@@ -1,0 +1,11 @@
+.idea
+.vscode
+target
+
+Cargo.lock
+event.py
+hs_err_pid*.log
+*.zip
+pyvenv.cfg
+
+

@@ -1,0 +1,9 @@
+# dev mode
+dev_mode=true
+
+# log
+dev_log_config_file_name="cfg/log4rs.dev.yaml"
+log_config_file_name="cfg/log4rs.yaml"
+
+# data
+data_dir="/tmp/shower/"
