@@ -106,8 +106,15 @@ fn event_handle(rx: &mut Receiver<QuoteData>) {
             if opt.is_ok() {
                 let data = opt.unwrap();
                 debug!(
-                    "Received [{}/{}/{}/{}/{}/{}]",
-                    data.id, data.bid, data.ask, data.last, data.volume, data.timestamp
+                    "Received [{}/{}/{}/{}/{}/{}/{}/{}]",
+                    data.quote_no,
+                    data.product_id,
+                    data.publisher_id,
+                    data.bid,
+                    data.ask,
+                    data.last,
+                    data.volume,
+                    data.timestamp
                 );
             } else {
                 //warn!("recv timeout");

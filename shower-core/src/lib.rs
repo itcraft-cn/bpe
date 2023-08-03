@@ -7,6 +7,9 @@ pub(crate) mod core;
 pub(crate) mod data;
 pub(crate) mod logger;
 
+#[cfg(test)]
+mod lib_test;
+
 pub use data::QuoteData;
 
 pub fn start() {

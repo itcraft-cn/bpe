@@ -1,6 +1,8 @@
 #[derive(Clone)]
 pub struct QuoteData {
-    pub id: u16,
+    pub quote_no: u16,
+    pub product_id: u16,
+    pub publisher_id: u16,
     pub bid: u128,
     pub ask: u128,
     pub last: u128,
@@ -9,7 +11,9 @@ pub struct QuoteData {
 }
 impl QuoteData {
     pub fn new(
-        id: u16,
+        quote_no: u16,
+        product_id: u16,
+        publisher_id: u16,
         bid: u128,
         ask: u128,
         last: u128,
@@ -17,7 +21,9 @@ impl QuoteData {
         timestamp: u64,
     ) -> QuoteData {
         QuoteData {
-            id,
+            quote_no,
+            product_id,
+            publisher_id,
             bid,
             ask,
             last,
