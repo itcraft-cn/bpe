@@ -4,7 +4,10 @@ pub(crate) mod macros;
 pub(crate) mod cfg;
 pub(crate) mod consts;
 pub(crate) mod core;
+pub(crate) mod data;
 pub(crate) mod logger;
+
+pub use data::QuoteData;
 
 pub fn start() {
     core::start();
@@ -14,28 +17,32 @@ pub fn stop() {
     core::stop();
 }
 
-pub fn new_data(data: [u8; 8192]) {
-    core::new_data(data);
+pub fn new_data(data: QuoteData) -> bool {
+    core::new_data(data)
 }
 
 #[cfg(test)]
 mod tests {
-    use crate::{consts::SHOWER_ENV_HOME_KEY, new_data, start, stop};
+    use crate::{consts::SHOWER_ENV_HOME_KEY, new_data, start, stop, QuoteData};
+    use log::*;
     use std::{env, thread, time::Duration};
 
     #[test]
-    fn test() {
+    fn test_new_proc() {
         env::set_var(SHOWER_ENV_HOME_KEY, "/home/helly/code/rust/shower");
-        let data = [0u8; 8192];
         start();
         let mut vec = vec![];
-        for _ in 0..4 {
-            vec.push(thread::spawn(move || {
-                for _ in 0..10000000 {
-                    new_data(data.clone());
-                }
-            }));
+        for idx in 0..4 {
+            let rs = thread::Builder::new()
+                .name(format!("caller-{}", idx))
+                .spawn(move || {
+                    gen_new_data();
+                });
+            if rs.is_ok() {
+                vec.push(rs.unwrap());
+            }
         }
+        thread::sleep(Duration::from_secs(30));
         loop {
             if vec.iter().all(|t| t.is_finished()) {
                 break;
@@ -45,5 +52,20 @@ mod tests {
             }
         }
         stop();
+    }
+
+    fn gen_new_data() {
+        info!("thread:{} started", thread::current().name().unwrap());
+        for i in 0..10000000 {
+            let v = i as u64;
+            let ret = new_data(QuoteData::new(
+                0, v as u128, v as u128, v as u128, v as u128, v,
+            ));
+            if ret {
+                debug!("send success");
+            } else {
+                warn!("send failed");
+            }
+        }
     }
 }
