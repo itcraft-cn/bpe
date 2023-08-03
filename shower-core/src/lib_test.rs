@@ -15,7 +15,7 @@ fn test_new_proc() {
             vec.push(rs.unwrap());
         }
     }
-    thread::sleep(Duration::from_secs(30));
+    thread::sleep(Duration::from_secs(1));
     loop {
         if vec.iter().all(|t| t.is_finished()) {
             break;

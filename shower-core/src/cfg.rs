@@ -16,12 +16,12 @@ impl ShowerConfig {
         self.map.get(key).unwrap().to_owned()
     }
 
-    pub(crate) fn _fetch_cfg_usize(&self, key: &str) -> usize {
-        usize::from_str_radix(self.fetch_cfg_str(key).as_str(), 10).unwrap()
-    }
-
     pub(crate) fn fetch_cfg_bool(&self, key: &str) -> bool {
         "true".eq_ignore_ascii_case(self.fetch_cfg_str(key).as_str())
+    }
+
+    pub(crate) fn _fetch_cfg_usize(&self, key: &str) -> usize {
+        usize::from_str_radix(self.fetch_cfg_str(key).as_str(), 10).unwrap()
     }
 }
 

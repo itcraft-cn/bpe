@@ -116,8 +116,6 @@ fn event_handle(rx: &mut Receiver<QuoteData>) {
                     data.volume,
                     data.timestamp
                 );
-            } else {
-                //warn!("recv timeout");
             }
         }
     }
