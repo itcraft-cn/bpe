@@ -24,7 +24,7 @@ static mut SENDER_VEC: RwLock<Vec<Sender<QuoteData>>> = RwLock::new(vec![]);
 
 static mut WALKER: RwLock<AtomicU64> = RwLock::new(AtomicU64::new(0));
 
-pub(crate) fn start() -> bool {
+pub fn start() -> bool {
     unsafe {
         load_config();
         init_logger(get_config());
@@ -50,7 +50,7 @@ pub(crate) fn start() -> bool {
     }
 }
 
-pub(crate) fn stop() {
+pub fn stop() {
     unsafe {
         ACTIVE.get_mut().unwrap().store(false, Ordering::SeqCst);
         loop {
@@ -68,7 +68,7 @@ pub(crate) fn stop() {
     }
 }
 
-pub(crate) fn new_data(data: QuoteData) -> bool {
+pub fn new_data(data: QuoteData) -> bool {
     unsafe {
         let v = WALKER.get_mut().unwrap().fetch_add(1, Ordering::SeqCst);
         let n = v & THREAD_MASK;
@@ -91,6 +91,10 @@ pub(crate) fn new_data(data: QuoteData) -> bool {
         }
         return ret.load(Ordering::SeqCst);
     }
+}
+
+pub fn def_action(sql: &str) {
+    info!("{}", sql);
 }
 
 fn event_handle(rx: &mut Receiver<QuoteData>) {
