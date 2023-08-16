@@ -14,7 +14,7 @@ use std::{
     time::Duration,
 };
 
-const THREAD_SIZE: usize = 8;
+const THREAD_SIZE: usize = 4;
 const THREAD_MASK: u64 = (THREAD_SIZE - 1) as u64;
 
 static mut ACTIVE: RwLock<AtomicBool> = RwLock::new(AtomicBool::new(true));

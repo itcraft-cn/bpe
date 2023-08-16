@@ -2,12 +2,14 @@ use crate::{consts::SHOWER_ENV_HOME_KEY, new_data, start, stop, QuoteData};
 use log::*;
 use std::{env, thread, time::Duration};
 
+const THREAD_SIZE: usize = 4;
+
 #[test]
 fn test_new_proc() {
     env::set_var(SHOWER_ENV_HOME_KEY, "/home/helly/code/rust/shower");
     start();
     let mut vec = vec![];
-    for idx in 0..4 {
+    for idx in 0..THREAD_SIZE {
         let rs = thread::Builder::new()
             .name(format!("caller-{}", idx))
             .spawn(move || gen_new_data);
