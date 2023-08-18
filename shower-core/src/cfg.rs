@@ -21,7 +21,7 @@ impl ShowerConfig {
     }
 
     pub(crate) fn _fetch_cfg_usize(&self, key: &str) -> usize {
-        usize::from_str_radix(self.fetch_cfg_str(key).as_str(), 10).unwrap()
+        self.fetch_cfg_str(key).as_str().parse::<usize>().unwrap()
     }
 }
 

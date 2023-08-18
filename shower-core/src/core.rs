@@ -46,7 +46,7 @@ pub fn start() -> bool {
             SENDER_VEC.get_mut().unwrap().len()
         );
         thread::sleep(Duration::from_secs(1));
-        return true;
+        true
     }
 }
 
@@ -89,7 +89,7 @@ pub fn new_data(data: QuoteData) -> bool {
                 break;
             }
         }
-        return ret.load(Ordering::SeqCst);
+        ret.load(Ordering::SeqCst)
     }
 }
 
@@ -107,8 +107,7 @@ fn event_handle(rx: &mut Receiver<QuoteData>) {
         const TIMEOUT: Duration = Duration::from_secs(1);
         while ACTIVE.get_mut().unwrap().load(Ordering::SeqCst) {
             let opt = rx.recv_timeout(TIMEOUT);
-            if opt.is_ok() {
-                let data = opt.unwrap();
+            if let Ok(data) = opt {
                 debug!(
                     "Received [{}/{}/{}/{}/{}/{}/{}/{}]",
                     data.quote_no,
