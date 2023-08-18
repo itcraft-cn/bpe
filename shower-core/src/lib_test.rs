@@ -1,4 +1,4 @@
-use crate::{consts::SHOWER_ENV_HOME_KEY, new_data, start, stop, QuoteData};
+use crate::{consts::SHOWER_ENV_HOME_KEY, new_data, start, stop, QuoteTick};
 use log::*;
 use std::{env, thread, time::Duration};
 
@@ -33,7 +33,7 @@ fn gen_new_data() {
     info!("thread:{} started", thread::current().name().unwrap());
     for i in 0..10000000 {
         let v = i as u64;
-        let ret = new_data(QuoteData::new(
+        let ret = new_data(QuoteTick::new(
             0, 1, 1, v as u128, v as u128, v as u128, v as u128, v,
         ));
         if ret {

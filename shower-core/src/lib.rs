@@ -10,7 +10,7 @@ pub(crate) mod logger;
 #[cfg(test)]
 mod lib_test;
 
-pub use crate::data::QuoteData;
+pub use crate::data::QuoteTick;
 pub use crate::core::start;
 pub use crate::core::stop;
 pub use crate::core::new_data;

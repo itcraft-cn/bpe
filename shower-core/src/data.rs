@@ -1,5 +1,5 @@
 #[derive(Clone)]
-pub struct QuoteData {
+pub struct QuoteTick {
     pub quote_no: u16,
     pub product_id: u16,
     pub publisher_id: u16,
@@ -9,7 +9,7 @@ pub struct QuoteData {
     pub volume: u128,
     pub timestamp: u64,
 }
-impl QuoteData {
+impl QuoteTick {
     pub fn new(
         quote_no: u16,
         product_id: u16,
@@ -19,8 +19,8 @@ impl QuoteData {
         last: u128,
         volume: u128,
         timestamp: u64,
-    ) -> QuoteData {
-        QuoteData {
+    ) -> QuoteTick {
+        QuoteTick {
             quote_no,
             product_id,
             publisher_id,
@@ -32,4 +32,4 @@ impl QuoteData {
         }
     }
 }
-impl Copy for QuoteData {}
+impl Copy for QuoteTick {}

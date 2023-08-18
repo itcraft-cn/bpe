@@ -1,7 +1,7 @@
 use crate::{
     cfg::{get_config, load_config},
     logger::init_logger,
-    QuoteData,
+    QuoteTick,
 };
 use log::*;
 use std::{
@@ -20,7 +20,7 @@ const THREAD_MASK: u64 = (THREAD_SIZE - 1) as u64;
 static mut ACTIVE: RwLock<AtomicBool> = RwLock::new(AtomicBool::new(true));
 
 static mut THREAD_VEC: RwLock<Vec<JoinHandle<()>>> = RwLock::new(vec![]);
-static mut SENDER_VEC: RwLock<Vec<Sender<QuoteData>>> = RwLock::new(vec![]);
+static mut SENDER_VEC: RwLock<Vec<Sender<QuoteTick>>> = RwLock::new(vec![]);
 
 static mut WALKER: RwLock<AtomicU64> = RwLock::new(AtomicU64::new(0));
 
@@ -29,7 +29,7 @@ pub fn start() -> bool {
         load_config();
         init_logger(get_config());
         for idx in 0..THREAD_SIZE {
-            let (tx, mut rx) = mpsc::channel::<QuoteData>();
+            let (tx, mut rx) = mpsc::channel::<QuoteTick>();
             let rs = thread::Builder::new()
                 .name(format!("proc-{}", idx))
                 .spawn(move || event_handle(&mut rx));
@@ -68,7 +68,7 @@ pub fn stop() {
     }
 }
 
-pub fn new_data(data: QuoteData) -> bool {
+pub fn new_data(data: QuoteTick) -> bool {
     unsafe {
         let v = WALKER.get_mut().unwrap().fetch_add(1, Ordering::SeqCst);
         let n = v & THREAD_MASK;
@@ -97,7 +97,7 @@ pub fn def_action(sql: &str) {
     info!("{}", sql);
 }
 
-fn event_handle(rx: &mut Receiver<QuoteData>) {
+fn event_handle(rx: &mut Receiver<QuoteTick>) {
     unsafe {
         info!(
             "thread:{} started, active:{}",
