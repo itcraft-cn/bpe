@@ -14,7 +14,7 @@ use std::{
     time::Duration,
 };
 
-const THREAD_SIZE: usize = 4;
+const THREAD_SIZE: usize = 1;
 const THREAD_MASK: u64 = (THREAD_SIZE - 1) as u64;
 
 static mut ACTIVE: RwLock<AtomicBool> = RwLock::new(AtomicBool::new(true));
@@ -72,8 +72,6 @@ pub fn new_data(data: QuoteTick) -> bool {
     unsafe {
         let v = WALKER.get_mut().unwrap().fetch_add(1, Ordering::SeqCst);
         let n = v & THREAD_MASK;
-        let walker = AtomicU64::new(0);
-        let ret = AtomicBool::new(false);
         debug!(
             "v:{}/n:{}/mask:{}/{}",
             v,
@@ -81,15 +79,8 @@ pub fn new_data(data: QuoteTick) -> bool {
             THREAD_MASK,
             SENDER_VEC.get_mut().unwrap().len()
         );
-        for tx in SENDER_VEC.get_mut().unwrap().iter() {
-            let c = walker.fetch_add(1, Ordering::SeqCst);
-            debug!("{}/{}", c, n);
-            if n == c {
-                ret.store(tx.send(data).is_ok(), Ordering::SeqCst);
-                break;
-            }
-        }
-        ret.load(Ordering::SeqCst)
+        let tx = &SENDER_VEC.get_mut().unwrap().as_slice()[n as usize];
+        tx.send(data).is_ok()
     }
 }
 
@@ -119,6 +110,8 @@ fn event_handle(rx: &mut Receiver<QuoteTick>) {
                     data.volume,
                     data.timestamp
                 );
+            } else {
+                warn!("recv failed: {:?}", opt.err().unwrap());
             }
         }
     }

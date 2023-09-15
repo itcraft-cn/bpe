@@ -2,7 +2,7 @@ use crate::{consts::SHOWER_ENV_HOME_KEY, new_data, start, stop, QuoteTick};
 use log::*;
 use std::{env, thread, time::Duration};
 
-const THREAD_SIZE: usize = 4;
+const THREAD_SIZE: usize = 1;
 
 #[test]
 fn test_new_proc() {
@@ -12,7 +12,7 @@ fn test_new_proc() {
     for idx in 0..THREAD_SIZE {
         let rs = thread::Builder::new()
             .name(format!("caller-{}", idx))
-            .spawn(move || gen_new_data);
+            .spawn(move || gen_new_data());
         if rs.is_ok() {
             vec.push(rs.unwrap());
         }
