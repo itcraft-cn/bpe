@@ -1,5 +1,5 @@
-use crate::consts::*;
-use config::Config;
+use crate::consts::{SHOWER_FILENAME_CONFIG_TOML, SHOWER_ENV_HOME_KEY};
+use config::{Config, File};
 use hashbrown::HashMap;
 use state::Storage;
 use std::{env, sync::Once};
@@ -31,12 +31,12 @@ pub(crate) fn load_config() {
     INIT.call_once(|| {
         let cfg_file = compose_file_name_with_base_dir(SHOWER_FILENAME_CONFIG_TOML);
         let cfg_map = Config::builder()
-            .add_source(config::File::with_name(cfg_file.as_str()))
+            .add_source(File::with_name(cfg_file.as_str()))
             .build()
             .unwrap()
             .try_deserialize::<std::collections::HashMap<String, String>>()
             .unwrap();
-        let mut map = hashbrown::HashMap::new();
+        let mut map = HashMap::new();
         for iter in cfg_map.iter() {
             map.insert(iter.0.clone(), iter.1.clone());
         }
