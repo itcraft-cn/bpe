@@ -8,20 +8,30 @@ use multiqueue::{mpmc_queue, MPMCReceiver, MPMCSender};
 use std::{
     sync::{
         atomic::{AtomicBool, AtomicU64, Ordering},
-        PoisonError, RwLock,
+        Once, PoisonError, RwLock,
     },
     thread::{self, JoinHandle},
 };
+
+const CAPACITY: u64 = 16777216;
+const ONE_SEC: u64 = 1000;
 
 static mut ACTIVE: RwLock<AtomicBool> = RwLock::new(AtomicBool::new(true));
 static mut OPT_SENDER: Option<MPMCSender<QuoteTick>> = None;
 static mut OPT_RECV_TH: Option<JoinHandle<()>> = None;
 
 pub fn start() -> bool {
+    static START: Once = Once::new();
+    let result = AtomicBool::new(false);
+    START.call_once(|| actual_start(&result));
+    result.load(Ordering::SeqCst)
+}
+
+fn actual_start(result: &AtomicBool) {
     load_config();
     init_logger(get_config());
 
-    let (sender, receiver) = mpmc_queue(65536);
+    let (sender, receiver) = mpmc_queue(CAPACITY);
 
     unsafe {
         OPT_SENDER.get_or_insert(sender);
@@ -35,9 +45,9 @@ pub fn start() -> bool {
         unsafe {
             OPT_RECV_TH.get_or_insert(recv_th);
         }
-        true
+        result.store(true, Ordering::SeqCst);
     } else {
-        false
+        result.store(false, Ordering::SeqCst);
     }
 }
 
@@ -48,10 +58,6 @@ fn handle_recv(receiver: MPMCReceiver<QuoteTick>) {
         let rs = receiver.try_recv();
         if let Ok(tick) = rs {
             debug!("Receiving data from queue: {:?}", tick);
-            // let now = walker.load(Ordering::SeqCst);
-            // if now % 100000 == 0 {
-            //     info!("Received {} ticks", now);
-            // }
             walker.fetch_add(1, Ordering::SeqCst);
         }
         if !check_active() {
@@ -78,26 +84,31 @@ fn handle_fetch_error_ret_fake(e: PoisonError<&mut AtomicBool>) -> &mut AtomicBo
 }
 
 pub fn stop() {
+    static STOP: Once = Once::new();
+    STOP.call_once(actual_stop);
+}
+
+fn actual_stop() {
     unsafe {
         ACTIVE
             .get_mut()
             .unwrap_or_else(handle_fetch_error)
             .store(false, Ordering::SeqCst);
     }
-    wait_receiver_quit();
-}
-
-fn wait_receiver_quit() {
     info!("mark as deactived");
     unsafe {
-        loop {
-            if OPT_RECV_TH.as_ref().unwrap().is_finished() {
-                info!("receiver thread is finished");
-                break;
-            }
-            info!("receiver thread is running, waiting for it");
-            thread::sleep(std::time::Duration::from_millis(100));
+        wait_receiver_quit();
+    }
+}
+
+unsafe fn wait_receiver_quit() {
+    loop {
+        if OPT_RECV_TH.as_ref().unwrap().is_finished() {
+            info!("receiver thread is finished");
+            break;
         }
+        info!("receiver thread is running, waiting for it");
+        thread::sleep(std::time::Duration::from_millis(ONE_SEC));
     }
 }
 
@@ -106,21 +117,26 @@ fn handle_fetch_error(e: PoisonError<&mut AtomicBool>) -> &mut AtomicBool {
 }
 
 pub fn new_data(data: QuoteTick) -> bool {
-    unsafe {
-        if let Some(sender) = OPT_SENDER.as_ref() {
-            let rs = sender.try_send(data);
-            if let Ok(_res) = rs {
-                debug!("Sending data to queue: {:?}", data);
-            } else {
-                warn!(
-                    "Failed to send data to queue: {:?}, {}",
-                    data,
-                    rs.err().unwrap()
-                );
-            }
+    unsafe { process_data(data) }
+}
+
+unsafe fn process_data(data: QuoteTick) -> bool {
+    if let Some(sender) = OPT_SENDER.as_ref() {
+        let rs = sender.try_send(data);
+        if let Ok(_res) = rs {
+            debug!("Sending data to queue: {:?}", data);
+            true
+        } else {
+            warn!(
+                "Failed to send data to queue: {:?}, {}",
+                data,
+                rs.err().unwrap()
+            );
+            false
         }
+    } else {
+        false
     }
-    true
 }
 
 pub fn def_action(sql: &str) {
