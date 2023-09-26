@@ -1,4 +1,4 @@
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 pub struct QuoteTick {
     pub quote_no: u16,
     pub product_id: u16,

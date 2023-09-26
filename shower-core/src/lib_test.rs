@@ -2,36 +2,24 @@ use crate::{consts::SHOWER_ENV_HOME_KEY, new_data, start, stop, QuoteTick};
 use log::*;
 use std::{env, thread, time::Duration};
 
-const THREAD_SIZE: usize = 1;
-
 #[test]
 fn test_new_proc() {
     env::set_var(SHOWER_ENV_HOME_KEY, "/home/helly/code/rust/shower");
     start();
-    let mut vec = vec![];
-    for idx in 0..THREAD_SIZE {
-        let rs = thread::Builder::new()
-            .name(format!("caller-{}", idx))
-            .spawn(move || gen_new_data());
-        if rs.is_ok() {
-            vec.push(rs.unwrap());
-        }
+    let rs = thread::Builder::new()
+        .name(String::from("caller"))
+        .spawn(move || gen_new_data());
+    if rs.is_ok() {
+        let th = rs.unwrap();
+        thread::sleep(Duration::from_secs(1));
+        let _ = th.join();
+        stop();
     }
-    thread::sleep(Duration::from_secs(1));
-    loop {
-        if vec.iter().all(|t| t.is_finished()) {
-            break;
-        } else {
-            const DURATION: Duration = Duration::from_millis(100);
-            thread::sleep(DURATION);
-        }
-    }
-    stop();
 }
 
 fn gen_new_data() {
     info!("thread:{} started", thread::current().name().unwrap());
-    for i in 0..10000000 {
+    for i in 0..100000000 {
         let v = i as u64;
         let ret = new_data(QuoteTick::new(
             0, 1, 1, v as u128, v as u128, v as u128, v as u128, v,

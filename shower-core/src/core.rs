@@ -4,115 +4,125 @@ use crate::{
     QuoteTick,
 };
 use log::*;
+use multiqueue::{mpmc_queue, MPMCReceiver, MPMCSender};
 use std::{
     sync::{
         atomic::{AtomicBool, AtomicU64, Ordering},
-        mpsc::{self, Receiver, Sender},
-        RwLock,
+        PoisonError, RwLock,
     },
     thread::{self, JoinHandle},
-    time::Duration,
 };
 
-const THREAD_SIZE: usize = 1;
-const THREAD_MASK: u64 = (THREAD_SIZE - 1) as u64;
-
 static mut ACTIVE: RwLock<AtomicBool> = RwLock::new(AtomicBool::new(true));
-
-static mut THREAD_VEC: RwLock<Vec<JoinHandle<()>>> = RwLock::new(vec![]);
-static mut SENDER_VEC: RwLock<Vec<Sender<QuoteTick>>> = RwLock::new(vec![]);
-
-static mut WALKER: RwLock<AtomicU64> = RwLock::new(AtomicU64::new(0));
+static mut OPT_SENDER: Option<MPMCSender<QuoteTick>> = None;
+static mut OPT_RECV_TH: Option<JoinHandle<()>> = None;
 
 pub fn start() -> bool {
+    load_config();
+    init_logger(get_config());
+
+    let (sender, receiver) = mpmc_queue(65536);
+
     unsafe {
-        load_config();
-        init_logger(get_config());
-        for idx in 0..THREAD_SIZE {
-            let (tx, mut rx) = mpsc::channel::<QuoteTick>();
-            let rs = thread::Builder::new()
-                .name(format!("proc-{}", idx))
-                .spawn(move || event_handle(&mut rx));
-            if rs.is_err() {
-                return false;
-            }
-            let thread = rs.unwrap();
-            THREAD_VEC.get_mut().unwrap().push(thread);
-            SENDER_VEC.get_mut().unwrap().push(tx);
-        }
-        info!(
-            "{}/{}",
-            THREAD_VEC.get_mut().unwrap().len(),
-            SENDER_VEC.get_mut().unwrap().len()
-        );
-        thread::sleep(Duration::from_secs(1));
-        true
+        OPT_SENDER.get_or_insert(sender);
     }
+
+    let rs = thread::Builder::new()
+        .name(String::from("receiver"))
+        .spawn(move || handle_recv(receiver));
+
+    if let Ok(recv_th) = rs {
+        unsafe {
+            OPT_RECV_TH.get_or_insert(recv_th);
+        }
+        true
+    } else {
+        false
+    }
+}
+
+fn handle_recv(receiver: MPMCReceiver<QuoteTick>) {
+    let _cfg = get_config();
+    let walker = AtomicU64::new(0);
+    loop {
+        let rs = receiver.try_recv();
+        if let Ok(tick) = rs {
+            debug!("Receiving data from queue: {:?}", tick);
+            // let now = walker.load(Ordering::SeqCst);
+            // if now % 100000 == 0 {
+            //     info!("Received {} ticks", now);
+            // }
+            walker.fetch_add(1, Ordering::SeqCst);
+        }
+        if !check_active() {
+            let now = walker.load(Ordering::SeqCst);
+            info!("finally, received {} ticks", now);
+            break;
+        }
+    }
+}
+
+fn check_active() -> bool {
+    unsafe {
+        ACTIVE
+            .get_mut()
+            .unwrap_or_else(handle_fetch_error_ret_fake)
+            .load(Ordering::SeqCst)
+    }
+}
+
+fn handle_fetch_error_ret_fake(e: PoisonError<&mut AtomicBool>) -> &mut AtomicBool {
+    static mut FAKE: AtomicBool = AtomicBool::new(false);
+    warn!("Failed to read ACTIVE: {:?}", e);
+    unsafe { &mut FAKE }
 }
 
 pub fn stop() {
     unsafe {
-        ACTIVE.get_mut().unwrap().store(false, Ordering::SeqCst);
+        ACTIVE
+            .get_mut()
+            .unwrap_or_else(handle_fetch_error)
+            .store(false, Ordering::SeqCst);
+    }
+    wait_receiver_quit();
+}
+
+fn wait_receiver_quit() {
+    info!("mark as deactived");
+    unsafe {
         loop {
-            if THREAD_VEC
-                .get_mut()
-                .unwrap()
-                .iter()
-                .all(|thread| thread.is_finished())
-            {
+            if OPT_RECV_TH.as_ref().unwrap().is_finished() {
+                info!("receiver thread is finished");
                 break;
-            } else {
-                thread::sleep(Duration::from_millis(100));
             }
+            info!("receiver thread is running, waiting for it");
+            thread::sleep(std::time::Duration::from_millis(100));
         }
     }
+}
+
+fn handle_fetch_error(e: PoisonError<&mut AtomicBool>) -> &mut AtomicBool {
+    warn_and_panic!("fail to set active to false, cannot stop threads:{}", e);
 }
 
 pub fn new_data(data: QuoteTick) -> bool {
     unsafe {
-        let v = WALKER.get_mut().unwrap().fetch_add(1, Ordering::SeqCst);
-        let n = v & THREAD_MASK;
-        debug!(
-            "v:{}/n:{}/mask:{}/{}",
-            v,
-            n,
-            THREAD_MASK,
-            SENDER_VEC.get_mut().unwrap().len()
-        );
-        let tx = &SENDER_VEC.get_mut().unwrap().as_slice()[n as usize];
-        tx.send(data).is_ok()
+        if let Some(sender) = OPT_SENDER.as_ref() {
+            let rs = sender.try_send(data);
+            if let Ok(_res) = rs {
+                debug!("Sending data to queue: {:?}", data);
+            } else {
+                warn!(
+                    "Failed to send data to queue: {:?}, {}",
+                    data,
+                    rs.err().unwrap()
+                );
+            }
+        }
     }
+    true
 }
 
 pub fn def_action(sql: &str) {
     info!("{}", sql);
-}
-
-fn event_handle(rx: &mut Receiver<QuoteTick>) {
-    unsafe {
-        info!(
-            "thread:{} started, active:{}",
-            thread::current().name().unwrap(),
-            ACTIVE.get_mut().unwrap().load(Ordering::SeqCst)
-        );
-        const TIMEOUT: Duration = Duration::from_secs(1);
-        while ACTIVE.get_mut().unwrap().load(Ordering::SeqCst) {
-            let opt = rx.recv_timeout(TIMEOUT);
-            if let Ok(data) = opt {
-                debug!(
-                    "Received [{}/{}/{}/{}/{}/{}/{}/{}]",
-                    data.quote_no,
-                    data.product_id,
-                    data.publisher_id,
-                    data.bid,
-                    data.ask,
-                    data.last,
-                    data.volume,
-                    data.timestamp
-                );
-            } else {
-                warn!("recv failed: {:?}", opt.err().unwrap());
-            }
-        }
-    }
 }
