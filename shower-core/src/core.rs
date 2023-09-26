@@ -52,6 +52,8 @@ fn actual_start(result: &AtomicBool) {
 }
 
 fn handle_recv(receiver: MPMCReceiver<QuoteTick>) {
+    let core_ids = core_affinity::get_core_ids().unwrap();
+    core_affinity::set_for_current(core_ids[0]);
     let _cfg = get_config();
     let walker = AtomicU64::new(0);
     loop {

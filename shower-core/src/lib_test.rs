@@ -18,6 +18,8 @@ fn test_new_proc() {
 }
 
 fn gen_new_data() {
+    let core_ids = core_affinity::get_core_ids().unwrap();
+    core_affinity::set_for_current(core_ids[core_ids.len() - 1]);
     info!("thread:{} started", thread::current().name().unwrap());
     for i in 0..100000000 {
         let v = i as u64;
