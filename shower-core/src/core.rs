@@ -22,14 +22,22 @@ static mut OPT_RECV_TH: Option<JoinHandle<()>> = None;
 
 pub fn start() -> bool {
     static START: Once = Once::new();
-    let result = AtomicBool::new(false);
-    START.call_once(|| actual_start(&result));
-    result.load(Ordering::SeqCst)
+    let mut opt = None;
+    START.call_once(|| {
+        opt.replace(actual_start());
+    });
+    if opt.is_none() {
+        debug!("already started, skipping");
+        true
+    } else {
+        opt.unwrap_or_else(|| false)
+    }
 }
 
-fn actual_start(result: &AtomicBool) {
+fn actual_start() -> bool {
     load_config();
     init_logger(get_config());
+    let result = AtomicBool::new(false);
 
     let (sender, receiver) = mpmc_queue(CAPACITY);
 
@@ -49,6 +57,8 @@ fn actual_start(result: &AtomicBool) {
     } else {
         result.store(false, Ordering::SeqCst);
     }
+
+    result.load(Ordering::SeqCst)
 }
 
 fn handle_recv(receiver: MPMCReceiver<Tick>) {
