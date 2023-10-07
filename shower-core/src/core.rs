@@ -1,7 +1,7 @@
 use crate::{
     cfg::{get_config, load_config},
     logger::init_logger,
-    QuoteTick,
+    Tick,
 };
 use log::*;
 use multiqueue::{mpmc_queue, MPMCReceiver, MPMCSender};
@@ -17,7 +17,7 @@ const CAPACITY: u64 = 16777216;
 const ONE_SEC: u64 = 1000;
 
 static mut ACTIVE: RwLock<AtomicBool> = RwLock::new(AtomicBool::new(true));
-static mut OPT_SENDER: Option<MPMCSender<QuoteTick>> = None;
+static mut OPT_SENDER: Option<MPMCSender<Tick>> = None;
 static mut OPT_RECV_TH: Option<JoinHandle<()>> = None;
 
 pub fn start() -> bool {
@@ -51,7 +51,7 @@ fn actual_start(result: &AtomicBool) {
     }
 }
 
-fn handle_recv(receiver: MPMCReceiver<QuoteTick>) {
+fn handle_recv(receiver: MPMCReceiver<Tick>) {
     let core_ids = core_affinity::get_core_ids().unwrap();
     core_affinity::set_for_current(core_ids[0]);
     let _cfg = get_config();
@@ -60,6 +60,7 @@ fn handle_recv(receiver: MPMCReceiver<QuoteTick>) {
         let rs = receiver.try_recv();
         if let Ok(tick) = rs {
             debug!("Receiving data from queue: {:?}", tick);
+            process_tick(tick);
             walker.fetch_add(1, Ordering::SeqCst);
         }
         if !check_active() {
@@ -68,6 +69,10 @@ fn handle_recv(receiver: MPMCReceiver<QuoteTick>) {
             break;
         }
     }
+}
+
+fn process_tick(tick: Tick) {
+    debug!("process tick[{:?}]", tick);
 }
 
 fn check_active() -> bool {
@@ -118,11 +123,11 @@ fn handle_fetch_error(e: PoisonError<&mut AtomicBool>) -> &mut AtomicBool {
     warn_and_panic!("fail to set active to false, cannot stop threads:{}", e);
 }
 
-pub fn new_data(data: QuoteTick) -> bool {
+pub fn new_data(data: Tick) -> bool {
     unsafe { process_data(data) }
 }
 
-unsafe fn process_data(data: QuoteTick) -> bool {
+unsafe fn process_data(data: Tick) -> bool {
     if let Some(sender) = OPT_SENDER.as_ref() {
         let rs = sender.try_send(data);
         if let Ok(_res) = rs {
@@ -130,7 +135,7 @@ unsafe fn process_data(data: QuoteTick) -> bool {
             true
         } else {
             warn!(
-                "Failed to send data to queue: {:?}, {}",
+                "Failed to send data to queue: {:?}[{}], dropped",
                 data,
                 rs.err().unwrap()
             );
@@ -141,6 +146,6 @@ unsafe fn process_data(data: QuoteTick) -> bool {
     }
 }
 
-pub fn def_action(sql: &str) {
-    info!("{}", sql);
+pub fn def_action(js: &str) {
+    info!("{}", js);
 }
