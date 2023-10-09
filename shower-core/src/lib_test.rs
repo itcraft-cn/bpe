@@ -25,9 +25,7 @@ fn gen_new_data() {
     info!("thread:{} started", thread::current().name().unwrap());
     for i in 0..LOOP_SIZE {
         let v = i as u64;
-        let ret = new_data(Tick::new(
-            7686, v as u128, v as u128, v as u128, v as u128, v,
-        ));
+        let ret = new_data(Tick::new(7686, v, v, v, v, v));
         if ret {
             debug!("send success");
         } else {

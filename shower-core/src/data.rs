@@ -1,21 +1,14 @@
 #[derive(Clone, Copy, Debug)]
 pub struct Tick {
     pub quote_id: u16,
-    pub bid: u128,
-    pub ask: u128,
-    pub last: u128,
-    pub volume: u128,
+    pub bid: u64,
+    pub ask: u64,
+    pub last: u64,
+    pub volume: u64,
     pub timestamp: u64,
 }
 impl Tick {
-    pub fn new(
-        quote_id: u16,
-        bid: u128,
-        ask: u128,
-        last: u128,
-        volume: u128,
-        timestamp: u64,
-    ) -> Tick {
+    pub fn new(quote_id: u16, bid: u64, ask: u64, last: u64, volume: u64, timestamp: u64) -> Tick {
         Tick {
             quote_id,
             bid,
@@ -31,18 +24,18 @@ impl Tick {
 pub struct DeepTick {
     pub quote_id: u16,
     pub depth: u8,
-    pub bid: [u128; 20],
-    pub ask: [u128; 20],
-    pub last: u128,
+    pub bid: [u64; 20],
+    pub ask: [u64; 20],
+    pub last: u64,
     pub timestamp: u64,
 }
 impl DeepTick {
     pub fn new(
         quote_id: u16,
         depth: u8,
-        bid: [u128; 20],
-        ask: [u128; 20],
-        last: u128,
+        bid: [u64; 20],
+        ask: [u64; 20],
+        last: u64,
         timestamp: u64,
     ) -> DeepTick {
         DeepTick {
@@ -72,9 +65,10 @@ pub enum BarType {
 pub struct Bar {
     pub quote_id: u16,
     pub bar_type: BarType,
-    pub open: u128,
-    pub high: u128,
-    pub low: u128,
-    pub close: u128,
-    pub volume: u128,
+    pub open: u64,
+    pub high: u64,
+    pub low: u64,
+    pub close: u64,
+    pub volume: u64,
+    pub timestamp: u64,
 }
