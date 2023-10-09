@@ -6,6 +6,7 @@ pub(crate) mod consts;
 pub(crate) mod core;
 pub(crate) mod data;
 pub(crate) mod logger;
+pub(crate) mod store;
 
 #[cfg(test)]
 mod lib_test;

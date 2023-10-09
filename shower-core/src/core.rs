@@ -1,7 +1,7 @@
 use crate::{
     cfg::{get_config, load_config},
     logger::init_logger,
-    Tick,
+    store, Tick,
 };
 use log::*;
 use multiqueue::{mpmc_queue, MPMCReceiver, MPMCSender};
@@ -83,6 +83,7 @@ fn handle_recv(receiver: MPMCReceiver<Tick>) {
 
 fn process_tick(tick: Tick) {
     debug!("process tick[{:?}]", tick);
+    store::insert(tick);
 }
 
 fn check_active() -> bool {
