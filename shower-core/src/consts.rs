@@ -2,6 +2,8 @@ pub(crate) const SHOWER_ENV_HOME_KEY: &str = "SHOWER_HOME";
 
 pub(crate) const SHOWER_FILENAME_CONFIG_TOML: &str = "cfg/config.toml";
 
+pub(crate) const MAX_DEEP_TICK_DEPTH: usize = 30;
+
 /// cfg keies
 pub(crate) const KEY_DEV_MODE: &str = "dev_mode";
 

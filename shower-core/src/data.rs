@@ -1,3 +1,5 @@
+use crate::consts::MAX_DEEP_TICK_DEPTH;
+
 #[derive(Clone, Copy, Debug)]
 pub struct Tick {
     pub quote_id: u16,
@@ -23,27 +25,27 @@ impl Tick {
 #[derive(Clone, Copy, Debug)]
 pub struct DeepTick {
     pub quote_id: u16,
-    pub depth: u8,
-    pub bid: [u64; 20],
-    pub ask: [u64; 20],
+    pub bid: [u64; MAX_DEEP_TICK_DEPTH],
+    pub ask: [u64; MAX_DEEP_TICK_DEPTH],
     pub last: u64,
+    pub volume: u64,
     pub timestamp: u64,
 }
 impl DeepTick {
     pub fn new(
         quote_id: u16,
-        depth: u8,
-        bid: [u64; 20],
-        ask: [u64; 20],
+        bid: [u64; MAX_DEEP_TICK_DEPTH],
+        ask: [u64; MAX_DEEP_TICK_DEPTH],
         last: u64,
+        volume: u64,
         timestamp: u64,
     ) -> DeepTick {
         DeepTick {
             quote_id,
-            depth,
             bid,
             ask,
             last,
+            volume,
             timestamp,
         }
     }
