@@ -7,3 +7,7 @@ event.py
 hs_err_pid*.log
 *.zip
 pyvenv.cfg
+
+perf.data
+perf.data.old
+flamegraph.svg

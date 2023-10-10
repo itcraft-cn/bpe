@@ -13,7 +13,8 @@ use std::{
     thread::{self, JoinHandle},
 };
 
-const CAPACITY: u64 = 16777216;
+const CAPACITY: u64 = 8 * 1024 * 1024;
+const ONCE_ITER_SIZE: usize = 16 * 1024;
 const ONE_SEC: u64 = 1000;
 
 static mut ACTIVE: RwLock<AtomicBool> = RwLock::new(AtomicBool::new(true));
@@ -67,12 +68,14 @@ fn handle_recv(receiver: MPMCReceiver<Tick>) {
     let _cfg = get_config();
     let walker = AtomicU64::new(0);
     loop {
-        let rs = receiver.try_recv();
-        if let Ok(tick) = rs {
+        let iter = receiver.try_iter();
+        let mut count = 0;
+        iter.take(ONCE_ITER_SIZE).for_each(|tick| {
             debug!("Receiving data from queue: {:?}", tick);
             process_tick(tick);
-            walker.fetch_add(1, Ordering::SeqCst);
-        }
+            count += 1;
+        });
+        walker.fetch_add(count, Ordering::SeqCst);
         if !check_active() {
             let now = walker.load(Ordering::SeqCst);
             info!("finally, received {} ticks", now);

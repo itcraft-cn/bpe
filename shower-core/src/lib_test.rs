@@ -2,8 +2,8 @@ use crate::{consts::SHOWER_ENV_HOME_KEY, new_data, start, stop, Tick};
 use log::*;
 use std::{env, thread, time::Duration};
 
-const LOOP_SIZE: i32 = 1000000;
-const RANGE_SIZE: i32 = 5000;
+const LOOP_SIZE: i32 = 100000000;
+const RANGE_SIZE: i32 = 10000;
 
 #[test]
 fn test_new_proc() {
@@ -34,7 +34,7 @@ fn gen_new_data() {
         }
         if i % RANGE_SIZE == 0 {
             info!("sending {} ticks", i);
-            thread::sleep(Duration::from_millis(100));
+            thread::sleep(Duration::from_millis(10));
         }
     }
 }
