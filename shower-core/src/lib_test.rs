@@ -1,9 +1,6 @@
-use crate::{consts::SHOWER_ENV_HOME_KEY, new_data, start, stop, Tick};
+use crate::{cfg::get_config, consts::SHOWER_ENV_HOME_KEY, new_data, start, stop, Tick};
 use log::*;
 use std::{env, thread, time::Duration};
-
-const LOOP_SIZE: i32 = 100000000;
-const RANGE_SIZE: i32 = 10000;
 
 #[test]
 fn test_new_proc() {
@@ -24,7 +21,9 @@ fn gen_new_data() {
     let core_ids = core_affinity::get_core_ids().unwrap();
     core_affinity::set_for_current(core_ids[core_ids.len() - 1]);
     info!("thread:{} started", thread::current().name().unwrap());
-    for i in 1..=LOOP_SIZE {
+    let loop_size: usize = get_config().fetch_cfg_usize("test_loop_size");
+    let range_size: usize = get_config().fetch_cfg_usize("test_range_size");
+    for i in 1..=loop_size {
         let v = i as u64;
         let ret = new_data(Tick::new((i % 32) as u16, v, v, v, v, v));
         if ret {
@@ -32,7 +31,7 @@ fn gen_new_data() {
         } else {
             warn!("send failed");
         }
-        if i % RANGE_SIZE == 0 {
+        if i % range_size == 0 {
             info!("sending {} ticks", i);
             thread::sleep(Duration::from_millis(10));
         }

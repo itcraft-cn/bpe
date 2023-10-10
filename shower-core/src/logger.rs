@@ -1,4 +1,7 @@
-use crate::cfg::{compose_file_name_with_base_dir, ShowerConfig};
+use crate::{
+    cfg::{compose_file_name_with_base_dir, ShowerConfig},
+    consts::{KEY_DEV_MODE, KEY_LOG_DEV_CONFIG_FILE, KEY_LOG_PROD_CONFIG_FILE},
+};
 use log::info;
 use std::sync::Once;
 
@@ -9,10 +12,10 @@ pub(crate) fn init_logger(cfg: &ShowerConfig) {
 }
 
 fn init(cfg: &ShowerConfig) {
-    if cfg.fetch_cfg_bool("dev_mode") {
-        init_log4rs(cfg, "dev_log_config_file_name");
+    if cfg.fetch_cfg_bool(KEY_DEV_MODE) {
+        init_log4rs(cfg, KEY_LOG_DEV_CONFIG_FILE);
     } else {
-        init_log4rs(cfg, "log_config_file_name");
+        init_log4rs(cfg, KEY_LOG_PROD_CONFIG_FILE);
     }
     info!("booting up");
 }

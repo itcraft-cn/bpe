@@ -1,5 +1,6 @@
 use crate::{
     cfg::{get_config, load_config},
+    consts::{KEY_ONCE_FETCH_RANGE, KEY_QUEUE_CAPACITY},
     logger::init_logger,
     store, Tick,
 };
@@ -13,8 +14,6 @@ use std::{
     thread::{self, JoinHandle},
 };
 
-const CAPACITY: u64 = 8 * 1024 * 1024;
-const ONCE_ITER_SIZE: usize = 16 * 1024;
 const ONE_SEC: u64 = 1000;
 
 static mut ACTIVE: RwLock<AtomicBool> = RwLock::new(AtomicBool::new(true));
@@ -40,7 +39,9 @@ fn actual_start() -> bool {
     init_logger(get_config());
     let result = AtomicBool::new(false);
 
-    let (sender, receiver) = mpmc_queue(CAPACITY);
+    let capacity = get_config().fetch_cfg_usize(KEY_QUEUE_CAPACITY);
+
+    let (sender, receiver) = mpmc_queue(capacity as u64);
 
     unsafe {
         OPT_SENDER.get_or_insert(sender);
@@ -65,12 +66,13 @@ fn actual_start() -> bool {
 fn handle_recv(receiver: MPMCReceiver<Tick>) {
     let core_ids = core_affinity::get_core_ids().unwrap();
     core_affinity::set_for_current(core_ids[0]);
-    let _cfg = get_config();
+    let cfg = get_config();
     let walker = AtomicU64::new(0);
+    let once_fetch_range = cfg.fetch_cfg_usize(KEY_ONCE_FETCH_RANGE);
     loop {
         let iter = receiver.try_iter();
         let mut count = 0;
-        iter.take(ONCE_ITER_SIZE).for_each(|tick| {
+        iter.take(once_fetch_range).for_each(|tick| {
             debug!("Receiving data from queue: {:?}", tick);
             process_tick(tick);
             count += 1;

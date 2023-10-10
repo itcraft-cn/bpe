@@ -1,8 +1,15 @@
 # dev mode
-dev_mode=true
+dev_mode = true
 
 # log
-dev_log_config_file_name="cfg/log4rs.dev.yaml"
-log_config_file_name="cfg/log4rs.yaml"
+log_dev_config_file = "cfg/log4rs.dev.yaml"
+log_prod_config_file = "cfg/log4rs.yaml"
 
 # settings
+queue_capacity = 8388608
+once_fetch_range = 16384
+stored_tick_size=65536
+
+# test
+test_loop_size = 20000
+test_range_size = 200
