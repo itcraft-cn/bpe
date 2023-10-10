@@ -30,6 +30,7 @@ rquickjs = "0.3.1"
 sql-parse = "0.15.0"
 multiqueue = "0.3.2"
 core_affinity = "0.8.1"
+chrono = "0.4.31"
 
 [dev-dependencies]
 criterion = { version = "0.4", features = ["html_reports"] }
