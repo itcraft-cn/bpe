@@ -1,6 +1,6 @@
 use crate::{
     cfg::{get_config, load_config},
-    consts::{KEY_ONCE_FETCH_RANGE, KEY_QUEUE_CAPACITY, KEY_STORED_TICK_SIZE},
+    consts::{KEY_DEV_MODE, KEY_ONCE_FETCH_RANGE, KEY_QUEUE_CAPACITY, KEY_STORED_TICK_SIZE},
     data::{U8Tick, DEEP_TICK_SIZE, TICK_SIZE},
     logger::init_logger,
     store, DeepTick, Tick,
@@ -20,6 +20,8 @@ const ONE_SEC: u64 = 1000;
 static mut ACTIVE: RwLock<AtomicBool> = RwLock::new(AtomicBool::new(true));
 static mut OPT_SENDER: Option<MPMCSender<U8Tick>> = None;
 static mut OPT_RECV_TH: Option<JoinHandle<()>> = None;
+
+static mut DEBUG: bool = false;
 
 static mut STORED_TICK_SIZE: usize = 0;
 
@@ -45,13 +47,15 @@ fn actual_start() -> bool {
     init_logger(get_config());
     let result = AtomicBool::new(false);
 
-    let capacity = get_config().fetch_cfg_usize(KEY_QUEUE_CAPACITY);
+    let cfg = get_config();
+    let capacity = cfg.fetch_cfg_usize(KEY_QUEUE_CAPACITY);
 
     let (sender, receiver) = mpmc_queue(capacity as u64);
 
     unsafe {
         OPT_SENDER.get_or_insert(sender);
-        STORED_TICK_SIZE = get_config().fetch_cfg_usize(KEY_STORED_TICK_SIZE);
+        DEBUG = cfg.fetch_cfg_bool(KEY_DEV_MODE);
+        STORED_TICK_SIZE = cfg.fetch_cfg_usize(KEY_STORED_TICK_SIZE);
         TICK_VEC_SIZE = TICK_SIZE * STORED_TICK_SIZE;
         DEEP_TICK_VEC_SIZE = DEEP_TICK_SIZE * STORED_TICK_SIZE;
     }
@@ -160,11 +164,13 @@ unsafe fn process_data(data: U8Tick) -> bool {
         if let Ok(_res) = rs {
             true
         } else {
-            let err = rs.err().unwrap();
-            warn!(
-                "Failed to send data to queue, dropped. reseason: [{:?}-->{}]",
-                &err, &err
-            );
+            if DEBUG {
+                let err = rs.err().unwrap();
+                warn!(
+                    "Failed to send data to queue, dropped. reseason: [{:?}-->{}]",
+                    &err, &err
+                );
+            }
             false
         }
     } else {
