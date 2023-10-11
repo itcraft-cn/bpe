@@ -1,8 +1,9 @@
 use crate::{
     cfg::{get_config, load_config},
-    consts::{KEY_ONCE_FETCH_RANGE, KEY_QUEUE_CAPACITY},
+    consts::{KEY_ONCE_FETCH_RANGE, KEY_QUEUE_CAPACITY, KEY_STORED_TICK_SIZE},
+    data::{U8Tick, TICK_SIZE, DEEP_TICK_SIZE},
     logger::init_logger,
-    store, Tick,
+    store, DeepTick, Tick,
 };
 use log::*;
 use multiqueue::{mpmc_queue, MPMCReceiver, MPMCSender};
@@ -17,8 +18,13 @@ use std::{
 const ONE_SEC: u64 = 1000;
 
 static mut ACTIVE: RwLock<AtomicBool> = RwLock::new(AtomicBool::new(true));
-static mut OPT_SENDER: Option<MPMCSender<Tick>> = None;
+static mut OPT_SENDER: Option<MPMCSender<U8Tick>> = None;
 static mut OPT_RECV_TH: Option<JoinHandle<()>> = None;
+
+static mut STORED_TICK_SIZE: usize = 0;
+
+static mut TICK_VEC_SIZE: usize = 0;
+static mut DEEP_TICK_VEC_SIZE: usize = 0;
 
 pub fn start() -> bool {
     static START: Once = Once::new();
@@ -45,6 +51,9 @@ fn actual_start() -> bool {
 
     unsafe {
         OPT_SENDER.get_or_insert(sender);
+        STORED_TICK_SIZE = get_config().fetch_cfg_usize(KEY_STORED_TICK_SIZE);
+        TICK_VEC_SIZE = TICK_SIZE * STORED_TICK_SIZE;
+        DEEP_TICK_VEC_SIZE = DEEP_TICK_SIZE * STORED_TICK_SIZE;
     }
 
     let rs = thread::Builder::new()
@@ -63,7 +72,7 @@ fn actual_start() -> bool {
     result.load(Ordering::SeqCst)
 }
 
-fn handle_recv(receiver: MPMCReceiver<Tick>) {
+fn handle_recv(receiver: MPMCReceiver<U8Tick>) {
     let core_ids = core_affinity::get_core_ids().unwrap();
     core_affinity::set_for_current(core_ids[0]);
     let cfg = get_config();
@@ -73,7 +82,6 @@ fn handle_recv(receiver: MPMCReceiver<Tick>) {
         let iter = receiver.try_iter();
         let mut count = 0;
         iter.take(once_fetch_range).for_each(|tick| {
-            debug!("Receiving data from queue: {:?}", tick);
             process_tick(tick);
             count += 1;
         });
@@ -86,8 +94,7 @@ fn handle_recv(receiver: MPMCReceiver<Tick>) {
     }
 }
 
-fn process_tick(tick: Tick) {
-    debug!("process tick[{:?}]", tick);
+fn process_tick(tick: U8Tick) {
     store::insert(tick);
 }
 
@@ -139,21 +146,24 @@ fn handle_fetch_error(e: PoisonError<&mut AtomicBool>) -> &mut AtomicBool {
     warn_and_panic!("fail to set active to false, cannot stop threads:{}", e);
 }
 
-pub fn new_data(data: Tick) -> bool {
-    unsafe { process_data(data) }
+pub fn new_tick_data(data: Tick) -> bool {
+    unsafe { process_data(data.convert(TICK_VEC_SIZE)) }
 }
 
-unsafe fn process_data(data: Tick) -> bool {
+pub fn new_deep_tick_data(data: DeepTick) -> bool {
+    unsafe { process_data(data.convert(DEEP_TICK_VEC_SIZE)) }
+}
+
+unsafe fn process_data(data: U8Tick) -> bool {
     if let Some(sender) = OPT_SENDER.as_ref() {
         let rs = sender.try_send(data);
         if let Ok(_res) = rs {
-            debug!("Sending data to queue: {:?}", data);
             true
         } else {
+            let err = rs.err().unwrap();
             warn!(
-                "Failed to send data to queue: {:?}[{}], dropped",
-                data,
-                rs.err().unwrap()
+                "Failed to send data to queue, dropped. reseason: [{:?}-->{}]",
+                &err, &err
             );
             false
         }

@@ -1,4 +1,4 @@
-use crate::{cfg::get_config, consts::SHOWER_ENV_HOME_KEY, new_data, start, stop, Tick};
+use crate::{cfg::get_config, consts::SHOWER_ENV_HOME_KEY, new_tick_data, start, stop, Tick};
 use chrono::NaiveDate;
 use log::*;
 use std::{env, thread, time::Duration};
@@ -24,10 +24,11 @@ fn gen_new_data() {
     info!("thread:{} started", thread::current().name().unwrap());
     let loop_size: usize = get_config().fetch_cfg_usize("test_loop_size");
     let range_size: usize = get_config().fetch_cfg_usize("test_range_size");
+    let wait_time: usize = get_config().fetch_cfg_usize("test_wait_time");
     let mut timestamp = special_timestamp(2023, 7, 10, 9, 59, 59);
     for i in 1..=loop_size {
         let v = i as u64;
-        let ret = new_data(Tick::new((i % 32) as u16, v, v, v, v, timestamp));
+        let ret = new_tick_data(Tick::new((i % 32) as u16, v, v, v, v, timestamp));
         if ret {
             debug!("send success");
         } else {
@@ -36,7 +37,7 @@ fn gen_new_data() {
         if i % range_size == 0 {
             timestamp += 1000;
             info!("sending {} ticks", i);
-            thread::sleep(Duration::from_millis(10));
+            thread::sleep(Duration::from_millis(wait_time as u64));
         }
     }
 }
