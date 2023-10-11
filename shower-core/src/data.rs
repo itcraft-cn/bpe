@@ -26,7 +26,7 @@ impl U8Tick {
         self.u8_data_len
     }
     pub fn u64data(&self) -> &[u64] {
-        &self.data.as_slice()
+        self.data.as_slice()
     }
 }
 

@@ -2,7 +2,7 @@ use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
 #[inline]
 pub(crate) fn fill_u64(slice: &mut [u8], data: u64) {
-    slice[0] = (data >> 0) as u8;
+    slice[0] = data as u8;
     slice[1] = (data >> 1) as u8;
     slice[2] = (data >> 2) as u8;
     slice[3] = (data >> 3) as u8;
@@ -14,7 +14,7 @@ pub(crate) fn fill_u64(slice: &mut [u8], data: u64) {
 
 #[inline]
 pub(crate) fn _fetch_u64(slice: &[u8]) -> u64 {
-    ((slice[0] as u64) << 0)
+    (slice[0] as u64)
         | ((slice[1] as u64) << 1)
         | ((slice[2] as u64) << 2)
         | ((slice[3] as u64) << 3)

@@ -1,7 +1,7 @@
 use crate::{
     cfg::{get_config, load_config},
     consts::{KEY_ONCE_FETCH_RANGE, KEY_QUEUE_CAPACITY, KEY_STORED_TICK_SIZE},
-    data::{U8Tick, TICK_SIZE, DEEP_TICK_SIZE},
+    data::{U8Tick, DEEP_TICK_SIZE, TICK_SIZE},
     logger::init_logger,
     store, DeepTick, Tick,
 };
@@ -36,7 +36,7 @@ pub fn start() -> bool {
         debug!("already started, skipping");
         true
     } else {
-        opt.unwrap_or_else(|| false)
+        opt.unwrap_or(false)
     }
 }
 
