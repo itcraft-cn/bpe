@@ -1,32 +1,26 @@
-use crate::{cfg::get_config, consts::SHOWER_ENV_HOME_KEY, new_tick_data, start, stop, Tick};
 use chrono::NaiveDate;
 use log::*;
+use shower::{new_tick_data, start, stop, Tick};
 use std::{env, thread, time::Duration};
+
+const LOOP_SIZE: usize = 50000;
+const RANGE_SIZE: usize = 100;
+const WAIT_TIME: usize = 1;
 
 #[test]
 fn test_new_proc() {
-    env::set_var(SHOWER_ENV_HOME_KEY, "/home/helly/code/rust/shower");
+    env::set_var("SHOWER_HOME", "/home/helly/code/rust/shower");
     start();
-    let rs = thread::Builder::new()
-        .name(String::from("caller"))
-        .spawn(move || gen_new_data());
-    if rs.is_ok() {
-        let th = rs.unwrap();
-        let _ = th.join();
-        thread::sleep(Duration::from_secs(1));
-        stop();
-    }
+    gen_new_data();
+    stop();
 }
 
 fn gen_new_data() {
     let core_ids = core_affinity::get_core_ids().unwrap();
     core_affinity::set_for_current(core_ids[core_ids.len() - 1]);
     info!("thread:{} started", thread::current().name().unwrap());
-    let loop_size: usize = get_config().fetch_cfg_usize("test_loop_size");
-    let range_size: usize = get_config().fetch_cfg_usize("test_range_size");
-    let wait_time: usize = get_config().fetch_cfg_usize("test_wait_time");
     let mut timestamp = special_timestamp(2023, 7, 10, 9, 59, 59);
-    for i in 1..=loop_size {
+    for i in 1..=LOOP_SIZE {
         let v = i as u64;
         let ret = new_tick_data(Tick::new((i % 32) as u16, v, v, v, v, timestamp));
         if ret {
@@ -34,10 +28,10 @@ fn gen_new_data() {
         } else {
             warn!("send failed");
         }
-        if i % range_size == 0 {
+        if i % RANGE_SIZE == 0 {
             timestamp += 1000;
             info!("sending {} ticks", i);
-            thread::sleep(Duration::from_millis(wait_time as u64));
+            thread::sleep(Duration::from_millis(WAIT_TIME as u64));
         }
     }
 }

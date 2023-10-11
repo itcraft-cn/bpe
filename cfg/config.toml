@@ -9,8 +9,3 @@ log_prod_config_file = "cfg/log4rs.yaml"
 queue_capacity = 8388608
 once_fetch_range = 16384
 stored_tick_size = 65536
-
-# test
-test_loop_size = 50000
-test_range_size = 100
-test_wait_time = 1
