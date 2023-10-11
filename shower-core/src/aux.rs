@@ -1,5 +1,6 @@
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
+#[inline]
 pub(crate) fn fill_u64(slice: &mut [u8], data: u64) {
     slice[0] = (data >> 0) as u8;
     slice[1] = (data >> 1) as u8;
@@ -11,6 +12,7 @@ pub(crate) fn fill_u64(slice: &mut [u8], data: u64) {
     slice[7] = (data >> 7) as u8;
 }
 
+#[inline]
 pub(crate) fn _fetch_u64(slice: &[u8]) -> u64 {
     ((slice[0] as u64) << 0)
         | ((slice[1] as u64) << 1)
@@ -22,7 +24,8 @@ pub(crate) fn _fetch_u64(slice: &[u8]) -> u64 {
         | ((slice[7] as u64) << 7)
 }
 
-fn _timestamp() -> u64 {
+#[inline]
+pub(crate) fn _timestamp() -> u64 {
     let duration = SystemTime::now()
         .duration_since(UNIX_EPOCH)
         .unwrap_or_else(|_e| Duration::new(0, 0));

@@ -24,7 +24,7 @@ config = "0.13.3"
 log = "0.4.17"
 log4rs = { version = "1.2.0", features = [] }
 state = { version = "0.5.3", features = ["tls"] }
-hashbrown = "0.13.2"
+hashbrown = "0.14.1"
 multiqueue = "0.3.2"
 core_affinity = "0.8.1"
 chrono = "0.4.31"

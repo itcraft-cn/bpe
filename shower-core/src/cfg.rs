@@ -1,4 +1,4 @@
-use crate::consts::{SHOWER_FILENAME_CONFIG_TOML, SHOWER_ENV_HOME_KEY};
+use crate::consts::{SHOWER_ENV_HOME_KEY, SHOWER_FILENAME_CONFIG_TOML};
 use config::{Config, File};
 use hashbrown::HashMap;
 use state::Storage;
@@ -11,7 +11,6 @@ pub(crate) struct ShowerConfig {
 }
 
 impl ShowerConfig {
-
     pub(crate) fn fetch_cfg_str(&self, key: &str) -> String {
         self.map.get(key).unwrap().to_owned()
     }
@@ -24,7 +23,6 @@ impl ShowerConfig {
         self.fetch_cfg_str(key).as_str().parse::<usize>().unwrap()
     }
 }
-
 
 pub(crate) fn load_config() {
     static INIT: Once = Once::new();
