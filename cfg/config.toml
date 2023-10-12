@@ -9,3 +9,4 @@ log_prod_config_file = "cfg/log4rs.yaml"
 queue_capacity = 8388608
 once_fetch_range = 16384
 stored_tick_size = 65536
+deep_tick_depth = 10

@@ -4,7 +4,7 @@ use crate::{
         KEY_DEEP_TICK_DEPTH, KEY_DEV_MODE, KEY_ONCE_FETCH_RANGE, KEY_QUEUE_CAPACITY,
         KEY_STORED_TICK_SIZE,
     },
-    data::{U8Tick, DEEP_TICK_SIZE, TICK_SIZE},
+    data::{TickConvU8, U8Tick, DEEP_TICK_SIZE, TICK_SIZE},
     logger::init_logger,
     store, DeepTick, Tick,
 };
@@ -97,8 +97,10 @@ fn handle_recv(receiver: MPMCReceiver<Event>) {
         });
         walker.fetch_add(count, Ordering::SeqCst);
         if !check_active() {
-            let now = walker.load(Ordering::SeqCst);
-            info!("finally, received {} events", now);
+            if unsafe { DEBUG } {
+                let now = walker.load(Ordering::SeqCst);
+                info!("finally, received {} events", now);
+            }
             break;
         }
     }
@@ -107,17 +109,27 @@ fn handle_recv(receiver: MPMCReceiver<Event>) {
 fn process_event(event: Event) {
     match event {
         Event::NewTick(tick) => {
-            let u8tick = tick.convert(unsafe { TICK_VEC_SIZE });
-            store::insert(&u8tick);
-            unsafe { process_data(Event::ComputeBar(u8tick, false)) };
+            process_tick(&tick, unsafe { TICK_VEC_SIZE }, 2);
         }
         Event::NewDeepTick(tick) => {
-            let u8tick = tick.convert(unsafe { DEEP_TICK_VEC_SIZE });
-            store::insert(&u8tick);
-            unsafe { process_data(Event::ComputeBar(u8tick, true)) };
+            process_tick(&tick, unsafe { DEEP_TICK_VEC_SIZE }, 59);
         }
-        Event::ComputeBar(_u8tick, _deep) => {}
+        Event::ComputeBar(u8tick, idx) => {
+            let slice = u8tick.u64data();
+            info!(
+                "last: [{}], volumn: [{}], timestamp: [{}]",
+                slice[idx],
+                slice[idx + 1],
+                slice[idx + 2]
+            );
+        }
     }
+}
+
+fn process_tick(tick: &dyn TickConvU8, size: usize, idx: usize) {
+    let u8tick = tick.convert(size);
+    store::insert(&u8tick);
+    send_event(Event::ComputeBar(u8tick, idx));
 }
 
 fn check_active() -> bool {
@@ -169,20 +181,20 @@ fn handle_fetch_error(e: PoisonError<&mut AtomicBool>) -> &mut AtomicBool {
 }
 
 pub fn new_tick_data(data: Tick) -> bool {
-    unsafe { process_data(Event::NewTick(data)) }
+    send_event(Event::NewTick(data))
 }
 
 pub fn new_deep_tick_data(data: DeepTick) -> bool {
-    unsafe { process_data(Event::NewDeepTick(data)) }
+    send_event(Event::NewDeepTick(data))
 }
 
-unsafe fn process_data(event: Event) -> bool {
-    if let Some(sender) = OPT_SENDER.as_ref() {
+fn send_event(event: Event) -> bool {
+    if let Some(sender) = unsafe { OPT_SENDER.as_ref() } {
         let rs = sender.try_send(event);
         if let Ok(_res) = rs {
             true
         } else {
-            if DEBUG {
+            if unsafe { DEBUG } {
                 let err = rs.err().unwrap();
                 warn!(
                     "Failed to send data to queue, dropped. reseason: [{:?}-->{}]",
@@ -203,5 +215,5 @@ pub fn def_action(js: &str) {
 enum Event {
     NewTick(Tick),
     NewDeepTick(DeepTick),
-    ComputeBar(U8Tick, bool),
+    ComputeBar(U8Tick, usize),
 }

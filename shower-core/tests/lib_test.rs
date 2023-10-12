@@ -7,6 +7,17 @@ const LOOP_SIZE: usize = 50000;
 const RANGE_SIZE: usize = 100;
 const WAIT_TIME: usize = 1;
 
+//#[test]
+fn _test_timestamp() {
+    env::set_var("SHOWER_HOME", "/home/helly/code/rust/shower");
+    start();
+    let timestamp = special_timestamp(2023, 10, 12, 12, 46, 3);
+    for i in 0..LOOP_SIZE {
+        log::info!("timestamp: {}", timestamp + i as u64 * 1000);
+    }
+    stop();
+}
+
 #[test]
 fn test_new_proc() {
     env::set_var("SHOWER_HOME", "/home/helly/code/rust/shower");

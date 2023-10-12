@@ -5,6 +5,10 @@ pub(crate) const TICK_SIZE: usize = 64;
 pub(crate) const DEEP_TICK_ELEMENT_SIZE: usize = 63;
 pub(crate) const DEEP_TICK_SIZE: usize = 512;
 
+pub(crate) trait TickConvU8 {
+    fn convert(&self, size: usize) -> U8Tick;
+}
+
 pub(crate) struct U8Tick {
     quote_id: u16,
     element_size: usize,
@@ -50,8 +54,9 @@ impl Tick {
             timestamp,
         }
     }
-
-    pub(crate) fn convert(&self, u8_data_len: usize) -> U8Tick {
+}
+impl TickConvU8 for Tick {
+    fn convert(&self, u8_data_len: usize) -> U8Tick {
         U8Tick {
             quote_id: self.quote_id,
             element_size: TICK_ELEMENT_SIZE,
@@ -154,8 +159,9 @@ impl DeepTick {
             timestamp,
         }
     }
-
-    pub(crate) fn convert(&self, u8_data_len: usize) -> U8Tick {
+}
+impl TickConvU8 for DeepTick {
+    fn convert(&self, u8_data_len: usize) -> U8Tick {
         U8Tick {
             quote_id: self.quote_id,
             element_size: DEEP_TICK_ELEMENT_SIZE,

@@ -98,7 +98,7 @@ impl SimpleU16Entry {
 
 #[cfg(test)]
 mod tests {
-    use crate::{cfg, consts::SHOWER_ENV_HOME_KEY, data::TICK_SIZE, logger, Tick};
+    use crate::{cfg, consts::SHOWER_ENV_HOME_KEY, data::{TICK_SIZE, TickConvU8}, logger, Tick};
     use std::env;
 
     #[test]
