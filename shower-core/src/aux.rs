@@ -34,32 +34,10 @@ pub(crate) fn _timestamp() -> u64 {
     duration.as_millis() as u64
 }
 
-pub(crate) struct WrappedArray {
-    data: Vec<u8>,
-    walker: usize,
+pub(crate) struct SimpleU16Map<T> {
+    vec: Vec<Option<T>>,
 }
-
-impl WrappedArray {
-    pub(crate) fn new(data: Vec<u8>) -> Self {
-        WrappedArray { data, walker: 0 }
-    }
-    pub(crate) fn data(&mut self) -> &mut [u8] {
-        let slice = self.data.as_mut_slice();
-        slice
-    }
-    pub(crate) fn walker(&self) -> usize {
-        self.walker
-    }
-
-    pub(crate) fn update_walker(&mut self, step: usize, mask: usize) {
-        self.walker = (self.walker + step) & mask;
-    }
-}
-
-pub(crate) struct SimpleU16Map {
-    vec: Vec<Option<WrappedArray>>,
-}
-impl SimpleU16Map {
+impl<T> SimpleU16Map<T> {
     pub(crate) fn new() -> Self {
         let mut vec = vec![];
         for _ in 0..U16_FULL_VAL {
@@ -76,7 +54,7 @@ impl SimpleU16Map {
         }
     }
     #[inline]
-    pub(crate) fn get_mut(&mut self, id: u16) -> &mut WrappedArray {
+    pub(crate) fn get_mut(&mut self, id: u16) -> &mut T {
         self.vec[id as usize].as_mut().unwrap()
     }
 }
@@ -87,9 +65,9 @@ pub(crate) enum SimpleU16Entry {
 }
 impl SimpleU16Entry {
     #[inline]
-    pub(crate) fn or_insert_with<F>(&mut self, map: &mut SimpleU16Map, f: F)
+    pub(crate) fn or_insert_with<T, F>(&mut self, map: &mut SimpleU16Map<T>, f: F)
     where
-        F: FnOnce() -> WrappedArray,
+        F: FnOnce() -> T,
     {
         match *self {
             SimpleU16Entry::Exist(_) => (),

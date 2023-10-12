@@ -6,7 +6,7 @@ use crate::{
     },
     data::{TickConvU8, U8Tick, DEEP_TICK_SIZE, TICK_SIZE},
     logger::init_logger,
-    store_tick, DeepTick, Tick,
+    store_bar, store_tick, DeepTick, Tick,
 };
 use log::*;
 use multiqueue::{mpmc_queue, MPMCReceiver, MPMCSender};
@@ -115,13 +115,7 @@ fn process_event(event: Event) {
             process_tick(&tick, unsafe { DEEP_TICK_VEC_SIZE }, 59);
         }
         Event::ComputeBar(u8tick, idx) => {
-            let slice = u8tick.u64data();
-            info!(
-                "last: [{}], volumn: [{}], timestamp: [{}]",
-                slice[idx],
-                slice[idx + 1],
-                slice[idx + 2]
-            );
+            store_bar::update_tick(&u8tick, idx);
         }
     }
 }
