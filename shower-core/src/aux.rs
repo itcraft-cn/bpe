@@ -1,5 +1,7 @@
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
+const U16_FULL_VAL: u32 = u16::MAX as u32 + 1;
+
 #[inline]
 pub(crate) fn fill_u64(slice: &mut [u8], data: u64) {
     slice[0] = data as u8;
@@ -30,4 +32,70 @@ pub(crate) fn _timestamp() -> u64 {
         .duration_since(UNIX_EPOCH)
         .unwrap_or_else(|_e| Duration::new(0, 0));
     duration.as_millis() as u64
+}
+
+pub(crate) struct WrappedArray {
+    data: Vec<u8>,
+    walker: usize,
+}
+
+impl WrappedArray {
+    pub(crate) fn new(data: Vec<u8>) -> Self {
+        WrappedArray { data, walker: 0 }
+    }
+    pub(crate) fn data(&mut self) -> &mut [u8] {
+        let slice = self.data.as_mut_slice();
+        slice
+    }
+    pub(crate) fn walker(&self) -> usize {
+        self.walker
+    }
+
+    pub(crate) fn update_walker(&mut self, step: usize, mask: usize) {
+        self.walker = (self.walker + step) & mask;
+    }
+}
+
+pub(crate) struct SimpleU16Map {
+    vec: Vec<Option<WrappedArray>>,
+}
+impl SimpleU16Map {
+    pub(crate) fn new() -> Self {
+        let mut vec = vec![];
+        for _ in 0..U16_FULL_VAL {
+            vec.push(None);
+        }
+        SimpleU16Map { vec }
+    }
+    #[inline]
+    pub(crate) fn entry(&mut self, id: u16) -> SimpleU16Entry {
+        let opt = self.vec[id as usize].as_mut();
+        match opt {
+            Some(_) => SimpleU16Entry::Exist(id),
+            None => SimpleU16Entry::NotExist(id),
+        }
+    }
+    #[inline]
+    pub(crate) fn get_mut(&mut self, id: u16) -> &mut WrappedArray {
+        self.vec[id as usize].as_mut().unwrap()
+    }
+}
+
+pub(crate) enum SimpleU16Entry {
+    Exist(u16),
+    NotExist(u16),
+}
+impl SimpleU16Entry {
+    #[inline]
+    pub(crate) fn or_insert_with<F>(&mut self, map: &mut SimpleU16Map, f: F)
+    where
+        F: FnOnce() -> WrappedArray,
+    {
+        match *self {
+            SimpleU16Entry::Exist(_) => (),
+            SimpleU16Entry::NotExist(id) => {
+                map.vec[id as usize] = Some(f());
+            }
+        }
+    }
 }

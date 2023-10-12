@@ -7,7 +7,7 @@ pub(crate) mod consts;
 pub(crate) mod core;
 pub(crate) mod data;
 pub(crate) mod logger;
-pub(crate) mod store;
+pub(crate) mod store_tick;
 
 #[cfg(test)]
 pub(crate) mod utest_base;

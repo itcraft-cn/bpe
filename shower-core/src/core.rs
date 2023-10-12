@@ -6,7 +6,7 @@ use crate::{
     },
     data::{TickConvU8, U8Tick, DEEP_TICK_SIZE, TICK_SIZE},
     logger::init_logger,
-    store, DeepTick, Tick,
+    store_tick, DeepTick, Tick,
 };
 use log::*;
 use multiqueue::{mpmc_queue, MPMCReceiver, MPMCSender};
@@ -128,7 +128,7 @@ fn process_event(event: Event) {
 
 fn process_tick(tick: &dyn TickConvU8, size: usize, idx: usize) {
     let u8tick = tick.convert(size);
-    store::insert(&u8tick);
+    store_tick::insert(&u8tick);
     send_event(Event::ComputeBar(u8tick, idx));
 }
 
