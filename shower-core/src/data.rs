@@ -1,5 +1,7 @@
 use crate::consts::MAX_DEEP_TICK_DEPTH;
 
+pub(crate) const U8TICK_ELEMENT_SIZE: usize = 64;
+
 pub(crate) const TICK_ELEMENT_SIZE: usize = 5;
 pub(crate) const TICK_SIZE: usize = 64;
 pub(crate) const DEEP_TICK_ELEMENT_SIZE: usize = 63;
@@ -14,7 +16,7 @@ pub(crate) struct U8Tick {
     element_size: usize,
     tick_size: usize,
     u8_data_len: usize,
-    data: [u64; 64],
+    data: [u64; U8TICK_ELEMENT_SIZE],
 }
 impl U8Tick {
     pub fn quote_id(&self) -> u16 {
