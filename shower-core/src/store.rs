@@ -7,24 +7,22 @@ static MAP_INIT: Once = Once::new();
 static mut MAP: Option<SimpleU16Map> = None;
 
 pub(crate) fn insert(tick: &U8Tick) {
-    MAP_INIT.call_once(|| unsafe { initial() });
-    unsafe {
-        insert_into_slice(&tick);
-    }
+    MAP_INIT.call_once(initial);
+    insert_into_slice(&tick);
 }
 
-unsafe fn initial() {
-    MAP.get_or_insert(SimpleU16Map::new());
+fn initial() {
+    unsafe { MAP.get_or_insert(SimpleU16Map::new()) };
 }
 
-unsafe fn insert_into_slice(tick: &U8Tick) {
+fn insert_into_slice(tick: &U8Tick) {
     let quote_id = tick.quote_id();
     let element_size = tick.element_size();
     let step = tick.tick_size();
     let size = tick.u8_tick_data_len();
     let mask = size - 1;
     let data = tick.u64data();
-    let map = MAP.as_mut().unwrap();
+    let map = unsafe { MAP.as_mut().unwrap() };
     let array = find_array(map, quote_id, size);
     let slice = array.data.as_mut_slice();
     let base = array.walker;
