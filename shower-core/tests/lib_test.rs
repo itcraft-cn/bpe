@@ -1,21 +1,23 @@
-use chrono::NaiveDate;
+mod test_log;
+mod test_timestamp;
+
 use log::*;
 use shower::{new_tick_data, start, stop, Tick};
 use std::{env, thread, time::Duration};
+use test_log::init_logger;
+use test_timestamp::special_timestamp;
 
 const LOOP_SIZE: usize = 50000;
 const RANGE_SIZE: usize = 100;
 const WAIT_TIME: usize = 1;
 
-//#[test]
-fn _test_timestamp() {
-    env::set_var("SHOWER_HOME", "/home/helly/code/rust/shower");
-    start();
+#[test]
+fn test_timestamp() {
+    init_logger();
     let timestamp = special_timestamp(2023, 10, 12, 12, 46, 3);
     for i in 0..LOOP_SIZE {
         log::info!("timestamp: {}", timestamp + i as u64 * 1000);
     }
-    stop();
 }
 
 #[test]
@@ -45,10 +47,4 @@ fn gen_new_data() {
             thread::sleep(Duration::from_millis(WAIT_TIME as u64));
         }
     }
-}
-
-fn special_timestamp(year: i32, month: u32, day: u32, hour: u32, min: u32, sec: u32) -> u64 {
-    let date = NaiveDate::from_ymd_opt(year, month, day).unwrap_or_default();
-    let date_time = date.and_hms_opt(hour, min, sec).unwrap_or_default();
-    date_time.timestamp_millis() as u64
 }

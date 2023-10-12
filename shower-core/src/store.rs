@@ -98,12 +98,15 @@ impl SimpleU16Entry {
 
 #[cfg(test)]
 mod tests {
-    use crate::{cfg, consts::SHOWER_ENV_HOME_KEY, data::{TICK_SIZE, TickConvU8}, logger, Tick};
-    use std::env;
+    use crate::{
+        data::{TickConvU8, TICK_SIZE},
+        utest_base::test_init,
+        Tick,
+    };
 
     #[test]
     fn test() {
-        init_logger();
+        test_init();
         let mut map = super::SimpleU16Map::new();
         map.entry(1)
             .or_insert_with(&mut map, || super::WrappedArray {
@@ -116,16 +119,10 @@ mod tests {
 
     #[test]
     fn test2() {
-        init_logger();
+        test_init();
         let tick = Tick::new(1, 1, 1, 1, 1, 1);
         for _ in 0..100 {
             super::insert(&tick.convert(TICK_SIZE * 65536));
         }
-    }
-
-    fn init_logger() {
-        env::set_var(SHOWER_ENV_HOME_KEY, "/home/helly/code/rust/shower");
-        cfg::load_config();
-        logger::init_logger(cfg::get_config());
     }
 }
