@@ -6,10 +6,10 @@ const U16_FULL_VAL: u32 = u16::MAX as u32 + 1;
 static MAP_INIT: Once = Once::new();
 static mut MAP: Option<SimpleU16Map> = None;
 
-pub(crate) fn insert(tick: U8Tick) {
+pub(crate) fn insert(tick: &U8Tick) {
     MAP_INIT.call_once(|| unsafe { initial() });
     unsafe {
-        insert_into_slice(tick);
+        insert_into_slice(&tick);
     }
 }
 
@@ -17,7 +17,7 @@ unsafe fn initial() {
     MAP.get_or_insert(SimpleU16Map::new());
 }
 
-unsafe fn insert_into_slice(tick: U8Tick) {
+unsafe fn insert_into_slice(tick: &U8Tick) {
     let quote_id = tick.quote_id();
     let element_size = tick.element_size();
     let step = tick.tick_size();
@@ -119,7 +119,7 @@ mod tests {
         init_logger();
         let tick = Tick::new(1, 1, 1, 1, 1, 1);
         for _ in 0..100 {
-            super::insert(tick.convert(TICK_SIZE * 65536));
+            super::insert(&tick.convert(TICK_SIZE * 65536));
         }
     }
 

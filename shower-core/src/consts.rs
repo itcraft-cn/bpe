@@ -14,3 +14,4 @@ pub(crate) const KEY_QUEUE_CAPACITY: &str = "queue_capacity";
 pub(crate) const KEY_ONCE_FETCH_RANGE: &str = "once_fetch_range";
 
 pub(crate) const KEY_STORED_TICK_SIZE: &str = "stored_tick_size";
+pub(crate) const KEY_DEEP_TICK_DEPTH: &str = "deep_tick_depth";
