@@ -245,11 +245,10 @@ pub enum BarType {
     Bar5Min,
     Bar15Min,
     Bar30Min,
-    Bar60Min,
+    BarHour,
     BarDaily,
     BarWeekly,
     BarMonthly,
-    BarYearly,
 }
 #[derive(Clone, Copy, Debug)]
 pub struct Bar {
