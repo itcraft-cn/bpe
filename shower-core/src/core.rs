@@ -38,7 +38,7 @@ fn actual_start() -> bool {
 }
 
 fn process_data(data: &U8Bytes) {
-    store::insert(&data);
+    store::insert(data);
 }
 
 pub fn stop() {
@@ -51,7 +51,7 @@ fn actual_stop() {
 }
 
 pub fn new_data(data: &U8Bytes) -> bool {
-    process_data(&data);
+    process_data(data);
     true
 }
 
