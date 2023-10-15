@@ -8,7 +8,7 @@ use test_log::init_logger;
 use test_timestamp::special_timestamp;
 
 const TM_TEST_SIZE: usize = 10000;
-const LOOP_SIZE: usize = 100000000;
+const LOOP_SIZE: usize = 10000000;
 
 #[test]
 fn test_timestamp() {

@@ -21,9 +21,7 @@ fn insert_into_slice(data: &U8Bytes) {
     let array = find_array(map, id, size);
     let base = array.walker();
     let slice = array.data();
-    for i in 0..size {
-        slice[base + i] = data[i];
-    }
+    slice[base..base + size].copy_from_slice(&data[0..size]);
     array.update_walker(U8_DATA_MAX_SIZE);
 }
 
