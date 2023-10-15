@@ -2,7 +2,7 @@ mod test_log;
 mod test_timestamp;
 
 use log::*;
-use shower::{new_tick_data, start, stop, Tick};
+use shower::{new_data, start, stop, U8Bytes};
 use std::{env, thread};
 use test_log::init_logger;
 use test_timestamp::special_timestamp;
@@ -31,10 +31,9 @@ fn gen_new_data() {
     let core_ids = core_affinity::get_core_ids().unwrap();
     core_affinity::set_for_current(core_ids[core_ids.len() - 1]);
     info!("thread:{} started", thread::current().name().unwrap());
-    let timestamp = special_timestamp(2023, 7, 10, 9, 59, 59);
-    for i in 1..=LOOP_SIZE {
-        let v = i as u64;
-        let ret = new_tick_data(Tick::new((i % 32) as u16, v, v, v, v, timestamp));
+    let u8data = U8Bytes::new_from_vec(16, 288, vec![0u8; 288]);
+    for _ in 1..=LOOP_SIZE {
+        let ret = new_data(&u8data);
         if ret {
             debug!("send success");
         } else {

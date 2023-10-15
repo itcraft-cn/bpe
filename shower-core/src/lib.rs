@@ -7,18 +7,13 @@ pub(crate) mod consts;
 pub(crate) mod core;
 pub(crate) mod data;
 pub(crate) mod logger;
-pub(crate) mod store_bar;
-pub(crate) mod store_tick;
+pub(crate) mod store;
 
 #[cfg(test)]
 pub(crate) mod utest_base;
 
 pub use crate::core::def_action;
-pub use crate::core::new_deep_tick_data;
-pub use crate::core::new_tick_data;
+pub use crate::core::new_data;
 pub use crate::core::start;
 pub use crate::core::stop;
-pub use crate::data::Bar;
-pub use crate::data::BarType;
-pub use crate::data::DeepTick;
-pub use crate::data::Tick;
+pub use crate::data::U8Bytes;

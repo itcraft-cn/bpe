@@ -1,35 +1,30 @@
-use crate::{
-    aux::{fill_u64, SimpleU16Map},
-    data::U8Tick,
-};
+use crate::{aux::SimpleU16Map, consts::U8_DATA_MAX_SIZE, data::U8Bytes};
 use std::sync::Once;
 
 static MAP_INIT: Once = Once::new();
 static mut MAP: Option<SimpleU16Map<WrappedArray>> = None;
 
-pub(crate) fn insert(tick: &U8Tick) {
+pub(crate) fn insert(data: &U8Bytes) {
     MAP_INIT.call_once(initial);
-    insert_into_slice(&tick);
+    insert_into_slice(&data);
 }
 
 fn initial() {
     unsafe { MAP.get_or_insert(SimpleU16Map::new()) };
 }
 
-fn insert_into_slice(tick: &U8Tick) {
-    let quote_id = tick.quote_id();
-    let element_size = tick.element_size();
-    let step = tick.tick_size();
-    let size = tick.u8_tick_data_len();
-    let data = tick.u64data();
+fn insert_into_slice(data: &U8Bytes) {
+    let id = data.id();
+    let size = data.len();
+    let data = data.bytes();
     let map = unsafe { MAP.as_mut().unwrap() };
-    let array = find_array(map, quote_id, size);
+    let array = find_array(map, id, size);
     let base = array.walker();
     let slice = array.data();
-    for i in 0..element_size {
-        fill_u64(&mut slice[base + i * 8..base + (i + 1) * 8], data[i]);
+    for i in 0..size {
+        slice[base + i] = data[i];
     }
-    array.update_walker(step);
+    array.update_walker(U8_DATA_MAX_SIZE);
 }
 
 #[inline]
@@ -73,12 +68,7 @@ impl WrappedArray {
 #[cfg(test)]
 mod tests {
     use super::WrappedArray;
-    use crate::{
-        aux::{SimpleU16Map, _timestamp},
-        data::{TickConvU8, TICK_SIZE},
-        utest_base::test_init,
-        Tick,
-    };
+    use crate::{aux::SimpleU16Map, utest_base::test_init, U8Bytes};
 
     #[test]
     fn test() {
@@ -93,9 +83,8 @@ mod tests {
     #[test]
     fn test2() {
         test_init();
-        let tick = Tick::new(1, 1, 1, 1, 1, _timestamp());
         for _ in 0..100 {
-            super::insert(&tick.convert(TICK_SIZE * 65536));
+            super::insert(&U8Bytes::new_from_vec(16, 288, vec![0u8; 288]));
         }
     }
 }

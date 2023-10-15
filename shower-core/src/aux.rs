@@ -3,7 +3,7 @@ use std::time::{Duration, SystemTime, UNIX_EPOCH};
 const U16_FULL_VAL: u32 = u16::MAX as u32 + 1;
 
 #[inline]
-pub(crate) fn fill_u64(slice: &mut [u8], data: u64) {
+pub(crate) fn _fill_u64(slice: &mut [u8], data: u64) {
     slice[0] = data as u8;
     slice[1] = (data >> 1) as u8;
     slice[2] = (data >> 2) as u8;
