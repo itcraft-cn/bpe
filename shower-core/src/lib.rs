@@ -7,6 +7,7 @@ pub(crate) mod consts;
 pub(crate) mod core;
 pub(crate) mod data;
 pub(crate) mod logger;
+pub(crate) mod lua;
 pub(crate) mod lua_func;
 pub(crate) mod store;
 

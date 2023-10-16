@@ -3,7 +3,7 @@ use crate::{
     consts::KEY_DEV_MODE,
     data::U8Bytes,
     logger::init_logger,
-    lua_func::inject_lua_func,
+    lua::inject_lua_func,
     store,
 };
 use log::*;
