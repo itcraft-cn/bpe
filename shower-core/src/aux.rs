@@ -80,7 +80,7 @@ impl SimpleU16Entry {
     #[inline]
     pub(crate) fn fetch_as_mut<'a, T>(&self, map: &'a mut SimpleU16Map<T>) -> Option<&'a mut T> {
         match *self {
-            SimpleU16Entry::Exist(id) => Some(map.vec[id as usize].as_mut().unwrap()),
+            SimpleU16Entry::Exist(id) => Some(map.get_mut(id)),
             _ => None,
         }
     }
