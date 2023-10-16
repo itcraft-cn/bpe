@@ -1,28 +1,18 @@
-mod test_log;
-mod test_timestamp;
-
 use log::*;
-use shower::{new_data, start, stop, U8Bytes};
+use shower::{def_action_lua, new_data, start, stop, U8Bytes};
 use std::{env, thread};
-use test_log::init_logger;
-use test_timestamp::special_timestamp;
 
-const TM_TEST_SIZE: usize = 10000;
-const LOOP_SIZE: usize = 10000000;
-
-#[test]
-fn test_timestamp() {
-    init_logger();
-    let timestamp = special_timestamp(2023, 10, 12, 12, 46, 3);
-    for i in 0..TM_TEST_SIZE {
-        log::info!("timestamp: {}", timestamp + i as u64 * 1000);
-    }
-}
+const LOOP_SIZE: usize = 1000000;
 
 #[test]
 fn test_new_proc() {
     env::set_var("SHOWER_HOME", "/home/helly/code/rust/shower");
     start();
+    def_action_lua(
+        r#"function(data)
+            _id(data)
+        end"#,
+    );
     gen_new_data();
     stop();
 }
