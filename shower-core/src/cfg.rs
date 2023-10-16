@@ -19,7 +19,7 @@ impl ShowerConfig {
         "true".eq_ignore_ascii_case(self.fetch_cfg_str(key).as_str())
     }
 
-    pub(crate) fn _fetch_cfg_usize(&self, key: &str) -> usize {
+    pub(crate) fn fetch_cfg_usize(&self, key: &str) -> usize {
         self.fetch_cfg_str(key).as_str().parse::<usize>().unwrap()
     }
 }

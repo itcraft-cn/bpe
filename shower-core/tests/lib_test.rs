@@ -11,10 +11,10 @@ fn test_new_proc() {
     def_action_lua(
         r#"
         function(data_ptr)
-            local id = _id(data_ptr)
-            _select(id,
+            _select(_id(data_ptr),
                 _mix_array_to_u128(1, 2, 4, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0),
-                _mix_array_to_u128(0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0))
+                _mix_array_to_u128(0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0),
+                3)
         end
         "#,
     );
