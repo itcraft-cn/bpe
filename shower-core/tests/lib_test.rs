@@ -9,9 +9,14 @@ fn test_new_proc() {
     env::set_var("SHOWER_HOME", "/home/helly/code/rust/shower");
     start();
     def_action_lua(
-        r#"function(data)
-            _id(data)
-        end"#,
+        r#"
+        function(data_ptr)
+            local id = _id(data_ptr)
+            _select(id,
+                _mix_array_to_u128(1, 2, 4, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0),
+                _mix_array_to_u128(0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0))
+        end
+        "#,
     );
     gen_new_data();
     stop();
