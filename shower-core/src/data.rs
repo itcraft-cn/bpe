@@ -32,7 +32,5 @@ impl U8Bytes {
 }
 
 fn copy(len: usize, bytes: &mut [u8; U8_DATA_MAX_SIZE], slice: &[u8]) {
-    for i in 0..len {
-        bytes[i] = slice[i];
-    }
+    bytes.as_mut_slice()[0..len].copy_from_slice(&slice[0..len]);
 }
