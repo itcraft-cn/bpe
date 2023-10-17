@@ -1,23 +1,13 @@
 use log::*;
-use shower::{def_action_lua, new_data, start, stop, U8Bytes};
+use shower::{new_data, start, stop, U8Bytes};
 use std::{env, thread};
 
-const LOOP_SIZE: usize = 1000000;
+const LOOP_SIZE: usize = 10000000;
 
 #[test]
 fn test_new_proc() {
     env::set_var("SHOWER_HOME", "/home/helly/code/rust/shower");
     start();
-    def_action_lua(
-        r#"
-        function(data_ptr)
-            _select(_id(data_ptr),
-                _mix_array_to_u128(1, 2, 4, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0),
-                _mix_array_to_u128(0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0),
-                3)
-        end
-        "#,
-    );
     gen_new_data();
     stop();
 }

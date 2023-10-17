@@ -3,16 +3,15 @@ use crate::{
     consts::KEY_DEV_MODE,
     data::U8Bytes,
     logger::init_logger,
-    lua::inject_lua_func,
+    sql::{parse_options, parse_sql},
     store,
 };
 use log::*;
-use mlua::{Function, Lua};
-use std::{ptr, sync::Once};
+use sql_parse::ParseOptions;
+use std::sync::Once;
 
 static mut DEBUG: bool = false;
-static mut LUA_VM: Option<Lua> = None;
-static mut ACTION_VEC: Option<Vec<Function>> = None;
+static mut PARSE_OPTIONS: Option<ParseOptions> = None;
 
 pub fn start() -> bool {
     static START: Once = Once::new();
@@ -36,10 +35,7 @@ fn actual_start() -> bool {
 
     unsafe {
         DEBUG = cfg.fetch_cfg_bool(KEY_DEV_MODE);
-        let lua_vm = Lua::new();
-        inject_lua_func(&lua_vm);
-        LUA_VM = Some(lua_vm);
-        ACTION_VEC = Some(vec![]);
+        PARSE_OPTIONS = Some(parse_options());
     }
 
     true
@@ -52,24 +48,7 @@ fn process_data(data: &U8Bytes) {
 }
 
 #[inline]
-fn call_action(data: &U8Bytes) {
-    let vec = unsafe { ACTION_VEC.as_ref().unwrap() };
-    if !vec.is_empty() {
-        let ptr = ptr::addr_of!(data);
-        let v_ptr = ptr as u64;
-        vec.iter().for_each(|f| {
-            call_lua(f, v_ptr);
-        });
-    }
-}
-
-#[inline]
-fn call_lua(f: &Function<'_>, v_ptr: u64) {
-    let rs = f.call::<u64, ()>(v_ptr);
-    if let Err(e) = rs {
-        warn!("hit error: {}", e);
-    }
-}
+fn call_action(_data: &U8Bytes) {}
 
 pub fn stop() {
     static STOP: Once = Once::new();
@@ -85,28 +64,22 @@ pub fn new_data(data: &U8Bytes) -> bool {
     true
 }
 
-pub fn def_action_sql(sql: &str) -> bool {
+pub fn def_action(sql: &str) -> bool {
     info!("{}", sql);
-    todo!("not implemented yet");
-}
-
-pub fn def_action_lua(lua: &str) -> bool {
-    info!("{}", lua);
-    let lua_vm = unsafe {
-        LUA_VM
-            .as_mut()
-            .unwrap_or_else(|| panic!("should have a valid lua vm"))
-    };
-    let rs: Result<Function, mlua::Error> = lua_vm.load(lua).eval();
-    if let Ok(lua_func) = rs {
-        let vec = unsafe {
-            ACTION_VEC
-                .as_mut()
-                .unwrap_or_else(|| panic!("should have a valid action map"))
-        };
-        vec.push(lua_func);
+    if let Some(parsed_sql) = parse_sql(sql, unsafe { PARSE_OPTIONS.as_ref().unwrap() }) {
+        info!("can be used as a select statement: [{}]", sql);
+        for table in &parsed_sql.tables() {
+            info!("table: {}", table);
+        }
+        for filter in &parsed_sql.filters() {
+            info!("filter: {:?}", filter);
+        }
+        for field in &parsed_sql.fields() {
+            info!("field: {:?}", field);
+        }
         true
     } else {
+        warn!("not supported sql statement: [{}]", sql);
         false
     }
 }

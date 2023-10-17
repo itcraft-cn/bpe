@@ -42,24 +42,24 @@ fn find_or_insert_array(map: &mut SimpleU16Map<WrappedArray>, id: u16) -> &mut W
 }
 
 #[inline]
-pub(crate) fn select_limit(
+pub(crate) fn _select_limit(
     id: u16,
     limit: usize,
 ) -> Option<(&'static [u8], usize, &'static [u8], usize, usize)> {
     let map = unsafe { MAP.as_mut().unwrap() };
-    let opt = find_array(map, id);
-    opt.map(|array| fetch_array(array, limit))
+    let opt = _find_array(map, id);
+    opt.map(|array| _fetch_array(array, limit))
 }
 
 #[inline]
-fn find_array(map: &mut SimpleU16Map<WrappedArray>, id: u16) -> Option<&mut WrappedArray> {
-    map.entry(id).fetch_as_mut(map)
+fn _find_array(map: &mut SimpleU16Map<WrappedArray>, id: u16) -> Option<&mut WrappedArray> {
+    map.entry(id)._fetch_as_mut(map)
 }
 
-fn fetch_array(array: &mut WrappedArray, limit: usize) -> (&[u8], usize, &[u8], usize, usize) {
+fn _fetch_array(array: &mut WrappedArray, limit: usize) -> (&[u8], usize, &[u8], usize, usize) {
     let base = array.walker();
-    let size = array.size();
-    let len = array.len();
+    let size = array._size();
+    let len = array._len();
     let record_len = len / U8_DATA_MAX_SIZE;
     let dst_len = if record_len > limit {
         limit
@@ -91,7 +91,7 @@ fn fetch_array(array: &mut WrappedArray, limit: usize) -> (&[u8], usize, &[u8], 
 
 struct WrappedArray {
     data: Vec<u8>,
-    size: usize,
+    _size: usize,
     mask: usize,
     walker: usize,
 }
@@ -100,22 +100,22 @@ impl WrappedArray {
     fn new(size: usize) -> Self {
         WrappedArray {
             data: vec![0u8; size],
-            size,
+            _size: size,
             mask: size - 1,
             walker: 0,
         }
     }
 
-    fn len(&self) -> usize {
+    fn _len(&self) -> usize {
         if self.walker > self.mask {
-            self.size
+            self._size
         } else {
             self.walker
         }
     }
 
-    fn size(&self) -> usize {
-        self.size
+    fn _size(&self) -> usize {
+        self._size
     }
 
     fn mask(&self) -> usize {
