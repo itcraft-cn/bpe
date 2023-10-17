@@ -1,4 +1,8 @@
-use crate::{aux::_fetch_u64, consts::DEFALUT_SELECT_SIZE, store, U8Bytes};
+use crate::{
+    aux::_fetch_u64,
+    consts::{DEFALUT_SELECT_SIZE, U8_DATA_MAX_SIZE},
+    store, U8Bytes,
+};
 
 pub(crate) fn rust_lua_fn_id(v_ptr: u64) -> u16 {
     let ptr = v_ptr as *const &U8Bytes;
@@ -61,19 +65,27 @@ fn select(id: u16, id_array: &[u8; 16], fn_array: &[u8; 16], len: u8) {
     select_limit(id, id_array, fn_array, len, DEFALUT_SELECT_SIZE);
 }
 
-fn select_limit(id: u16, _id_array: &[u8; 16], _fn_array: &[u8; 16], _len: u8, limit: usize) {
+fn select_limit(id: u16, id_array: &[u8; 16], _fn_array: &[u8; 16], field_len: u8, limit: usize) {
     let opt = store::select_limit(id, limit);
     if let Some(tuple) = opt {
-        let _slice1 = tuple.0;
-        let _size1 = tuple.1;
-        let _slice2 = tuple.2;
-        let _size2 = tuple.3;
+        let slice1 = tuple.0;
+        let size1 = tuple.1;
+        let slice2 = tuple.2;
+        let size2 = tuple.3;
         let _size = tuple.4;
-        for i in 0.._size1 {
-            let _ = _fetch_u64(&_slice1[i * 8..(i + 1) * 8]);
+        iter_slice(id_array, slice1, size1, field_len as usize);
+        iter_slice(id_array, slice2, size2, field_len as usize);
+    }
+}
+
+fn iter_slice(id_array: &[u8; 16], slice: &[u8], size: usize, field_len: usize) {
+    let mut base = 0 as usize;
+    for _ in 0..size {
+        for j in 0..field_len {
+            let idx1 = base + (id_array[j] * 8) as usize;
+            let idx2 = base + ((id_array[j] + 1) * 8) as usize;
+            let _ = _fetch_u64(&slice[idx1..idx2]);
         }
-        for i in 0.._size2 {
-            let _ = _fetch_u64(&_slice2[i * 8..(i + 1) * 8]);
-        }
+        base += U8_DATA_MAX_SIZE;
     }
 }
