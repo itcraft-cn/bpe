@@ -12,7 +12,7 @@ static mut VEC_SIZE: usize = 0;
 
 pub(crate) fn insert(data: &U8Bytes) {
     MAP_INIT.call_once(initial);
-    insert_into_slice(&data);
+    insert_into_slice(data);
 }
 
 fn initial() {
@@ -24,7 +24,7 @@ fn initial() {
 
 fn insert_into_slice(data: &U8Bytes) {
     let id = data.id();
-    let size = data.len();
+    let size = data.data_len();
     let data = data.bytes();
     let map = unsafe { MAP.as_mut().unwrap() };
     let array = find_or_insert_array(map, id);
@@ -48,15 +48,11 @@ pub(crate) fn select_limit(
 ) -> Option<(&'static [u8], usize, &'static [u8], usize, usize)> {
     let map = unsafe { MAP.as_mut().unwrap() };
     let opt = find_array(map, id);
-    if let Some(array) = opt {
-        Some(fetch_array(array, limit))
-    } else {
-        None
-    }
+    opt.map(|array| fetch_array(array, limit))
 }
 
 #[inline]
-fn find_array<'a>(map: &'a mut SimpleU16Map<WrappedArray>, id: u16) -> Option<&mut WrappedArray> {
+fn find_array(map: &mut SimpleU16Map<WrappedArray>, id: u16) -> Option<&mut WrappedArray> {
     map.entry(id).fetch_as_mut(map)
 }
 
@@ -64,13 +60,12 @@ fn fetch_array(array: &mut WrappedArray, limit: usize) -> (&[u8], usize, &[u8], 
     let base = array.walker();
     let size = array.size();
     let len = array.len();
-    let dst_len;
     let record_len = len / U8_DATA_MAX_SIZE;
-    if record_len > limit {
-        dst_len = limit;
+    let dst_len = if record_len > limit {
+        limit
     } else {
-        dst_len = record_len;
-    }
+        record_len
+    };
     let mask = array.mask();
     let slice = array.data();
     let idx1 = (base - U8_DATA_MAX_SIZE * dst_len) % mask;
@@ -80,7 +75,7 @@ fn fetch_array(array: &mut WrappedArray, limit: usize) -> (&[u8], usize, &[u8], 
             &slice[idx1..size],
             (size - idx1) / U8_DATA_MAX_SIZE,
             &slice[0..idx2],
-            (idx2 - 0) / U8_DATA_MAX_SIZE,
+            idx2 / U8_DATA_MAX_SIZE,
             dst_len,
         )
     } else {

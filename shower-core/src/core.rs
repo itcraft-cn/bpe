@@ -36,8 +36,8 @@ fn actual_start() -> bool {
 
     unsafe {
         DEBUG = cfg.fetch_cfg_bool(KEY_DEV_MODE);
-        let mut lua_vm = Lua::new();
-        inject_lua_func(&mut lua_vm);
+        let lua_vm = Lua::new();
+        inject_lua_func(&lua_vm);
         LUA_VM = Some(lua_vm);
         ACTION_VEC = Some(vec![]);
     }

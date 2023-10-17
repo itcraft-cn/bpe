@@ -25,31 +25,30 @@ pub(crate) fn rust_lua_fn_mix(
     c15: u8,
 ) -> u128 {
     let mut mixed = c0 as u128;
-    mixed += (c1 as u128) << 2 * 8;
-    mixed += (c2 as u128) << 3 * 8;
-    mixed += (c3 as u128) << 4 * 8;
-    mixed += (c4 as u128) << 5 * 8;
-    mixed += (c5 as u128) << 6 * 8;
-    mixed += (c6 as u128) << 7 * 8;
-    mixed += (c7 as u128) << 8 * 8;
-    mixed += (c8 as u128) << 8 * 8;
-    mixed += (c9 as u128) << 9 * 8;
-    mixed += (c10 as u128) << 10 * 8;
-    mixed += (c11 as u128) << 11 * 8;
-    mixed += (c12 as u128) << 12 * 8;
-    mixed += (c13 as u128) << 13 * 8;
-    mixed += (c14 as u128) << 14 * 8;
-    mixed += (c15 as u128) << 15 * 8;
+    mixed += (c1 as u128) << (2 * 8);
+    mixed += (c2 as u128) << (3 * 8);
+    mixed += (c3 as u128) << (4 * 8);
+    mixed += (c4 as u128) << (5 * 8);
+    mixed += (c5 as u128) << (6 * 8);
+    mixed += (c6 as u128) << (7 * 8);
+    mixed += (c7 as u128) << (8 * 8);
+    mixed += (c8 as u128) << (8 * 8);
+    mixed += (c9 as u128) << (9 * 8);
+    mixed += (c10 as u128) << (10 * 8);
+    mixed += (c11 as u128) << (11 * 8);
+    mixed += (c12 as u128) << (12 * 8);
+    mixed += (c13 as u128) << (13 * 8);
+    mixed += (c14 as u128) << (14 * 8);
+    mixed += (c15 as u128) << (15 * 8);
     mixed
 }
 
-pub(crate) fn rust_lua_fn_select(id: u16, mixed_id: u128, mixed_func: u128, len: u8) -> () {
+pub(crate) fn rust_lua_fn_select(id: u16, mixed_id: u128, mixed_func: u128, len: u8) {
     let mut id_array = [0u8; 16];
     fill(&mut id_array, mixed_id, len);
     let mut fn_array = [0u8; 16];
     fill(&mut fn_array, mixed_func, len);
     select(id, &id_array, &fn_array, len);
-    ()
 }
 
 fn fill(array: &mut [u8; 16], mixed: u128, len: u8) {

@@ -37,7 +37,8 @@ pub(crate) fn inject_lua_func(lua_vm: &Lua) {
             lua_vm,
             "_select",
             |_, (id, mixed_id, mixed_func, len): (u16, u128, u128, u8)| {
-                Ok(rust_lua_fn_select(id, mixed_id, mixed_func, len))
+                rust_lua_fn_select(id, mixed_id, mixed_func, len);
+                Ok(())
             },
         );
     });
