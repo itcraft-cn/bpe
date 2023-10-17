@@ -1,4 +1,5 @@
 use crate::{
+    action::gen_action,
     cfg::{get_config, load_config},
     consts::KEY_DEV_MODE,
     data::U8Bytes,
@@ -77,6 +78,7 @@ pub fn def_action(sql: &str) -> bool {
         for field in &parsed_sql.fields() {
             info!("field: {:?}", field);
         }
+        let _actions = gen_action(&parsed_sql);
         true
     } else {
         warn!("not supported sql statement: [{}]", sql);

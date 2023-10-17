@@ -83,7 +83,7 @@ fn check_forbidden_statement(select_stat: &Select<'_>, issues: &mut Vec<String>)
 fn parse_select_target(
     table_references: &Option<Vec<TableReference<'_>>>,
     issues: &mut Vec<String>,
-) -> Vec<String> {
+) -> Vec<u16> {
     if let Some(tab_vec) = table_references {
         let mut tab_ref_vec = vec![];
         for tab in tab_vec {
@@ -99,7 +99,7 @@ fn parse_select_target(
     }
 }
 
-fn parse_tab_ref(tab: &TableReference<'_>, tab_ref_vec: &mut Vec<String>) -> Option<String> {
+fn parse_tab_ref(tab: &TableReference<'_>, tab_ref_vec: &mut Vec<u16>) -> Option<String> {
     match tab {
         TableReference::Table {
             identifier,
@@ -113,7 +113,7 @@ fn parse_tab_ref(tab: &TableReference<'_>, tab_ref_vec: &mut Vec<String>) -> Opt
                 if !id.starts_with("_") {
                     return Some(String::from("should be a valid identifier, start with `_`"));
                 }
-                tab_ref_vec.push(String::from(id.value));
+                tab_ref_vec.push(conv_tab_id(String::from(id.value)));
             }
         }
         TableReference::Query {
@@ -357,8 +357,8 @@ fn parse_expr(expr: &Expression<'_>, expr_entity_vec: &mut Vec<ExprEntity>) -> O
                     return Some(converted_id_part2.0);
                 }
                 expr_entity_vec.push(ExprEntity::FieldWithTab(
-                    converted_id_part1.0,
-                    converted_id_part2.0,
+                    conv_tab_id(converted_id_part1.0),
+                    conv_field_id(converted_id_part2.0),
                 ));
             } else if id_vec.len() == 1 {
                 let id_part = id_vec.get(0).unwrap();
@@ -366,7 +366,7 @@ fn parse_expr(expr: &Expression<'_>, expr_entity_vec: &mut Vec<ExprEntity>) -> O
                 if !converted_id_part.1 {
                     return Some(converted_id_part.0);
                 }
-                expr_entity_vec.push(ExprEntity::Field(converted_id_part.0));
+                expr_entity_vec.push(ExprEntity::Field(conv_field_id(converted_id_part.0)));
             } else {
                 return Some(String::from("id should be a valid identifier"));
             }
@@ -374,6 +374,19 @@ fn parse_expr(expr: &Expression<'_>, expr_entity_vec: &mut Vec<ExprEntity>) -> O
         _ => {}
     }
     None
+}
+
+fn conv_tab_id(id: String) -> u16 {
+    conv_id(id, 1)
+}
+
+fn conv_field_id(id: String) -> u16 {
+    conv_id(id, 2)
+}
+
+fn conv_id(id: String, idx: usize) -> u16 {
+    let v_str = String::from_utf8(id.as_bytes()[idx..].to_vec()).unwrap();
+    u16::from_str_radix(&v_str, 16).unwrap()
 }
 
 fn fetch_id_part(id_part: &IdentifierPart<'_>) -> (String, bool) {
@@ -393,22 +406,22 @@ fn fetch_id_part(id_part: &IdentifierPart<'_>) -> (String, bool) {
 }
 
 #[derive(Debug, Clone)]
-pub(crate)enum ExprEntity {
+pub(crate) enum ExprEntity {
     Op(OpType),
     Val(ValType),
-    Field(String),
-    FieldWithTab(String, String),
+    Field(u16),
+    FieldWithTab(u16, u16),
     Function(String, Vec<ExprEntity>),
 }
 #[derive(Debug, Clone)]
-pub(crate)enum ValType {
+pub(crate) enum ValType {
     Bool(bool),
     Str(String),
     Int(i64),
     Float(f64),
 }
 #[derive(Debug, Clone)]
-pub(crate)enum OpType {
+pub(crate) enum OpType {
     Or,
     And,
     Eq,
@@ -420,14 +433,14 @@ pub(crate)enum OpType {
 }
 
 #[derive(Debug, Clone)]
-pub(crate)struct ParsedSql {
-    tables: Vec<String>,
+pub(crate) struct ParsedSql {
+    tables: Vec<u16>,
     filters: Vec<ExprEntity>,
     fields: Vec<ExprEntity>,
 }
 impl ParsedSql {
-    pub(crate)fn new(
-        tables: Vec<String>,
+    pub(crate) fn new(
+        tables: Vec<u16>,
         filters: Vec<ExprEntity>,
         fields: Vec<ExprEntity>,
     ) -> ParsedSql {
@@ -438,15 +451,15 @@ impl ParsedSql {
         }
     }
 
-    pub fn tables(&self) -> Vec<String> {
+    pub fn tables(&self) -> Vec<u16> {
         self.tables.clone()
     }
 
-    pub(crate)fn filters(&self) -> Vec<ExprEntity> {
+    pub(crate) fn filters(&self) -> Vec<ExprEntity> {
         self.filters.clone()
     }
 
-    pub(crate)fn fields(&self) -> Vec<ExprEntity> {
+    pub(crate) fn fields(&self) -> Vec<ExprEntity> {
         self.fields.clone()
     }
 }

@@ -29,6 +29,8 @@ core_affinity = "0.8.1"
 chrono = "0.4.31"
 mlua = { version = "0.8.10", features = ["luajit52", "vendored", "async"] }
 sql-parse = "0.15.0"
+strum = "0.25.0"
+strum_macros = "0.25"
 
 [dev-dependencies]
 criterion = { version = "0.4", features = ["html_reports"] }
