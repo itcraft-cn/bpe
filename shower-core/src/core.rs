@@ -66,18 +66,7 @@ pub fn new_data(data: &U8Bytes) -> bool {
 }
 
 pub fn def_action(sql: &str) -> bool {
-    info!("{}", sql);
     if let Some(parsed_sql) = parse_sql(sql, unsafe { PARSE_OPTIONS.as_ref().unwrap() }) {
-        info!("can be used as a select statement: [{}]", sql);
-        for table in &parsed_sql.tables() {
-            info!("table: {}", table);
-        }
-        for filter in &parsed_sql.filters() {
-            info!("filter: {:?}", filter);
-        }
-        for field in &parsed_sql.fields() {
-            info!("field: {:?}", field);
-        }
         let _actions = gen_action(&parsed_sql);
         true
     } else {

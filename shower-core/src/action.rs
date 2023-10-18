@@ -8,10 +8,8 @@ pub(crate) fn gen_action(parsed_sql: &ParsedSql) -> Vec<Action> {
     let mut actions = vec![];
     let tab_id_array = parsed_sql.tables();
     let filter = create_filter(parsed_sql.filters());
-    log::info!("filter: {:?}", filter);
     actions.push(Action::FilterAction(filter));
     let executors = create_executor(tab_id_array.clone(), parsed_sql.fields());
-    log::info!("executors: {:?}", executors);
     actions.push(Action::ExecuteAction(executors));
     actions
 }
@@ -24,9 +22,8 @@ fn create_filter(entities: Vec<ExprEntity>) -> Filter {
     loop {
         let len = filters.len();
         if filters.is_empty() {
-            break;
+            panic!("No filters found");
         } else if len == 1 {
-            log::info!("Filter created");
             break;
         } else if len >= 3 {
             let v1 = filters.remove(0);
@@ -34,19 +31,15 @@ fn create_filter(entities: Vec<ExprEntity>) -> Filter {
             let op = filters.remove(0);
             let new_filter = match (v1.clone(), v2.clone(), op.clone()) {
                 (Filter::Original(_), Filter::Original(_), Filter::Original(_)) => {
-                    log::info!("0: {:?}, {:?}, {:?}", v1.clone(), v2.clone(), op.clone());
                     Filter::Mixed(vec![v1.clone(), v2.clone(), op.clone()])
                 }
                 (Filter::Original(_), Filter::Mixed(_), Filter::Original(_)) => {
-                    log::info!("1: {:?}, {:?}, {:?}", v1.clone(), v2.clone(), op.clone());
                     Filter::Mixed(vec![v1.clone(), v2.clone(), op.clone()])
                 }
                 (Filter::Mixed(_), Filter::Original(_), Filter::Original(_)) => {
-                    log::info!("2: {:?}, {:?}, {:?}", v1.clone(), v2.clone(), op.clone());
                     Filter::Mixed(vec![v1.clone(), v2.clone(), op.clone()])
                 }
                 (Filter::Mixed(_), Filter::Mixed(_), Filter::Original(_)) => {
-                    log::info!("3: {:?}, {:?}, {:?}", v1.clone(), v2.clone(), op.clone());
                     Filter::Mixed(vec![v1.clone(), v2.clone(), op.clone()])
                 }
                 _ => {
