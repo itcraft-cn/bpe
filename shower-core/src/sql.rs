@@ -1,3 +1,4 @@
+use crate::consts::DEFALUT_SELECT_SIZE;
 use sql_parse::{
     self, BinaryOperator, Expression, IdentifierPart, ParseOptions, SQLArguments, SQLDialect,
     Select, SelectExpr, Statement, TableReference,
@@ -49,9 +50,11 @@ fn parse_select_statement(select_stat: Select<'_>, issues: &mut Vec<String>) -> 
         let tables = parse_select_target(&select_stat.table_references, issues);
         // 辨识过滤条件
         let filters = parse_select_condition(&select_stat.where_, issues);
+        // 限制数据范围
+        let limit_range = parse_select_limitor(&select_stat.limit, issues);
         // 辨识字段
         let fields = parse_select_fields(&select_stat.select_exprs, issues);
-        Some(ParsedSql::new(tables, filters, fields))
+        Some(ParsedSql::new(tables, filters, limit_range, fields))
     } else {
         None
     }
@@ -149,6 +152,24 @@ fn parse_select_condition(
         }
     } else {
         vec![]
+    }
+}
+
+fn parse_select_limitor(
+    limit: &Option<(Range<usize>, Option<Expression<'_>>, Expression<'_>)>,
+    issues: &mut Vec<String>,
+) -> usize {
+    if let Some(limit_part) = limit {
+        if limit_part.1.is_some() {
+            issues.push(String::from("offset is not supported"));
+            return 0;
+        }
+        match &limit_part.2 {
+            Expression::Integer(v) => v.0 as usize,
+            _ => DEFALUT_SELECT_SIZE,
+        }
+    } else {
+        DEFALUT_SELECT_SIZE
     }
 }
 
@@ -386,7 +407,7 @@ fn conv_field_id(id: String) -> u16 {
 
 fn conv_id(id: String, idx: usize) -> u16 {
     let v_str = String::from_utf8(id.as_bytes()[idx..].to_vec()).unwrap();
-    u16::from_str_radix(&v_str, 16).unwrap()
+    v_str.parse::<u16>().unwrap()
 }
 
 fn fetch_id_part(id_part: &IdentifierPart<'_>) -> (String, bool) {
@@ -436,17 +457,20 @@ pub(crate) enum OpType {
 pub(crate) struct ParsedSql {
     tables: Vec<u16>,
     filters: Vec<ExprEntity>,
+    _limit_range: usize,
     fields: Vec<ExprEntity>,
 }
 impl ParsedSql {
     pub(crate) fn new(
         tables: Vec<u16>,
         filters: Vec<ExprEntity>,
+        limit_range: usize,
         fields: Vec<ExprEntity>,
     ) -> ParsedSql {
         ParsedSql {
             tables,
             filters,
+            _limit_range: limit_range,
             fields,
         }
     }
