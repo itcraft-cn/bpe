@@ -9,7 +9,7 @@ use strum_macros::EnumString;
 pub(crate) fn gen_action(parsed_sql: &ParsedSql) -> Result<Action, ActionError> {
     let tab_id_array = parsed_sql.tables();
     if tab_id_array.len() != 1 {
-        return Err(ActionError::new_string(format!(
+        return Err(ActionError::new(format!(
             "only support one table, but {} tables",
             tab_id_array.len()
         )));
@@ -17,14 +17,14 @@ pub(crate) fn gen_action(parsed_sql: &ParsedSql) -> Result<Action, ActionError> 
     let iterator = create_iterator(*tab_id_array.first().unwrap());
     let rs_filter = create_filter(parsed_sql.filters());
     if rs_filter.is_err() {
-        return Err(ActionError::new_string(format!(
+        return Err(ActionError::new(format!(
             "failed to parse filter: {}",
             rs_filter.err().unwrap()
         )));
     }
     let rs_executors = create_executor(tab_id_array.clone(), parsed_sql.fields());
     if rs_executors.is_err() {
-        return Err(ActionError::new_string(format!(
+        return Err(ActionError::new(format!(
             "failed to parse executors: {}",
             rs_executors.err().unwrap()
         )));
@@ -104,20 +104,20 @@ fn conv_as_executor(entity: ExprEntity, tab_id_array: &Vec<u16>) -> Result<Execu
                         return Err(rs.err().unwrap());
                     }
                 } else {
-                    return Err(ActionError::new_string(format!(
+                    return Err(ActionError::new(format!(
                         "unknown func: {:?}",
                         func_name
                     )));
                 }
             } else {
-                return Err(ActionError::new_string(format!(
+                return Err(ActionError::new(format!(
                     "unknown func: {:?}",
                     func_name
                 )));
             }
         }
         _ => {
-            return Err(ActionError::new_string(format!(
+            return Err(ActionError::new(format!(
                 "cannot hit this case: {:?}",
                 entity
             )));
@@ -142,7 +142,7 @@ fn parse_args_fetchers(
             }
         });
     if hit_error {
-        Err(ActionError::new_string(format!(
+        Err(ActionError::new(format!(
             "failed to parse args: {:?}",
             args
         )))

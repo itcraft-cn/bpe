@@ -8,12 +8,7 @@ pub(crate) struct ActionError {
     msg: String,
 }
 impl ActionError {
-    pub(crate) fn new(msg: &str) -> Self {
-        Self {
-            msg: String::from(msg),
-        }
-    }
-    pub(crate) fn new_string(msg: String) -> Self {
+    pub(crate) fn new(msg: String) -> Self {
         Self { msg: msg.clone() }
     }
 }
