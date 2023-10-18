@@ -53,13 +53,15 @@ fn process_data(data: &U8Bytes) {
 
 #[inline]
 fn call_action(data: &U8Bytes) {
-    let actions = search_aciton(data.id());
-    for action in actions {
-        invoke(action);
+    let opt_actions = search_aciton(data.id());
+    if let Some(actions) = opt_actions {
+        for action in actions {
+            invoke(action);
+        }
     }
 }
 
-fn search_aciton<'a>(id: u16) -> &'a Vec<Action<'a>> {
+fn search_aciton<'a>(id: u16) -> Option<&'a Vec<Action<'a>>> {
     let map = unsafe { ACTION_MAP.as_ref().unwrap() };
     map.get(id)
 }

@@ -58,8 +58,8 @@ impl<T> SimpleU16Map<T> {
         self.vec[id as usize].as_mut().unwrap()
     }
     #[inline]
-    pub(crate) fn get(&self, id: u16) -> &T {
-        self.vec[id as usize].as_ref().unwrap()
+    pub(crate) fn get(&self, id: u16) -> Option<&T> {
+        self.vec[id as usize].as_ref()
     }
 }
 
