@@ -1,13 +1,12 @@
 use crate::{
     error::ActionError,
-    sql::{ExprEntity, ParsedSql},
+    sql::{ExprEntity, OpType, ParsedSql, ValType},
     store::{self, DataIterator},
 };
 use std::str::FromStr;
 use strum_macros::EnumString;
 
-pub(crate) fn gen_action(parsed_sql: &ParsedSql) -> Result<Vec<Action>, ActionError> {
-    let mut actions = vec![];
+pub(crate) fn gen_action(parsed_sql: &ParsedSql) -> Result<Action, ActionError> {
     let tab_id_array = parsed_sql.tables();
     if tab_id_array.len() != 1 {
         return Err(ActionError::new_string(format!(
@@ -15,26 +14,27 @@ pub(crate) fn gen_action(parsed_sql: &ParsedSql) -> Result<Vec<Action>, ActionEr
             tab_id_array.len()
         )));
     }
-    let _iterator = create_iterator(*tab_id_array.first().unwrap());
-    let rs = create_filter(parsed_sql.filters());
-    if let Ok(filter) = rs {
-        actions.push(Action::FilterAction(filter));
-    } else {
+    let iterator = create_iterator(*tab_id_array.first().unwrap());
+    let rs_filter = create_filter(parsed_sql.filters());
+    if rs_filter.is_err() {
         return Err(ActionError::new_string(format!(
             "failed to parse filter: {}",
-            rs.err().unwrap()
+            rs_filter.err().unwrap()
         )));
     }
-    let rs = create_executor(tab_id_array.clone(), parsed_sql.fields());
-    if let Ok(executors) = rs {
-        actions.push(Action::ExecuteAction(executors));
-    } else {
+    let rs_executors = create_executor(tab_id_array.clone(), parsed_sql.fields());
+    if rs_executors.is_err() {
         return Err(ActionError::new_string(format!(
             "failed to parse executors: {}",
-            rs.err().unwrap()
+            rs_executors.err().unwrap()
         )));
     }
-    Ok(actions)
+    Ok(Action {
+        _iterator: iterator,
+        _filter: rs_filter.unwrap(),
+        _limit: parsed_sql.limit(),
+        _executors: rs_executors.unwrap(),
+    })
 }
 
 fn create_iterator<'a>(id: u16) -> DataIterator<'a> {
@@ -42,48 +42,33 @@ fn create_iterator<'a>(id: u16) -> DataIterator<'a> {
 }
 
 fn create_filter(entities: Vec<ExprEntity>) -> Result<Filter, ActionError> {
-    let mut filters = vec![];
-    for entity in entities {
-        filters.insert(0, Filter::Original(entity));
-    }
+    let mut filters: Vec<Filter> = entities
+        .iter()
+        .map(|e| Filter::Original(e.clone()))
+        .collect();
+    filters.reverse();
+    let mut tmp: Vec<Filter> = vec![];
     loop {
-        let len = filters.len();
         if filters.is_empty() {
-            return Err(ActionError::new("No filters found"));
-        } else if len == 1 {
             break;
-        } else if len >= 3 {
-            let v1 = filters.remove(0);
-            let v2 = filters.remove(0);
-            let op = filters.remove(0);
-            let rs = match (v1.clone(), v2.clone(), op.clone()) {
-                (Filter::Original(_), Filter::Original(_), Filter::Original(_)) => {
-                    Ok(Filter::Mixed(vec![v1.clone(), v2.clone(), op.clone()]))
-                }
-                (Filter::Original(_), Filter::Mixed(_), Filter::Original(_)) => {
-                    Ok(Filter::Mixed(vec![v1.clone(), v2.clone(), op.clone()]))
-                }
-                (Filter::Mixed(_), Filter::Original(_), Filter::Original(_)) => {
-                    Ok(Filter::Mixed(vec![v1.clone(), v2.clone(), op.clone()]))
-                }
-                (Filter::Mixed(_), Filter::Mixed(_), Filter::Original(_)) => {
-                    Ok(Filter::Mixed(vec![v1.clone(), v2.clone(), op.clone()]))
-                }
-                _ => Err(ActionError::new_string(format!(
-                    "cannot hit this case: {:?}",
-                    (v1.clone(), v2.clone(), op.clone())
-                ))),
-            };
-            if let Ok(new_filter) = rs {
-                filters.insert(0, new_filter);
-            } else {
-                return Err(rs.err().unwrap());
-            }
+        }
+        let filter = filters.remove(0);
+        let is_op = match &filter {
+            Filter::Original(expr) => match expr {
+                ExprEntity::Op(_) => true,
+                _ => false,
+            },
+            Filter::Mixed(_) => false,
+        };
+        if is_op {
+            let m2 = tmp.pop().unwrap();
+            let m1 = tmp.pop().unwrap();
+            tmp.push(Filter::Mixed(vec![m1, m2, filter]));
         } else {
-            return Err(ActionError::new("cannot create filter, less than 3"));
+            tmp.push(filter);
         }
     }
-    Ok(filters.get(0).cloned().unwrap())
+    Ok(tmp.first().unwrap().clone())
 }
 
 fn create_executor(
@@ -104,9 +89,7 @@ fn create_executor(
 
 fn conv_as_executor(entity: ExprEntity, tab_id_array: &Vec<u16>) -> Result<Executor, ActionError> {
     let fetcher = match entity {
-        ExprEntity::Field(field_id) => {
-            Executor::Fetch(*tab_id_array.first().unwrap(), field_id)
-        }
+        ExprEntity::Field(field_id) => Executor::Fetch(*tab_id_array.first().unwrap(), field_id),
         ExprEntity::FieldWithTab(tab_id, field_id) => Executor::Fetch(tab_id, field_id),
         ExprEntity::Function(func_name, args) => {
             if func_name.starts_with('_') {
@@ -168,38 +151,123 @@ fn parse_args_fetchers(
     }
 }
 
-pub(crate) fn invoke(actions: &Vec<Action>) {
-    for action in actions {
-        match action {
-            Action::ExecuteAction(executors) => {
-                for executor in executors {
-                    call_executor(executor);
-                }
-            }
-            Action::FilterAction(filter) => {
-                call_filter(filter);
-            }
-        }
+pub(crate) fn _invoke(action: &Action) {
+    let _: Vec<_> = action
+        ._iterator
+        .filter(|e| action._filter._is_match(e))
+        .take(action._limit)
+        .map(|_e| {})
+        .collect();
+}
+
+fn op_or(slice: &[u8], v1: &Filter, v2: &Filter) -> bool {
+    log::info!("or, p[{:?}], v1:[{:?}], v2:[{:?}]", slice.as_ptr(), v1, v2);
+    match (v1, v2) {
+        (Filter::Mixed(_), Filter::Mixed(_)) => v1._is_match(slice) || v2._is_match(slice),
+        _ => false,
     }
 }
-
-fn call_filter(filter: &Filter) {
-    todo!()
+fn op_and(slice: &[u8], v1: &Filter, v2: &Filter) -> bool {
+    log::info!("and, p[{:?}], v1:[{:?}], v2:[{:?}]", slice.as_ptr(), v1, v2);
+    match (v1, v2) {
+        (Filter::Mixed(_), Filter::Mixed(_)) => v1._is_match(slice) || v2._is_match(slice),
+        _ => false,
+    }
+}
+fn op_eq(slice: &[u8], v1: &Filter, v2: &Filter) -> bool {
+    log::info!("eq, p[{:?}], v1:[{:?}], v2:[{:?}]", slice.as_ptr(), v1, v2);
+    match (v1, v2) {
+        (Filter::Original(expr1), Filter::Original(expr2)) => match (expr1, expr2) {
+            (ExprEntity::Val(_), ExprEntity::Field(_)) => {
+                log::info!("eq, v, f");
+                true
+            }
+            (ExprEntity::Val(_), ExprEntity::FieldWithTab(_, _)) => {
+                log::info!("eq, v, fwt");
+                true
+            }
+            (ExprEntity::Val(_), ExprEntity::Function(_, _)) => {
+                log::info!("eq, v, fn");
+                true
+            }
+            (ExprEntity::Field(_), ExprEntity::Val(_)) => {
+                log::info!("eq, f, v");
+                true
+            }
+            (ExprEntity::FieldWithTab(_, _), ExprEntity::Val(_)) => {
+                log::info!("eq, fwt, v");
+                true
+            }
+            (ExprEntity::Function(_, _), ExprEntity::Val(_)) => {
+                log::info!("eq, fn, v");
+                true
+            }
+            _ => false,
+        },
+        _ => false,
+    }
+}
+fn op_gt_eq(slice: &[u8], v1: &Filter, v2: &Filter) -> bool {
+    log::info!("gt_eq, p[{:?}]", slice.as_ptr());
+    true
+}
+fn op_gt(slice: &[u8], v1: &Filter, v2: &Filter) -> bool {
+    log::info!("gt, p[{:?}]", slice.as_ptr());
+    true
+}
+fn op_lt_eq(slice: &[u8], v1: &Filter, v2: &Filter) -> bool {
+    log::info!("lt_eq, p[{:?}]", slice.as_ptr());
+    true
+}
+fn op_lt(slice: &[u8], v1: &Filter, v2: &Filter) -> bool {
+    log::info!("lt, p[{:?}]", slice.as_ptr());
+    true
+}
+fn op_neq(slice: &[u8], v1: &Filter, v2: &Filter) -> bool {
+    log::info!("neq, p[{:?}]", slice.as_ptr());
+    true
 }
 
-fn call_executor(executor: &Executor) {
-    todo!()
+#[derive(Debug)]
+pub(crate) struct Action<'a> {
+    _iterator: DataIterator<'a>,
+    pub(crate) _filter: Filter,
+    _limit: usize,
+    _executors: Vec<Executor>,
 }
 
-#[derive(Debug, Clone)]
-pub(crate) enum Action {
-    FilterAction(Filter),
-    ExecuteAction(Vec<Executor>),
-}
 #[derive(Debug, Clone)]
 pub(crate) enum Filter {
     Original(ExprEntity),
     Mixed(Vec<Filter>),
+}
+impl Filter {
+    fn _is_match(&self, slice: &[u8]) -> bool {
+        match self {
+            Filter::Original(_) => true,
+            Filter::Mixed(filters) => {
+                let v1 = filters.get(0).unwrap();
+                let v2 = filters.get(1).unwrap();
+                let op = filters.get(2).unwrap();
+                match op {
+                    Filter::Original(op_expr) => match op_expr {
+                        ExprEntity::Op(op_type) => match op_type {
+                            OpType::Or => op_or(slice, v1, v2),
+                            OpType::And => op_and(slice, v1, v2),
+                            OpType::Eq => op_eq(slice, v1, v2),
+                            OpType::GtEq => op_gt_eq(slice, v1, v2),
+                            OpType::Gt => op_gt(slice, v1, v2),
+                            OpType::LtEq => op_lt_eq(slice, v1, v2),
+                            OpType::Lt => op_lt(slice, v1, v2),
+                            OpType::Neq => op_neq(slice, v1, v2),
+                        },
+                        _ => false,
+                    },
+                    Filter::Mixed(_) => false,
+                }
+            }
+        }
+    }
 }
 #[derive(Debug, Clone)]
 pub(crate) enum Executor {
@@ -212,4 +280,44 @@ pub(crate) enum Func {
     Add,
     #[strum(ascii_case_insensitive)]
     Sub,
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::{
+        cfg::{get_config, load_config},
+        data::U8Bytes,
+        logger::init_logger,
+        sql::{parse_options, parse_sql},
+        store::insert,
+    };
+    use std::env;
+
+    const SQL: &str = r#"
+    SELECT _1.__1, _1.__2, _1.__3, _sub(_add(_1.__4, _1.__4), _1.__5)
+    FROM _1
+    WHERE (_1.__1 = '1' AND _1.__2 = '2') OR (_1.__1 = '3' AND _1.__2 = '4')
+    LIMIT 10
+    "#;
+
+    #[test]
+    fn test_action() {
+        env::set_var("SHOWER_HOME", "/home/helly/code/rust/shower");
+        load_config();
+        init_logger(get_config());
+        let mut vec = vec![0u8; 288];
+        vec.as_mut_slice()[3] = 1;
+        let u8data = U8Bytes::new_from_vec(1, 288, vec);
+        for _ in 0..100 {
+            insert(&u8data);
+        }
+        let parse_options = parse_options();
+        if let Some(parsed_sql) = parse_sql(SQL, &parse_options) {
+            let rs_action = gen_action(&parsed_sql);
+            if let Ok(action) = rs_action {
+                _invoke(&action);
+            }
+        }
+    }
 }

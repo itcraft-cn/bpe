@@ -26,8 +26,7 @@ fn insert_into_slice(data: &U8Bytes) {
     let id = data.id();
     let size = data.data_len();
     let data = data.bytes();
-    let map = unsafe { MAP.as_mut().unwrap() };
-    let array = find_or_insert_array(map, id);
+    let array = find_or_insert_array(id);
     let base = array.walker() & array.mask();
     let slice = array.data();
     slice[base..base + size].copy_from_slice(&data[0..size]);
@@ -35,7 +34,8 @@ fn insert_into_slice(data: &U8Bytes) {
 }
 
 #[inline]
-fn find_or_insert_array(map: &mut SimpleU16Map<WrappedArray>, id: u16) -> &mut WrappedArray {
+fn find_or_insert_array<'a>(id: u16) -> &'a mut WrappedArray {
+    let map = unsafe { MAP.as_mut().unwrap() };
     map.entry(id)
         .or_insert_with(map, || WrappedArray::new(unsafe { VEC_SIZE }));
     map.get_mut(id)
@@ -43,16 +43,15 @@ fn find_or_insert_array(map: &mut SimpleU16Map<WrappedArray>, id: u16) -> &mut W
 
 pub(crate) fn create_iterator<'a>(id: u16) -> DataIterator<'a> {
     MAP_INIT.call_once(initial);
-    let map = unsafe { MAP.as_mut().unwrap() };
-    let array = find_or_insert_array(map, id);
     DataIterator {
-        array,
+        array: find_or_insert_array(id),
         len: 0,
         offset: 0,
         first: true,
     }
 }
 
+#[derive(Debug, Copy, Clone)]
 pub(crate) struct DataIterator<'a> {
     array: &'a WrappedArray,
     len: usize,
@@ -80,6 +79,7 @@ impl<'a> Iterator for DataIterator<'a> {
     }
 }
 
+#[derive(Debug)]
 struct WrappedArray {
     data: Vec<u8>,
     size: usize,

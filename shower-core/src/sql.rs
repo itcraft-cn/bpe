@@ -454,30 +454,34 @@ pub(crate) enum OpType {
 pub(crate) struct ParsedSql {
     tables: Vec<u16>,
     filters: Vec<ExprEntity>,
-    _limit_range: usize,
+    limit: usize,
     fields: Vec<ExprEntity>,
 }
 impl ParsedSql {
     pub(crate) fn new(
         tables: Vec<u16>,
         filters: Vec<ExprEntity>,
-        limit_range: usize,
+        limit: usize,
         fields: Vec<ExprEntity>,
     ) -> ParsedSql {
         ParsedSql {
             tables,
             filters,
-            _limit_range: limit_range,
+            limit,
             fields,
         }
     }
 
-    pub fn tables(&self) -> Vec<u16> {
+    pub(crate) fn tables(&self) -> Vec<u16> {
         self.tables.clone()
     }
 
     pub(crate) fn filters(&self) -> Vec<ExprEntity> {
         self.filters.clone()
+    }
+
+    pub(crate) fn limit(&self) -> usize {
+        self.limit
     }
 
     pub(crate) fn fields(&self) -> Vec<ExprEntity> {
