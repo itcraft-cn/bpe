@@ -57,6 +57,10 @@ impl<T> SimpleU16Map<T> {
     pub(crate) fn get_mut(&mut self, id: u16) -> &mut T {
         self.vec[id as usize].as_mut().unwrap()
     }
+    #[inline]
+    pub(crate) fn get(&self, id: u16) -> &T {
+        self.vec[id as usize].as_ref().unwrap()
+    }
 }
 
 pub(crate) enum SimpleU16Entry {
