@@ -1,6 +1,7 @@
 use crate::{
     error::ActionError,
-    sql::{ExprEntity, ParsedSql}, store,
+    sql::{ExprEntity, ParsedSql},
+    store::{self, DataIterator},
 };
 use std::str::FromStr;
 use strum_macros::EnumString;
@@ -14,7 +15,7 @@ pub(crate) fn gen_action(parsed_sql: &ParsedSql) -> Result<Vec<Action>, ActionEr
             tab_id_array.len()
         )));
     }
-    let _stream = create_stream(tab_id_array.get(0).unwrap().clone());
+    let _iterator = create_iterator(tab_id_array.get(0).unwrap().clone());
     let rs = create_filter(parsed_sql.filters());
     if let Ok(filter) = rs {
         actions.push(Action::FilterAction(filter));
@@ -36,8 +37,8 @@ pub(crate) fn gen_action(parsed_sql: &ParsedSql) -> Result<Vec<Action>, ActionEr
     Ok(actions)
 }
 
-fn create_stream(id: u16) -> () {
-    return store::create_stream(id);
+fn create_iterator<'a>(id: u16) -> DataIterator<'a> {
+    store::create_iterator(id)
 }
 
 fn create_filter(entities: Vec<ExprEntity>) -> Result<Filter, ActionError> {
