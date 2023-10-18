@@ -54,7 +54,14 @@ fn parse_select_statement(select_stat: Select<'_>, issues: &mut Vec<String>) -> 
         let limit_range = parse_select_limitor(&select_stat.limit, issues);
         // 辨识字段
         let fields = parse_select_fields(&select_stat.select_exprs, issues);
-        Some(ParsedSql::new(tables, filters, limit_range, fields))
+        if issues.is_empty(){
+            Some(ParsedSql::new(tables, filters, limit_range, fields))
+        } else {
+            for issue in issues{
+                log::warn!("hit issue: [{}]",issue);
+            }
+            None
+        }
     } else {
         None
     }

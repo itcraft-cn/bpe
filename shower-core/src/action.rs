@@ -1,6 +1,6 @@
 use crate::{
     error::ActionError,
-    sql::{ExprEntity, ParsedSql},
+    sql::{ExprEntity, ParsedSql}, store,
 };
 use std::str::FromStr;
 use strum_macros::EnumString;
@@ -8,6 +8,13 @@ use strum_macros::EnumString;
 pub(crate) fn gen_action(parsed_sql: &ParsedSql) -> Result<Vec<Action>, ActionError> {
     let mut actions = vec![];
     let tab_id_array = parsed_sql.tables();
+    if tab_id_array.len() != 1 {
+        return Err(ActionError::new_string(format!(
+            "only support one table, but {} tables",
+            tab_id_array.len()
+        )));
+    }
+    let _stream = create_stream(tab_id_array.get(0).unwrap().clone());
     let rs = create_filter(parsed_sql.filters());
     if let Ok(filter) = rs {
         actions.push(Action::FilterAction(filter));
@@ -27,6 +34,10 @@ pub(crate) fn gen_action(parsed_sql: &ParsedSql) -> Result<Vec<Action>, ActionEr
         )));
     }
     Ok(actions)
+}
+
+fn create_stream(id: u16) -> () {
+    return store::create_stream(id);
 }
 
 fn create_filter(entities: Vec<ExprEntity>) -> Result<Filter, ActionError> {
@@ -156,7 +167,6 @@ fn parse_args_fetchers(
     }
 }
 
-/*
 pub(crate) fn invoke(actions: &Vec<Action>) {
     for action in actions {
         match action {
@@ -171,7 +181,14 @@ pub(crate) fn invoke(actions: &Vec<Action>) {
         }
     }
 }
- */
+
+fn call_filter(filter: &Filter) {
+    todo!()
+}
+
+fn call_executor(executor: &Executor) {
+    todo!()
+}
 
 #[derive(Debug, Clone)]
 pub(crate) enum Action {

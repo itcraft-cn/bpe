@@ -46,6 +46,7 @@ pub(crate) fn _select_limit(
     id: u16,
     limit: usize,
 ) -> Option<(&'static [u8], usize, &'static [u8], usize, usize)> {
+    MAP_INIT.call_once(initial);
     let map = unsafe { MAP.as_mut().unwrap() };
     let opt = _find_array(map, id);
     opt.map(|array| _fetch_array(array, limit))
@@ -87,6 +88,12 @@ fn _fetch_array(array: &mut WrappedArray, limit: usize) -> (&[u8], usize, &[u8],
             dst_len,
         )
     }
+}
+
+pub(crate) fn create_stream(id: u16) {
+    MAP_INIT.call_once(initial);
+    let map = unsafe { MAP.as_mut().unwrap() };
+    let _array = find_or_insert_array(map, id);
 }
 
 struct WrappedArray {

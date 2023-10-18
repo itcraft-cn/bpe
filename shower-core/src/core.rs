@@ -67,8 +67,17 @@ pub fn new_data(data: &U8Bytes) -> bool {
 
 pub fn def_action(sql: &str) -> bool {
     if let Some(parsed_sql) = parse_sql(sql, unsafe { PARSE_OPTIONS.as_ref().unwrap() }) {
-        let _actions = gen_action(&parsed_sql);
-        true
+        let rs = gen_action(&parsed_sql);
+        if let Ok(_action) = rs {
+            true
+        } else {
+            log::warn!(
+                "fail to create action from sql[{}], hit unexpected error: {:?}",
+                sql,
+                rs.err().unwrap()
+            );
+            false
+        }
     } else {
         warn!("not supported sql statement: [{}]", sql);
         false
