@@ -33,8 +33,7 @@ pub(crate) fn parse_sql(sql: &str, options: &ParseOptions) -> Option<ParsedSql> 
         match ast {
             Statement::Select(stat) => {
                 let mut issues2 = Vec::new();
-                let opt = parse_select_statement(stat, &mut issues2);
-                opt
+                parse_select_statement(stat, &mut issues2)
             }
             _ => None,
         }
@@ -54,11 +53,11 @@ fn parse_select_statement(select_stat: Select<'_>, issues: &mut Vec<String>) -> 
         let limit_range = parse_select_limitor(&select_stat.limit, issues);
         // 辨识字段
         let fields = parse_select_fields(&select_stat.select_exprs, issues);
-        if issues.is_empty(){
+        if issues.is_empty() {
             Some(ParsedSql::new(tables, filters, limit_range, fields))
         } else {
-            for issue in issues{
-                log::warn!("hit issue: [{}]",issue);
+            for issue in issues {
+                log::warn!("hit issue: [{}]", issue);
             }
             None
         }
@@ -70,23 +69,14 @@ fn parse_select_statement(select_stat: Select<'_>, issues: &mut Vec<String>) -> 
 fn check_forbidden_statement(select_stat: &Select<'_>, issues: &mut Vec<String>) {
     if !select_stat.flags.is_empty() {
         issues.push(String::from("select flag is not supported"));
-        return;
-    }
-    if select_stat.locking.is_some() {
+    } else if select_stat.locking.is_some() {
         issues.push(String::from("locking statement is not supported"));
-        return;
-    }
-    if select_stat.having.is_some() {
+    } else if select_stat.having.is_some() {
         issues.push(String::from("having statement is not supported"));
-        return;
-    }
-    if select_stat.group_by.is_some() {
+    } else if select_stat.group_by.is_some() {
         issues.push(String::from("group by statement is not supported"));
-        return;
-    }
-    if select_stat.order_by.is_some() {
+    } else if select_stat.order_by.is_some() {
         issues.push(String::from("order by statement is not supported"));
-        return;
     }
 }
 
@@ -105,7 +95,7 @@ fn parse_select_target(
         tab_ref_vec
     } else {
         issues.push(String::from("need a table name"));
-        return vec![];
+        vec![]
     }
 }
 
@@ -120,7 +110,7 @@ fn parse_tab_ref(tab: &TableReference<'_>, tab_ref_vec: &mut Vec<u16>) -> Option
                 return Some(String::from("as is not supported"));
             }
             for id in identifier {
-                if !id.starts_with("_") {
+                if !id.starts_with('_') {
                     return Some(String::from("should be a valid identifier, start with `_`"));
                 }
                 tab_ref_vec.push(conv_tab_id(String::from(id.value)));
@@ -210,14 +200,10 @@ fn parse_condition(expr: &Expression<'_>, expr_entity_vec: &mut Vec<ExprEntity>)
             lhs,
             rhs,
         } => {
-            if check_op(op) {
-                return Some(format!("op[{:?}] is not supported", op));
+            if let Some(op_type) = conv_op(op) {
+                expr_entity_vec.push(ExprEntity::Op(op_type));
             } else {
-                if let Some(op_type) = conv_op(op) {
-                    expr_entity_vec.push(ExprEntity::Op(op_type));
-                } else {
-                    return Some(format!("op[{:?}] is not supported", op));
-                }
+                return Some(format!("op[{:?}] is not supported", op));
             }
             let mut left_vec = vec![];
             if let Some(issue) = parse_condition(lhs.as_ref(), &mut left_vec) {
@@ -242,100 +228,104 @@ fn parse_condition(expr: &Expression<'_>, expr_entity_vec: &mut Vec<ExprEntity>)
     None
 }
 
-fn check_op(op: &BinaryOperator) -> bool {
-    match op {
-        BinaryOperator::Xor => true,
-        BinaryOperator::NullSafeEq => true,
-        BinaryOperator::ShiftLeft => true,
-        BinaryOperator::ShiftRight => true,
-        BinaryOperator::BitAnd => true,
-        BinaryOperator::BitOr => true,
-        BinaryOperator::BitXor => true,
-        BinaryOperator::Add => true,
-        BinaryOperator::Subtract => true,
-        BinaryOperator::Divide => true,
-        BinaryOperator::Div => true,
-        BinaryOperator::Mod => true,
-        BinaryOperator::Mult => true,
-        BinaryOperator::Like => true,
-        BinaryOperator::NotLike => true,
-        _ => false,
-    }
+fn check_not_support_op(op: &BinaryOperator) -> bool {
+    matches!(
+        op,
+        BinaryOperator::Xor
+            | BinaryOperator::NullSafeEq
+            | BinaryOperator::ShiftLeft
+            | BinaryOperator::ShiftRight
+            | BinaryOperator::BitAnd
+            | BinaryOperator::BitOr
+            | BinaryOperator::BitXor
+            | BinaryOperator::Add
+            | BinaryOperator::Subtract
+            | BinaryOperator::Divide
+            | BinaryOperator::Div
+            | BinaryOperator::Mod
+            | BinaryOperator::Mult
+            | BinaryOperator::Like
+            | BinaryOperator::NotLike
+    )
 }
 
 fn conv_op(op: &BinaryOperator) -> Option<OpType> {
-    match op {
-        BinaryOperator::Or => Some(OpType::Or),
-        BinaryOperator::And => Some(OpType::And),
-        BinaryOperator::Eq => Some(OpType::Eq),
-        BinaryOperator::GtEq => Some(OpType::GtEq),
-        BinaryOperator::Gt => Some(OpType::Gt),
-        BinaryOperator::LtEq => Some(OpType::LtEq),
-        BinaryOperator::Lt => Some(OpType::Lt),
-        BinaryOperator::Neq => Some(OpType::Neq),
-        _ => None,
+    if check_not_support_op(op) {
+        None
+    } else {
+        match op {
+            BinaryOperator::Or => Some(OpType::Or),
+            BinaryOperator::And => Some(OpType::And),
+            BinaryOperator::Eq => Some(OpType::Eq),
+            BinaryOperator::GtEq => Some(OpType::GtEq),
+            BinaryOperator::Gt => Some(OpType::Gt),
+            BinaryOperator::LtEq => Some(OpType::LtEq),
+            BinaryOperator::Lt => Some(OpType::Lt),
+            BinaryOperator::Neq => Some(OpType::Neq),
+            _ => None,
+        }
     }
 }
 
 fn check_not_allow_expr(expr: &Expression<'_>) -> Option<String> {
-    let not_allow = match &expr {
-        Expression::Subquery(_) => true,
-        Expression::Null(_) => true,
-        Expression::ListHack(_) => true,
-        Expression::WindowFunction {
-            function: _,
-            args: _,
-            function_span: _,
-            over_span: _,
-            window_spec: _,
-        } => true,
-        Expression::Arg(_) => true,
-        Expression::Exists(_) => true,
-        Expression::In {
-            lhs: _,
-            rhs: _,
-            in_span: _,
-            not_in: _,
-        } => true,
-        Expression::Is(_, _, _) => true,
-        Expression::Invalid(_) => true,
-        Expression::Case {
-            case_span: _,
-            value: _,
-            whens: _,
-            else_: _,
-            end_span: _,
-        } => true,
-        Expression::Cast {
-            cast_span: _,
-            expr: _,
-            as_span: _,
-            type_: _,
-        } => true,
-        Expression::Count {
-            count_span: _,
-            distinct_span: _,
-            expr: _,
-        } => true,
-        Expression::GroupConcat {
-            group_concat_span: _,
-            distinct_span: _,
-            expr: _,
-        } => true,
-        Expression::Variable {
-            global: _,
-            session: _,
-            dot: _,
-            variable: _,
-            variable_span: _,
-        } => true,
-        Expression::Unary {
-            op: _,
-            op_span: _,
-            operand: _,
-        } => true,
-        _ => false,
-    };
+    let not_allow = matches!(
+        expr,
+        Expression::Subquery(_)
+            | Expression::Null(_)
+            | Expression::ListHack(_)
+            | Expression::WindowFunction {
+                function: _,
+                args: _,
+                function_span: _,
+                over_span: _,
+                window_spec: _,
+            }
+            | Expression::Arg(_)
+            | Expression::Exists(_)
+            | Expression::In {
+                lhs: _,
+                rhs: _,
+                in_span: _,
+                not_in: _,
+            }
+            | Expression::Is(_, _, _)
+            | Expression::Invalid(_)
+            | Expression::Case {
+                case_span: _,
+                value: _,
+                whens: _,
+                else_: _,
+                end_span: _,
+            }
+            | Expression::Cast {
+                cast_span: _,
+                expr: _,
+                as_span: _,
+                type_: _,
+            }
+            | Expression::Count {
+                count_span: _,
+                distinct_span: _,
+                expr: _,
+            }
+            | Expression::GroupConcat {
+                group_concat_span: _,
+                distinct_span: _,
+                expr: _,
+            }
+            | Expression::Variable {
+                global: _,
+                session: _,
+                dot: _,
+                variable: _,
+                variable_span: _,
+            }
+            | Expression::Unary {
+                op: _,
+                op_span: _,
+                operand: _,
+            }
+    );
     if not_allow {
         Some(format!("expression {:?} is not supported", &expr))
     } else {
@@ -346,7 +336,7 @@ fn check_not_allow_expr(expr: &Expression<'_>) -> Option<String> {
 fn parse_expr(expr: &Expression<'_>, expr_entity_vec: &mut Vec<ExprEntity>) -> Option<String> {
     match expr {
         Expression::Bool(v, _) => {
-            expr_entity_vec.push(ExprEntity::Val(ValType::Bool(v.clone())));
+            expr_entity_vec.push(ExprEntity::Val(ValType::Bool(*v)));
         }
         Expression::String(v) => {
             expr_entity_vec.push(ExprEntity::Val(ValType::Str(v.value.to_string())));
@@ -420,7 +410,7 @@ fn conv_id(id: String, idx: usize) -> u16 {
 fn fetch_id_part(id_part: &IdentifierPart<'_>) -> (String, bool) {
     match id_part {
         IdentifierPart::Name(id) => {
-            if !id.starts_with("__") && !id.starts_with("_") {
+            if !id.starts_with("__") && !id.starts_with('_') {
                 (
                     String::from("should be a valid identifier, start with `_` or `__`"),
                     false,

@@ -41,55 +41,6 @@ fn find_or_insert_array(map: &mut SimpleU16Map<WrappedArray>, id: u16) -> &mut W
     map.get_mut(id)
 }
 
-#[inline]
-pub(crate) fn _select_limit(
-    id: u16,
-    limit: usize,
-) -> Option<(&'static [u8], usize, &'static [u8], usize, usize)> {
-    MAP_INIT.call_once(initial);
-    let map = unsafe { MAP.as_mut().unwrap() };
-    let opt = _find_array(map, id);
-    opt.map(|array| _fetch_array(array, limit))
-}
-
-#[inline]
-fn _find_array(map: &mut SimpleU16Map<WrappedArray>, id: u16) -> Option<&mut WrappedArray> {
-    map.entry(id)._fetch_as_mut(map)
-}
-
-fn _fetch_array(array: &mut WrappedArray, limit: usize) -> (&[u8], usize, &[u8], usize, usize) {
-    let base = array.walker();
-    let size = array._size();
-    let len = array.len();
-    let record_len = len / U8_DATA_MAX_SIZE;
-    let dst_len = if record_len > limit {
-        limit
-    } else {
-        record_len
-    };
-    let mask = array.mask();
-    let slice = array.data();
-    let idx1 = (base - U8_DATA_MAX_SIZE * dst_len) % mask;
-    let idx2 = base % mask;
-    if idx1 > idx2 {
-        (
-            &slice[idx1..size],
-            (size - idx1) / U8_DATA_MAX_SIZE,
-            &slice[0..idx2],
-            idx2 / U8_DATA_MAX_SIZE,
-            dst_len,
-        )
-    } else {
-        (
-            &slice[idx1..idx2],
-            (idx2 - idx1) / U8_DATA_MAX_SIZE,
-            &slice[0..0],
-            0,
-            dst_len,
-        )
-    }
-}
-
 pub(crate) fn create_iterator<'a>(id: u16) -> DataIterator<'a> {
     MAP_INIT.call_once(initial);
     let map = unsafe { MAP.as_mut().unwrap() };

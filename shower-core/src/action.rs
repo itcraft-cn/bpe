@@ -15,7 +15,7 @@ pub(crate) fn gen_action(parsed_sql: &ParsedSql) -> Result<Vec<Action>, ActionEr
             tab_id_array.len()
         )));
     }
-    let _iterator = create_iterator(tab_id_array.get(0).unwrap().clone());
+    let _iterator = create_iterator(*tab_id_array.first().unwrap());
     let rs = create_filter(parsed_sql.filters());
     if let Ok(filter) = rs {
         actions.push(Action::FilterAction(filter));
@@ -105,11 +105,11 @@ fn create_executor(
 fn conv_as_executor(entity: ExprEntity, tab_id_array: &Vec<u16>) -> Result<Executor, ActionError> {
     let fetcher = match entity {
         ExprEntity::Field(field_id) => {
-            Executor::Fetch(tab_id_array.get(0).cloned().unwrap(), field_id)
+            Executor::Fetch(*tab_id_array.first().unwrap(), field_id)
         }
         ExprEntity::FieldWithTab(tab_id, field_id) => Executor::Fetch(tab_id, field_id),
         ExprEntity::Function(func_name, args) => {
-            if func_name.starts_with("_") {
+            if func_name.starts_with('_') {
                 let mut real_func_name = func_name.clone();
                 real_func_name.remove(0);
                 let opt_func = Func::from_str(real_func_name.as_str());
