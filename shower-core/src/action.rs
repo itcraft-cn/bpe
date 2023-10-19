@@ -309,10 +309,8 @@ impl<'a> Action<'a> {
 
     fn fetch(&self, slice: &[u8]) -> [u64; 64] {
         let mut result = [0u64; 64];
-        let mut i = 0 as usize;
-        for executor in &self.executors {
+        for (i, executor) in self.executors.iter().enumerate() {
             result[i] = executor.fetch(slice);
-            i += 1;
         }
         result
     }
