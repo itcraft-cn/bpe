@@ -113,7 +113,13 @@ fn parse_tab_ref(tab: &TableReference<'_>, tab_ref_vec: &mut Vec<u16>) -> Option
                 if !id.starts_with('_') {
                     return Some(String::from("should be a valid identifier, start with `_`"));
                 }
-                tab_ref_vec.push(conv_tab_id(String::from(id.value)));
+                let rs = conv_tab_id(String::from(id.value));
+                let tab_id = if let Ok(tid) = rs {
+                    tid
+                } else {
+                    return Some(rs.err().unwrap());
+                };
+                tab_ref_vec.push(tab_id);
             }
         }
         TableReference::Query {
@@ -374,17 +380,32 @@ fn parse_expr(expr: &Expression<'_>, expr_entity_vec: &mut Vec<ExprEntity>) -> O
                 if !converted_id_part2.1 {
                     return Some(converted_id_part2.0);
                 }
-                expr_entity_vec.push(ExprEntity::FieldWithTab(
-                    conv_tab_id(converted_id_part1.0),
-                    conv_field_id(converted_id_part2.0),
-                ));
+                let rs_tab_id = conv_tab_id(converted_id_part1.0);
+                let tab_id = if let Ok(id) = rs_tab_id {
+                    id
+                } else {
+                    return Some(rs_tab_id.err().unwrap());
+                };
+                let rs_field_id = conv_field_id(converted_id_part2.0);
+                let field_id = if let Ok(id) = rs_field_id {
+                    id
+                } else {
+                    return Some(rs_field_id.err().unwrap());
+                };
+                expr_entity_vec.push(ExprEntity::FieldWithTab(tab_id, field_id));
             } else if id_vec.len() == 1 {
                 let id_part = id_vec.get(0).unwrap();
                 let converted_id_part = fetch_id_part(id_part);
                 if !converted_id_part.1 {
                     return Some(converted_id_part.0);
                 }
-                expr_entity_vec.push(ExprEntity::Field(conv_field_id(converted_id_part.0)));
+                let rs_field_id = conv_field_id(converted_id_part.0);
+                let field_id = if let Ok(id) = rs_field_id {
+                    id
+                } else {
+                    return Some(rs_field_id.err().unwrap());
+                };
+                expr_entity_vec.push(ExprEntity::Field(field_id));
             } else {
                 return Some(String::from("id should be a valid identifier"));
             }
@@ -394,17 +415,26 @@ fn parse_expr(expr: &Expression<'_>, expr_entity_vec: &mut Vec<ExprEntity>) -> O
     None
 }
 
-fn conv_tab_id(id: String) -> u16 {
+fn conv_tab_id(id: String) -> Result<u16, String> {
     conv_id(id, 1)
 }
 
-fn conv_field_id(id: String) -> u16 {
+fn conv_field_id(id: String) -> Result<u16, String> {
     conv_id(id, 2)
 }
 
-fn conv_id(id: String, idx: usize) -> u16 {
+fn conv_id(id: String, idx: usize) -> Result<u16, String> {
     let v_str = String::from_utf8(id.as_bytes()[idx..].to_vec()).unwrap();
-    v_str.parse::<u16>().unwrap()
+    let o = v_str.parse::<u16>();
+    if let Ok(v) = o {
+        if v > 0 {
+            Ok(v)
+        } else {
+            Err(String::from("id should be a positive integer"))
+        }
+    } else {
+        Err(format!("hit error: {}", o.unwrap_err()))
+    }
 }
 
 fn fetch_id_part(id_part: &IdentifierPart<'_>) -> (String, bool) {

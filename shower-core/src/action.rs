@@ -1,6 +1,7 @@
 use crate::{
+    aux::_fetch_u64,
     error::ActionError,
-    sql::{ExprEntity, OpType, ParsedSql},
+    sql::{ExprEntity, OpType, ParsedSql, ValType},
     store::{self, DataIterator},
 };
 use std::str::FromStr;
@@ -145,78 +146,153 @@ fn parse_args_fetchers(
 }
 
 pub(crate) fn invoke(action: &Action) {
-    let _: Vec<_> = action
+    let vec: Vec<i32> = action
         .iterator
-        .filter(|e| action.filter().is_match(e))
+        .filter(|slice| action.filter.is_match(slice))
         .take(action.limit)
-        .map(|_e| {})
+        .map(|_e| 1)
         .collect();
+    log::info!("vec len: {}, vec:{:?}", vec.len(), vec);
 }
 
+#[inline]
 fn op_or(slice: &[u8], v1: &Filter, v2: &Filter) -> bool {
-    match (v1, v2) {
-        (Filter::Mixed(_), Filter::Mixed(_)) => v1.is_match(slice) || v2.is_match(slice),
-        _ => false,
-    }
+    op_logical(slice, v1, v2, or)
 }
+#[inline]
 fn op_and(slice: &[u8], v1: &Filter, v2: &Filter) -> bool {
+    op_logical(slice, v1, v2, and)
+}
+#[inline]
+fn op_logical<F>(slice: &[u8], v1: &Filter, v2: &Filter, f: F) -> bool
+where
+    F: Fn(&[u8], &Filter, &Filter) -> bool,
+{
     match (v1, v2) {
-        (Filter::Mixed(_), Filter::Mixed(_)) => v1.is_match(slice) && v2.is_match(slice),
+        (Filter::Mixed(_), Filter::Mixed(_)) => f(slice, v1, v2),
         _ => false,
     }
 }
+
+#[inline]
+fn or(slice: &[u8], v1: &Filter, v2: &Filter) -> bool {
+    v1.is_match(slice) || v2.is_match(slice)
+}
+
+#[inline]
+fn and(slice: &[u8], v1: &Filter, v2: &Filter) -> bool {
+    v1.is_match(slice) && v2.is_match(slice)
+}
+
+#[inline]
 fn op_eq(slice: &[u8], v1: &Filter, v2: &Filter) -> bool {
-    log::info!("eq, p[{:?}], v1:[{:?}], v2:[{:?}]", slice.as_ptr(), v1, v2);
+    compare_slice_val(slice, v1, v2, eq)
+}
+#[inline]
+fn op_gt_eq(slice: &[u8], v1: &Filter, v2: &Filter) -> bool {
+    compare_slice_val(slice, v1, v2, gt_eq)
+}
+#[inline]
+fn op_gt(slice: &[u8], v1: &Filter, v2: &Filter) -> bool {
+    compare_slice_val(slice, v1, v2, gt)
+}
+#[inline]
+fn op_lt_eq(slice: &[u8], v1: &Filter, v2: &Filter) -> bool {
+    compare_slice_val(slice, v1, v2, lt_eq)
+}
+#[inline]
+fn op_lt(slice: &[u8], v1: &Filter, v2: &Filter) -> bool {
+    compare_slice_val(slice, v1, v2, lt)
+}
+#[inline]
+fn op_neq(slice: &[u8], v1: &Filter, v2: &Filter) -> bool {
+    compare_slice_val(slice, v1, v2, neq)
+}
+
+#[inline]
+fn compare_slice_val<F>(slice: &[u8], v1: &Filter, v2: &Filter, f: F) -> bool
+where
+    F: Fn(u64, u64) -> bool,
+{
     match (v1, v2) {
         (Filter::Original(expr1), Filter::Original(expr2)) => match (expr1, expr2) {
-            (ExprEntity::Val(_), ExprEntity::Field(_)) => {
-                log::info!("eq, v, f");
-                true
+            (ExprEntity::Field(idx), ExprEntity::Val(v_type)) => {
+                compare_with_op(slice, *idx, v_type, f)
             }
-            (ExprEntity::Val(_), ExprEntity::FieldWithTab(_, _)) => {
-                log::info!("eq, v, fwt");
-                true
+            (ExprEntity::FieldWithTab(_, field_idx), ExprEntity::Val(v_type)) => {
+                compare_with_op(slice, *field_idx, v_type, f)
             }
-            (ExprEntity::Val(_), ExprEntity::Function(_, _)) => {
-                log::info!("eq, v, fn");
-                true
+            (ExprEntity::Val(v_type), ExprEntity::Field(idx)) => {
+                compare_with_op(slice, *idx, v_type, f)
             }
-            (ExprEntity::Field(_), ExprEntity::Val(_)) => {
-                log::info!("eq, f, v");
-                true
-            }
-            (ExprEntity::FieldWithTab(_, _), ExprEntity::Val(_)) => {
-                log::info!("eq, fwt, v");
-                true
-            }
-            (ExprEntity::Function(_, _), ExprEntity::Val(_)) => {
-                log::info!("eq, fn, v");
-                true
+            (ExprEntity::Val(v_type), ExprEntity::FieldWithTab(_, field_idx)) => {
+                compare_with_op(slice, *field_idx, v_type, f)
             }
             _ => false,
         },
         _ => false,
     }
 }
-fn op_gt_eq(slice: &[u8], _v1: &Filter, _v2: &Filter) -> bool {
-    log::info!("gt_eq, p[{:?}]", slice.as_ptr());
-    true
+
+#[inline]
+fn compare_with_op<F>(slice: &[u8], idx: u16, v_type: &ValType, f: F) -> bool
+where
+    F: Fn(u64, u64) -> bool,
+{
+    let opt_expacted = fetch_expacted(v_type);
+    if let Some(expacted) = opt_expacted {
+        let val = fetch_val(slice, idx);
+        compare_val(expacted, val, f)
+    } else {
+        false
+    }
 }
-fn op_gt(slice: &[u8], _v1: &Filter, _v2: &Filter) -> bool {
-    log::info!("gt, p[{:?}]", slice.as_ptr());
-    true
+
+#[inline]
+fn fetch_expacted(v_type: &ValType) -> Option<u64> {
+    match v_type {
+        ValType::Int(val) => Some(*val as u64),
+        _ => None,
+    }
 }
-fn op_lt_eq(slice: &[u8], _v1: &Filter, _v2: &Filter) -> bool {
-    log::info!("lt_eq, p[{:?}]", slice.as_ptr());
-    true
+
+#[inline]
+fn fetch_val(slice: &[u8], idx: u16) -> u64 {
+    let real_idx = idx - 1;
+    _fetch_u64(&slice[real_idx as usize * 8..idx as usize * 8])
 }
-fn op_lt(slice: &[u8], _v1: &Filter, _v2: &Filter) -> bool {
-    log::info!("lt, p[{:?}]", slice.as_ptr());
-    true
+
+#[inline]
+fn compare_val<F>(expacted: u64, val: u64, f: F) -> bool
+where
+    F: Fn(u64, u64) -> bool,
+{
+    f(expacted, val)
 }
-fn op_neq(slice: &[u8], _v1: &Filter, _v2: &Filter) -> bool {
-    log::info!("neq, p[{:?}]", slice.as_ptr());
-    true
+
+#[inline]
+fn eq(expacted: u64, val: u64) -> bool {
+    val == expacted
+}
+#[inline]
+fn gt_eq(expacted: u64, val: u64) -> bool {
+    val >= expacted
+}
+#[inline]
+fn gt(expacted: u64, val: u64) -> bool {
+    val > expacted
+}
+#[inline]
+fn lt_eq(expacted: u64, val: u64) -> bool {
+    val <= expacted
+}
+#[inline]
+fn lt(expacted: u64, val: u64) -> bool {
+    val < expacted
+}
+#[inline]
+fn neq(expacted: u64, val: u64) -> bool {
+    val != expacted
 }
 
 #[derive(Debug)]
@@ -230,15 +306,6 @@ pub(crate) struct Action<'a> {
 impl<'a> Action<'a> {
     pub(crate) fn id(&self) -> u16 {
         self.id
-    }
-    pub(crate) fn _iterator(&self) -> &DataIterator<'a> {
-        &self.iterator
-    }
-    pub(crate) fn filter(&self) -> &Filter {
-        &self.filter
-    }
-    pub(crate) fn _limit(&self) -> usize {
-        self.limit
     }
     pub(crate) fn _executors(&self) -> &Vec<Executor> {
         &self._executors

@@ -62,17 +62,20 @@ impl<'a> Iterator for DataIterator<'a> {
     type Item = &'a [u8];
 
     fn next(&mut self) -> Option<Self::Item> {
+        let walker = self.array.walker;
+        if walker == 0 {
+            return None;
+        }
         if self.first {
             self.len = self.array.records();
             self.offset = 0;
             self.first = false;
         }
-        let walker = self.array.walker;
         let mask = self.array.mask;
-        let position = (walker - self.offset * U8_DATA_MAX_SIZE) & mask;
         if self.offset == self.len {
             None
         } else {
+            let position = (walker - U8_DATA_MAX_SIZE - self.offset * U8_DATA_MAX_SIZE) & mask;
             self.offset += 1;
             Some(&self.array.data.as_slice()[position..position + U8_DATA_MAX_SIZE])
         }
