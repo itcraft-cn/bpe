@@ -36,7 +36,7 @@ pub(crate) fn gen_action<'a>(parsed_sql: &ParsedSql) -> Result<Action<'a>, Actio
         iterator,
         filter: rs_filter.unwrap(),
         limit: parsed_sql.limit(),
-        _executors: rs_executors.unwrap(),
+        executors: rs_executors.unwrap(),
     })
 }
 
@@ -146,13 +146,12 @@ fn parse_args_fetchers(
 }
 
 pub(crate) fn invoke(action: &Action) {
-    let vec: Vec<i32> = action
+    let _: Vec<[u64; 64]> = action
         .iterator
         .filter(|slice| action.filter.is_match(slice))
         .take(action.limit)
-        .map(|_e| 1)
+        .map(|slice| action.fetch(slice))
         .collect();
-    log::info!("vec len: {}, vec:{:?}", vec.len(), vec);
 }
 
 #[inline]
@@ -301,14 +300,21 @@ pub(crate) struct Action<'a> {
     iterator: DataIterator<'a>,
     filter: Filter,
     limit: usize,
-    _executors: Vec<Executor>,
+    executors: Vec<Executor>,
 }
 impl<'a> Action<'a> {
     pub(crate) fn id(&self) -> u16 {
         self.id
     }
-    pub(crate) fn _executors(&self) -> &Vec<Executor> {
-        &self._executors
+
+    fn fetch(&self, slice: &[u8]) -> [u64; 64] {
+        let mut result = [0u64; 64];
+        let mut i = 0 as usize;
+        for executor in &self.executors {
+            result[i] = executor.fetch(slice);
+            i += 1;
+        }
+        result
     }
 }
 
@@ -363,6 +369,48 @@ pub(crate) enum Executor {
     Fetch(u16, u16),
     Compute(Func, Vec<Executor>),
 }
+impl Executor {
+    fn fetch(&self, slice: &[u8]) -> u64 {
+        match self {
+            Executor::Fetch(_, field_id) => fetch_val(slice, *field_id),
+            Executor::Compute(f, executors) => compute_func(slice, f, executors),
+        }
+    }
+}
+
+fn compute_func(slice: &[u8], f: &Func, executors: &[Executor]) -> u64 {
+    match f {
+        Func::Add => add(slice, executors),
+        Func::Sub => sub(slice, executors),
+    }
+}
+
+fn add(slice: &[u8], executors: &[Executor]) -> u64 {
+    if executors.len() != 2 {
+        log::warn!(
+            "Invalid parameters for add function, should be 2, but was {}",
+            executors.len()
+        );
+        return 0;
+    }
+    let v1 = executors[0].fetch(slice);
+    let v2 = executors[1].fetch(slice);
+    v1 + v2
+}
+
+fn sub(slice: &[u8], executors: &[Executor]) -> u64 {
+    if executors.len() != 2 {
+        log::warn!(
+            "Invalid parameters for add function, should be 2, but was {}",
+            executors.len()
+        );
+        return 0;
+    }
+    let v1 = executors[0].fetch(slice);
+    let v2 = executors[1].fetch(slice);
+    v1 - v2
+}
+
 #[derive(Debug, Clone, EnumString)]
 pub(crate) enum Func {
     #[strum(ascii_case_insensitive)]

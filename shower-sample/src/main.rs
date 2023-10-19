@@ -1,8 +1,11 @@
 use log::*;
 use shower::{def_action, new_data, start, stop, U8Bytes};
-use std::{env, thread};
+use std::{
+    env, thread,
+    time::{Duration, SystemTime},
+};
 
-const LOOP_SIZE: usize = 1;
+const LOOP_SIZE: usize = 10000000;
 
 const SQL: &str = r#"
     SELECT _1.__1, _1.__2, _1.__3, _sub(_add(_1.__4, _1.__4), _1.__5)
@@ -15,7 +18,7 @@ pub fn main() {
     env::set_var("SHOWER_HOME", "/home/helly/code/rust/shower");
     start();
     def_action(SQL);
-    gen_new_data();
+    exec_with_time_it(gen_new_data);
     stop();
 }
 
@@ -65,4 +68,18 @@ fn fetch_u64(slice: &[u8]) -> u64 {
         | ((slice[5] as u64) << 5)
         | ((slice[6] as u64) << 6)
         | ((slice[7] as u64) << 7)
+}
+
+pub fn exec_with_time_it<F>(f: F)
+where
+    F: Fn(),
+{
+    let start = SystemTime::now();
+    f();
+    let end = SystemTime::now();
+    let duration = end
+        .duration_since(start)
+        .unwrap_or_else(|_e| Duration::new(0, 0));
+    log::info!("cost time: {:?}ms", duration.as_millis());
+    log::info!("cost time: {:?}ns", duration.as_nanos());
 }
