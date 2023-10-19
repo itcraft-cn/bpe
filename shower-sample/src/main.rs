@@ -1,11 +1,11 @@
 use log::*;
-use shower::{def_action, new_data, start, stop, U8Bytes};
+use shower::{def_action_with_callback, new_data, start, stop, U8Bytes};
 use std::{
     env, thread,
     time::{Duration, SystemTime},
 };
 
-const LOOP_SIZE: usize = 10000000;
+const LOOP_SIZE: usize = 100;
 
 const SQL: &str = r#"
     SELECT _1.__1, _1.__2, _1.__3, _sub(_add(_1.__4, _1.__4), _1.__5)
@@ -17,9 +17,13 @@ const SQL: &str = r#"
 pub fn main() {
     env::set_var("SHOWER_HOME", "/home/helly/code/rust/shower");
     start();
-    def_action(SQL);
+    def_action_with_callback(SQL, callback);
     exec_with_time_it(gen_new_data);
     stop();
+}
+
+fn callback(vec: Vec<[u64; 64]>) {
+    log::info!("{:?}", vec);
 }
 
 fn gen_new_data() {

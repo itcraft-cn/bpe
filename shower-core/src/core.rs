@@ -1,5 +1,5 @@
 use crate::{
-    action::{gen_action, invoke, Action},
+    action::{gen_action, invoke, Action, FnHolder},
     aux::SimpleU16Map,
     cfg::{get_config, load_config},
     consts::KEY_DEV_MODE,
@@ -14,7 +14,7 @@ use std::sync::Once;
 
 static mut DEBUG: bool = false;
 static mut PARSE_OPTIONS: Option<ParseOptions> = None;
-static mut ACTION_MAP: Option<SimpleU16Map<Vec<Action>>> = None;
+static mut ACTION_MAP: Option<SimpleU16Map<Vec<(Action, FnHolder)>>> = None;
 
 pub fn start() -> bool {
     static START: Once = Once::new();
@@ -55,13 +55,13 @@ fn process_data(data: &U8Bytes) {
 fn call_action(data: &U8Bytes) {
     let opt_actions = search_aciton(data.id());
     if let Some(actions) = opt_actions {
-        for action in actions {
-            invoke(action);
+        for (action, fn_holder) in actions {
+            invoke(action, fn_holder);
         }
     }
 }
 
-fn search_aciton<'a>(id: u16) -> Option<&'a Vec<Action<'a>>> {
+fn search_aciton<'a>(id: u16) -> Option<&'a Vec<(Action<'a>, FnHolder)>> {
     let map = unsafe { ACTION_MAP.as_ref().unwrap() };
     map.get(id)
 }
@@ -81,6 +81,17 @@ pub fn new_data(data: &U8Bytes) -> bool {
 }
 
 pub fn def_action(sql: &str) -> bool {
+    actual_def_action(sql, FnHolder::NotExist)
+}
+
+pub fn def_action_with_callback<F>(sql: &str, func: F) -> bool
+where
+    F: Fn(Vec<[u64; 64]>) + Send + 'static,
+{
+    actual_def_action(sql, FnHolder::Func(Box::new(func)))
+}
+
+fn actual_def_action(sql: &str, func_holder: FnHolder) -> bool {
     let opt_parsed_sql = parse_sql(sql, unsafe { PARSE_OPTIONS.as_ref().unwrap() });
     if let Some(parsed_sql) = opt_parsed_sql {
         let rs = gen_action(&parsed_sql);
@@ -88,7 +99,7 @@ pub fn def_action(sql: &str) -> bool {
             let id = action.id();
             let map = unsafe { ACTION_MAP.as_mut().unwrap() };
             map.entry(id).or_insert_with(map, Vec::new);
-            map.get_mut(id).push(action);
+            map.get_mut(id).push((action, func_holder));
             true
         } else {
             log::warn!(

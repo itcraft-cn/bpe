@@ -145,13 +145,17 @@ fn parse_args_fetchers(
     }
 }
 
-pub(crate) fn invoke(action: &Action) {
-    let _: Vec<[u64; 64]> = action
+pub(crate) fn invoke(action: &Action, fn_holder: &FnHolder) {
+    let vec: Vec<[u64; 64]> = action
         .iterator
         .filter(|slice| action.filter.is_match(slice))
         .take(action.limit)
         .map(|slice| action.fetch(slice))
         .collect();
+    match fn_holder {
+        FnHolder::Func(f) => f(vec),
+        FnHolder::NotExist => {}
+    }
 }
 
 #[inline]
@@ -417,6 +421,11 @@ pub(crate) enum Func {
     Sub,
 }
 
+pub(crate) enum FnHolder {
+    Func(Box<dyn Fn(Vec<[u64; 64]>) + Send + 'static>),
+    NotExist,
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -451,7 +460,7 @@ mod tests {
         if let Some(parsed_sql) = parse_sql(SQL, &parse_options) {
             let rs_action = gen_action(&parsed_sql);
             if let Ok(action) = rs_action {
-                invoke(&action);
+                invoke(&action, &FnHolder::NotExist);
             }
         }
     }
