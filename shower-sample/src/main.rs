@@ -1,11 +1,11 @@
 use log::*;
-use shower::{def_action_with_callback, new_data, start, stop, U8Bytes};
+use shower::{def_action, new_data, start, stop, U8Bytes};
 use std::{
     env, thread,
     time::{Duration, SystemTime},
 };
 
-const LOOP_SIZE: usize = 100;
+const LOOP_SIZE: usize = 10000000;
 
 const SQL: &str = r#"
     SELECT _1.__1, _1.__2, _1.__3, _sub(_add(_1.__4, _1.__4), _1.__5)
@@ -17,13 +17,9 @@ const SQL: &str = r#"
 pub fn main() {
     env::set_var("SHOWER_HOME", "/home/helly/code/rust/shower");
     start();
-    def_action_with_callback(SQL, callback);
+    def_action(SQL);
     exec_with_time_it(gen_new_data);
     stop();
-}
-
-fn callback(vec: Vec<[u64; 64]>) {
-    log::info!("{:?}", vec);
 }
 
 fn gen_new_data() {
@@ -36,9 +32,11 @@ fn gen_new_data() {
         let data = i + 1;
         fill_u64(&mut slice[i * 8..data * 8], data as u64);
     }
+    let mut u64array = [0u64; 8];
     for i in 0..8 {
-        info!("data:{:?}", fetch_u64(&slice[i * 8..(i + 1) * 8]));
+        u64array[i] = fetch_u64(&slice[i * 8..(i + 1) * 8]);
     }
+    info!("data:{:?}", u64array);
     let u8data = U8Bytes::new_from_vec(1, 512, Vec::from(u8array));
     for _ in 1..=LOOP_SIZE {
         let ret = new_data(&u8data);
