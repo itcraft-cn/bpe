@@ -3,18 +3,9 @@
 target
 
 Cargo.lock
-event.py
-hs_err_pid*.log
-*.zip
 pyvenv.cfg
+*.zip
 
 perf.data
 perf.data.old
 flamegraph.svg
-
-.gradle
-gradle
-gradlew*
-.idea
-build
-out
