@@ -25,7 +25,7 @@ import java.util.concurrent.atomic.AtomicLong;
 @Threads(value = 1)
 @Warmup(iterations = 10, time = 1)
 @Measurement(iterations = 20, time = 1)
-@OutputTimeUnit(TimeUnit.MILLISECONDS)
+@OutputTimeUnit(TimeUnit.MICROSECONDS)
 public class ShowerBenchmark {
     private static final String SQL = "select _1.__1 from _1 limit 1";
     private static final byte[] DATA = {
