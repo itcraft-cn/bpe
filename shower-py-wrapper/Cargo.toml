@@ -21,5 +21,6 @@ crate-type = ["cdylib"]
 [dependencies]
 shower = { path = "../shower-core" }
 pyo3 = "0.18.1"
+log = "0.4.17"
 
 [dev-dependencies]

@@ -20,6 +20,14 @@ impl U8Bytes {
         }
         U8Bytes { id, data_len, bytes }
     }
+    pub fn new_from_slice(id: u16, data_len: usize, slice: &[u8]) -> U8Bytes {
+        let mut bytes = [0u8; U8_DATA_MAX_SIZE];
+        match slice.len().cmp(&U8_DATA_MAX_SIZE) {
+            Ordering::Less => copy(slice.len(), &mut bytes, slice),
+            Ordering::Equal | Ordering::Greater => copy(U8_DATA_MAX_SIZE, &mut bytes, slice),
+        }
+        U8Bytes { id, data_len, bytes }
+    }
     pub fn id(&self) -> u16 {
         self.id
     }
