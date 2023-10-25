@@ -11,3 +11,10 @@ pyvenv.cfg
 perf.data
 perf.data.old
 flamegraph.svg
+
+.gradle
+gradle
+gradlew*
+.idea
+build
+out

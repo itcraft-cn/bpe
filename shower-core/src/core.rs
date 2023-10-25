@@ -4,9 +4,10 @@ use crate::{
     cfg::{get_config, load_config},
     consts::KEY_DEV_MODE,
     data::U8Bytes,
+    ffi::FfiFunc,
     logger::init_logger,
     sql::{parse_options, parse_sql},
-    store,
+    store::insert,
 };
 use log::*;
 use sql_parse::ParseOptions;
@@ -45,9 +46,23 @@ fn actual_start() -> bool {
     true
 }
 
+pub fn stop() {
+    static STOP: Once = Once::new();
+    STOP.call_once(actual_stop);
+}
+
+fn actual_stop() {
+    info!("mark as deactived");
+}
+
+pub fn new_data(data: &U8Bytes) -> bool {
+    process_data(data);
+    true
+}
+
 #[inline]
 fn process_data(data: &U8Bytes) {
-    store::insert(data);
+    insert(data);
     call_action(data);
 }
 
@@ -66,20 +81,6 @@ fn search_aciton<'a>(id: u16) -> Option<&'a Vec<(Action<'a>, FnHolder)>> {
     map.get(id)
 }
 
-pub fn stop() {
-    static STOP: Once = Once::new();
-    STOP.call_once(actual_stop);
-}
-
-fn actual_stop() {
-    info!("mark as deactived");
-}
-
-pub fn new_data(data: &U8Bytes) -> bool {
-    process_data(data);
-    true
-}
-
 pub fn def_action(sql: &str) -> bool {
     actual_def_action(sql, FnHolder::NotExist)
 }
@@ -89,6 +90,10 @@ where
     F: Fn(Vec<[u64; 64]>) + Send + 'static,
 {
     actual_def_action(sql, FnHolder::Func(Box::new(func)))
+}
+
+pub fn def_action_ffi(sql: &str, ffi: Box<dyn FfiFunc>) -> bool {
+    actual_def_action(sql, FnHolder::FfiFunc(ffi))
 }
 
 fn actual_def_action(sql: &str, func_holder: FnHolder) -> bool {
@@ -110,7 +115,7 @@ fn actual_def_action(sql: &str, func_holder: FnHolder) -> bool {
             false
         }
     } else {
-        warn!("not supported sql statement: [{}]", sql);
+        log::warn!("not supported sql statement: [{}]", sql);
         false
     }
 }

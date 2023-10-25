@@ -1,6 +1,7 @@
 use crate::{
     aux::_fetch_u64,
     error::ActionError,
+    ffi::FfiFunc,
     sql::{ExprEntity, OpType, ParsedSql, ValType},
     store::{self, DataIterator},
 };
@@ -45,6 +46,9 @@ fn create_iterator<'a>(id: u16) -> DataIterator<'a> {
 }
 
 fn create_filter(entities: &[ExprEntity]) -> Result<Filter, ActionError> {
+    if entities.len() == 0 {
+        return Ok(Filter::Empty);
+    }
     let mut filters: Vec<Filter> = entities
         .iter()
         .map(|e| Filter::Original(e.clone()))
@@ -57,6 +61,7 @@ fn create_filter(entities: &[ExprEntity]) -> Result<Filter, ActionError> {
         }
         let filter = filters.remove(0);
         let is_op = match &filter {
+            Filter::Empty => false,
             Filter::Original(expr) => matches!(expr, ExprEntity::Op(_)),
             Filter::Mixed(_) => false,
         };
@@ -68,7 +73,13 @@ fn create_filter(entities: &[ExprEntity]) -> Result<Filter, ActionError> {
             tmp.push(filter);
         }
     }
-    Ok(tmp.first().unwrap().clone())
+    if tmp.len() == 1 {
+        Ok(tmp.first().unwrap().clone())
+    } else {
+        Err(ActionError::new(
+            "the last element is not found.".to_owned(),
+        ))
+    }
 }
 
 fn create_executor(
@@ -153,8 +164,9 @@ pub(crate) fn invoke(action: &Action, fn_holder: &FnHolder) {
         .map(|slice| action.fetch(slice))
         .collect();
     match fn_holder {
-        FnHolder::Func(f) => f(vec),
         FnHolder::NotExist => {}
+        FnHolder::Func(f) => f(vec),
+        FnHolder::FfiFunc(ffi) => ffi.callback(vec),
     }
 }
 
@@ -322,12 +334,14 @@ impl<'a> Action<'a> {
 
 #[derive(Debug, Clone)]
 pub(crate) enum Filter {
+    Empty,
     Original(ExprEntity),
     Mixed(Vec<Filter>),
 }
 impl Filter {
     fn is_match(&self, slice: &[u8]) -> bool {
         match self {
+            Filter::Empty => true,
             Filter::Original(_) => false,
             Filter::Mixed(filters) => self.filter_slice(filters, slice),
         }
@@ -338,6 +352,7 @@ impl Filter {
         let v2 = &filters[1];
         let op = &filters[2];
         match op {
+            Filter::Empty => true,
             Filter::Original(expr) => self.filter_slice_by_expr(expr, v1, v2, slice),
             Filter::Mixed(_) => false,
         }
@@ -422,8 +437,9 @@ pub(crate) enum Func {
 }
 
 pub(crate) enum FnHolder {
-    Func(Box<dyn Fn(Vec<[u64; 64]>) + Send + 'static>),
     NotExist,
+    Func(Box<dyn Fn(Vec<[u64; 64]>) + Send + 'static>),
+    FfiFunc(Box<dyn FfiFunc>),
 }
 
 #[cfg(test)]
