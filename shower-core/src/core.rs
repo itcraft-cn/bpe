@@ -1,10 +1,11 @@
 use crate::{
-    action::{gen_action, invoke, Action, FnHolder},
+    action::{gen_action, invoke, Action},
     aux::SimpleU16Map,
     cfg::{get_config, load_config},
     consts::KEY_DEV_MODE,
     data::U8Bytes,
     ffi::FfiFunc,
+    func::FnHolder,
     logger::init_logger,
     sql::{parse_options, parse_sql},
     store::insert,

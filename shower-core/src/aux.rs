@@ -1,9 +1,11 @@
+#![allow(dead_code)]
+
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
 const U16_FULL_VAL: u32 = u16::MAX as u32 + 1;
 
 #[inline]
-pub(crate) fn _fill_u64(slice: &mut [u8], data: u64) {
+pub(crate) fn fill_u64(slice: &mut [u8], data: u64) {
     slice[0] = data as u8;
     slice[1] = (data >> 1) as u8;
     slice[2] = (data >> 2) as u8;
@@ -15,7 +17,7 @@ pub(crate) fn _fill_u64(slice: &mut [u8], data: u64) {
 }
 
 #[inline]
-pub(crate) fn _fetch_u64(slice: &[u8]) -> u64 {
+pub(crate) fn fetch_u64(slice: &[u8]) -> u64 {
     (slice[0] as u64)
         | ((slice[1] as u64) << 1)
         | ((slice[2] as u64) << 2)
@@ -27,7 +29,7 @@ pub(crate) fn _fetch_u64(slice: &[u8]) -> u64 {
 }
 
 #[inline]
-pub(crate) fn _timestamp() -> u64 {
+pub(crate) fn timestamp() -> u64 {
     let duration = SystemTime::now()
         .duration_since(UNIX_EPOCH)
         .unwrap_or_else(|_e| Duration::new(0, 0));
