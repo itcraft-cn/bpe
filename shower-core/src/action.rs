@@ -399,6 +399,9 @@ fn compute_func(slice: &[u8], f: &Func, executors: &[Executor]) -> u64 {
     match f {
         Func::Add => add(slice, executors),
         Func::Sub => sub(slice, executors),
+        Func::Mul => mul(slice, executors),
+        Func::Div => div(slice, executors),
+        Func::Mod => mod_(slice, executors),
     }
 }
 
@@ -428,12 +431,57 @@ fn sub(slice: &[u8], executors: &[Executor]) -> u64 {
     v1 - v2
 }
 
+fn mul(slice: &[u8], executors: &[Executor]) -> u64 {
+    if executors.len() != 2 {
+        log::warn!(
+            "Invalid parameters for add function, should be 2, but was {}",
+            executors.len()
+        );
+        return 0;
+    }
+    let v1 = executors[0].fetch(slice);
+    let v2 = executors[1].fetch(slice);
+    v1 * v2
+}
+
+fn div(slice: &[u8], executors: &[Executor]) -> u64 {
+    if executors.len() != 2 {
+        log::warn!(
+            "Invalid parameters for add function, should be 2, but was {}",
+            executors.len()
+        );
+        return 0;
+    }
+    let v1 = executors[0].fetch(slice);
+    let v2 = executors[1].fetch(slice);
+    v1 / v2
+}
+
+fn mod_(slice: &[u8], executors: &[Executor]) -> u64 {
+    if executors.len() != 2 {
+        log::warn!(
+            "Invalid parameters for add function, should be 2, but was {}",
+            executors.len()
+        );
+        return 0;
+    }
+    let v1 = executors[0].fetch(slice);
+    let v2 = executors[1].fetch(slice);
+    v1 % v2
+}
+
 #[derive(Debug, Clone, EnumString)]
 pub(crate) enum Func {
     #[strum(ascii_case_insensitive)]
     Add,
     #[strum(ascii_case_insensitive)]
     Sub,
+    #[strum(ascii_case_insensitive)]
+    Mul,
+    #[strum(ascii_case_insensitive)]
+    Div,
+    #[strum(ascii_case_insensitive)]
+    Mod,
 }
 
 pub(crate) enum FnHolder {
