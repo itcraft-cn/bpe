@@ -1,6 +1,6 @@
-import shower4py
 from abc import abstractmethod, ABCMeta
 from ctypes import *
+import shower4py
 
 
 class ShowerRecordCallback(metaclass=ABCMeta):
@@ -13,7 +13,6 @@ class ShowerRecordCallback(metaclass=ABCMeta):
         Args:
             data(long[]): 数据.
         """
-        pass
 
 
 class Shower:
@@ -36,9 +35,9 @@ class Shower:
             bool: True if stop success. 是否成功
         """
         return shower4py.stop()
-    
+
     @staticmethod
-    def new_data(id:int,bdata: bytes) -> bool:
+    def new_data(id: int, bdata: bytes) -> bool:
         """Create table. 新建数据表
 
         Args:

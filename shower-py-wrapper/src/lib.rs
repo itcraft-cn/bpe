@@ -54,24 +54,24 @@ struct PythonFfiFunc {
 impl FfiFunc for PythonFfiFunc {
     fn callback(&self, data: Vec<[u64; 64]>) {
         Python::with_gil(|py| {
-            fun_name(py, &self.callback, data);
+            call_py_func(py, &self.callback, data);
         })
     }
 }
 
-fn fun_name(py: Python, callback: &PyObject, data: Vec<[u64; 64]>) {
+fn call_py_func(py: Python, callback: &PyObject, data: Vec<[u64; 64]>) {
     if let Ok(func) = callback.getattr(py, "callback") {
         let array = conv_array(data);
         let args = (array,);
         let rs = func.call1(py, args);
         if rs.is_err() {
-            log::warn!("call_method failed: {:?}", rs.err().unwrap());
+            log::warn!("call python method failed: {:?}", rs.err().unwrap());
         }
     }
 }
 
 fn conv_array(data: Vec<[u64; 64]>) -> Vec<u64> {
-    let mut vec = vec![];
+    let mut vec = vec![0u64; data.len() * 64];
     for array in data {
         vec.push(array[0]);
         vec.push(array[1]);
