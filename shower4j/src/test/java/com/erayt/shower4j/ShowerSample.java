@@ -38,7 +38,7 @@ public class ShowerSample {
         Shower.stop();
     }
 
-    private static void listenData(long[] data, int size) {
+    private static void listenData(byte[] data, int size) {
     }
 
     private static void waitCmd() {

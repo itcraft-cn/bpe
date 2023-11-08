@@ -88,7 +88,7 @@ pub fn def_action(sql: &str) -> bool {
 
 pub fn def_action_with_callback<F>(sql: &str, func: F) -> bool
 where
-    F: Fn(Vec<[u64; 64]>) + Send + 'static,
+    F: Fn(Vec<[u8; 512]>) + Send + 'static,
 {
     actual_def_action(sql, FnHolder::Func(Box::new(func)))
 }

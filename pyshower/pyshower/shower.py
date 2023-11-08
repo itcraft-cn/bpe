@@ -1,5 +1,4 @@
 from abc import abstractmethod, ABCMeta
-from ctypes import *
 import shower4py
 
 

@@ -52,14 +52,14 @@ struct PythonFfiFunc {
     callback: PyObject,
 }
 impl FfiFunc for PythonFfiFunc {
-    fn callback(&self, data: Vec<[u64; 64]>) {
+    fn callback(&self, data: Vec<[u8; 512]>) {
         Python::with_gil(|py| {
             call_py_func(py, &self.callback, data);
         })
     }
 }
 
-fn call_py_func(py: Python, callback: &PyObject, data: Vec<[u64; 64]>) {
+fn call_py_func(py: Python, callback: &PyObject, data: Vec<[u8; 512]>) {
     if let Ok(func) = callback.getattr(py, "callback") {
         let array = conv_array(data);
         let args = (array,);
@@ -70,73 +70,11 @@ fn call_py_func(py: Python, callback: &PyObject, data: Vec<[u64; 64]>) {
     }
 }
 
-fn conv_array(data: Vec<[u64; 64]>) -> Vec<u64> {
-    let mut vec = vec![0u64; data.len() * 64];
-    for array in data {
-        vec.push(array[0]);
-        vec.push(array[1]);
-        vec.push(array[2]);
-        vec.push(array[3]);
-        vec.push(array[4]);
-        vec.push(array[5]);
-        vec.push(array[6]);
-        vec.push(array[7]);
-        vec.push(array[8]);
-        vec.push(array[9]);
-        vec.push(array[10]);
-        vec.push(array[11]);
-        vec.push(array[12]);
-        vec.push(array[13]);
-        vec.push(array[14]);
-        vec.push(array[15]);
-        vec.push(array[16]);
-        vec.push(array[17]);
-        vec.push(array[18]);
-        vec.push(array[19]);
-        vec.push(array[20]);
-        vec.push(array[21]);
-        vec.push(array[22]);
-        vec.push(array[23]);
-        vec.push(array[24]);
-        vec.push(array[25]);
-        vec.push(array[26]);
-        vec.push(array[27]);
-        vec.push(array[28]);
-        vec.push(array[29]);
-        vec.push(array[30]);
-        vec.push(array[31]);
-        vec.push(array[32]);
-        vec.push(array[33]);
-        vec.push(array[34]);
-        vec.push(array[35]);
-        vec.push(array[36]);
-        vec.push(array[37]);
-        vec.push(array[38]);
-        vec.push(array[39]);
-        vec.push(array[40]);
-        vec.push(array[41]);
-        vec.push(array[42]);
-        vec.push(array[43]);
-        vec.push(array[44]);
-        vec.push(array[45]);
-        vec.push(array[46]);
-        vec.push(array[47]);
-        vec.push(array[48]);
-        vec.push(array[49]);
-        vec.push(array[50]);
-        vec.push(array[51]);
-        vec.push(array[52]);
-        vec.push(array[53]);
-        vec.push(array[54]);
-        vec.push(array[55]);
-        vec.push(array[56]);
-        vec.push(array[57]);
-        vec.push(array[58]);
-        vec.push(array[59]);
-        vec.push(array[60]);
-        vec.push(array[61]);
-        vec.push(array[62]);
-        vec.push(array[63]);
+fn conv_array(data: Vec<[u8; 512]>) -> Vec<u8> {
+    let len = data.len();
+    let mut vec = vec![0u8; len * 512];
+    for i in 0..len {
+        vec[i * 512..(i + 1) * 512].copy_from_slice(&data[i]);
     }
     vec
 }

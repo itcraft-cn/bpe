@@ -120,7 +120,7 @@ struct JavaFfiFunc {
     callback: GlobalRef,
 }
 impl FfiFunc for JavaFfiFunc {
-    fn callback(&self, data: Vec<[u64; 64]>) {
+    fn callback(&self, data: Vec<[u8; 512]>) {
         let rs = self.vm.get_env();
         if let Ok(mut env) = rs {
             let len = data.len() as i32;
@@ -130,7 +130,7 @@ impl FfiFunc for JavaFfiFunc {
             let rs = env.call_method(
                 self.callback.clone(),
                 "callback",
-                "([JI)V",
+                "([BI)V",
                 &[param1, param2],
             );
             if rs.is_err() {
@@ -140,14 +140,13 @@ impl FfiFunc for JavaFfiFunc {
     }
 }
 
-fn conv_array<'a>(env: &JNIEnv<'a>, data: Vec<[u64; 64]>) -> JPrimitiveArray<'a, i64> {
-    let array = env.new_long_array((data.len() * 64) as i32).unwrap();
-    let mut sub_array = [0i64; 64];
-    for record in data.iter().enumerate() {
-        for data_record in record.1.as_slice().iter().enumerate() {
-            sub_array[data_record.0] = *data_record.1 as i64;
-        }
-        let _ = env.set_long_array_region(&array, (record.0 * 8) as i32, sub_array.as_slice());
+fn conv_array<'a>(env: &JNIEnv<'a>, data: Vec<[u8; 512]>) -> JPrimitiveArray<'a, i8> {
+    let len = data.len();
+    let array = env.new_byte_array((len * 512) as i32).unwrap();
+    for i in 0..len {
+        let u8slice = data[i].as_slice();
+        let i8slice = unsafe { &*(u8slice as *const [u8] as *const [i8]) };
+        let _ = env.set_byte_array_region(&array, (i * 512) as i32, i8slice);
     }
     array
 }

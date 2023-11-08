@@ -8,9 +8,9 @@ sys.path.insert(
     0, os.path.join(os.path.dirname(__file__), "../lib64/python3.11/site-packages")
 )
 
-from pyshower.shower import Shower,ShowerRecordCallback
+from pyshower.shower import Shower, ShowerRecordCallback
 import pytest
-    
+
 SQL = "select _1.__1 from _1 limit 1"
 
 class XDemo(ShowerRecordCallback):
@@ -24,7 +24,7 @@ class XDemo(ShowerRecordCallback):
 class TestUniStream:
     # 函数级开始
     def setup_method(self):
-        os.environ['SHOWER_HOME'] = '/home/helly/code/rust/shower'
+        os.environ["SHOWER_HOME"] = "/home/helly/code/rust/shower"
         Shower.start()
 
     # 函数级结束
@@ -37,7 +37,7 @@ class TestUniStream:
         global SQL
         Shower.def_action_with_callback(SQL, callback)
         for i in range(100):
-            Shower.new_data(1, b'000000000000000000000000')
+            Shower.new_data(1, b"000000000000000000000000")
 
 
 if __name__ == "__main__":
