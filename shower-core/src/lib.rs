@@ -21,6 +21,7 @@ pub(crate) mod utest_base;
 pub use crate::core::def_action;
 pub use crate::core::def_action_ffi;
 pub use crate::core::def_action_with_callback;
+pub use crate::core::def_record;
 pub use crate::core::new_data;
 pub use crate::core::start;
 pub use crate::core::stop;
