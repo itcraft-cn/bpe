@@ -1,4 +1,3 @@
-mod ffi;
 #[macro_use]
 pub(crate) mod macros;
 
@@ -10,6 +9,7 @@ pub(crate) mod core;
 pub(crate) mod data;
 pub(crate) mod element;
 pub(crate) mod error;
+pub(crate) mod ffi;
 pub(crate) mod func;
 pub(crate) mod logger;
 pub(crate) mod sql;
