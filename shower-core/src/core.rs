@@ -13,6 +13,7 @@ use log::*;
 use std::sync::Once;
 
 static mut DEBUG: bool = false;
+static mut ID_STORE: [u8; 8192] = [0; 8192];
 
 pub fn start() -> bool {
     static START: Once = Once::new();
@@ -48,7 +49,11 @@ pub fn stop() {
 }
 
 pub fn def_record(defines: Vec<FieldDef>) -> u16 {
-    insert_define(defines)
+    let id = insert_define(defines);
+    let idx = id / 8;
+    let bit = id % 8;
+    unsafe { ID_STORE[idx as usize] |= 1 << bit };
+    id
 }
 
 fn actual_stop() {
@@ -56,8 +61,15 @@ fn actual_stop() {
 }
 
 pub fn new_data(data: &U8Bytes) -> bool {
-    process_data(data);
-    true
+    let id = data.id();
+    let idx = id / 8;
+    let bit = id % 8;
+    if unsafe { ID_STORE[idx as usize] & (1 << bit) == 0 } {
+        false
+    } else {
+        process_data(data);
+        true
+    }
 }
 
 #[inline]

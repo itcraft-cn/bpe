@@ -1,5 +1,7 @@
 use log::*;
-use shower::{def_action, new_data, start, stop, U8Bytes};
+use shower::{
+    def_action_with_callback, def_record, new_data, start, stop, FieldDef, U8Bytes, LONG,
+};
 use std::{
     env, thread,
     time::{Duration, SystemTime},
@@ -17,7 +19,7 @@ const SQL: &str = r#"
 pub fn main() {
     env::set_var("SHOWER_HOME", "/home/helly/code/rust/shower");
     start();
-    def_action(SQL);
+    def_action_with_callback(SQL, |_vec| {});
     exec_with_time_it(gen_new_data);
     stop();
 }
@@ -26,6 +28,30 @@ fn gen_new_data() {
     let core_ids = core_affinity::get_core_ids().unwrap();
     core_affinity::set_for_current(core_ids[core_ids.len() - 1]);
     info!("thread:{} started", thread::current().name().unwrap());
+    let id = def_record(vec![
+        FieldDef::Num(LONG),
+        FieldDef::Num(LONG),
+        FieldDef::Num(LONG),
+        FieldDef::Num(LONG),
+        FieldDef::Num(LONG),
+        FieldDef::Num(LONG),
+        FieldDef::Num(LONG),
+        FieldDef::Num(LONG),
+        FieldDef::Str(448),
+    ]);
+    log::info!("assigned id:{}", id);
+    let u8data = gen_u8_bytes(id);
+    for _ in 1..=LOOP_SIZE {
+        let ret = new_data(&u8data);
+        if ret {
+            debug!("send success");
+        } else {
+            warn!("send failed");
+        }
+    }
+}
+
+fn gen_u8_bytes(id: u16) -> U8Bytes {
     let mut u8array = [0u8; 512];
     let slice = u8array.as_mut_slice();
     for i in 0..8 {
@@ -37,15 +63,7 @@ fn gen_new_data() {
         u64array[i] = fetch_u64(&slice[i * 8..(i + 1) * 8]);
     }
     info!("data:{:?}", u64array);
-    let u8data = U8Bytes::new_from_vec(1, 512, Vec::from(u8array));
-    for _ in 1..=LOOP_SIZE {
-        let ret = new_data(&u8data);
-        if ret {
-            debug!("send success");
-        } else {
-            warn!("send failed");
-        }
-    }
+    U8Bytes::new_from_vec(id, 512, Vec::from(u8array))
 }
 
 #[inline]

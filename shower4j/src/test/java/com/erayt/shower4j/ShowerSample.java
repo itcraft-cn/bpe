@@ -58,8 +58,13 @@ public class ShowerSample {
 
     private static void sendData() {
         long start = System.nanoTime();
+        boolean success;
         for (int i = 0; i < LOOP_SIZE; i++) {
-            Shower.newData(1, DATA);
+            success = Shower.newData(1, DATA);
+            if (!success) {
+                LOGGER.warn("failed to send data");
+                break;
+            }
         }
         long end = System.nanoTime();
         LOGGER.info("send {} data in {} ms, {} ns", LOOP_SIZE, (end - start) / 1000D / 1000D, end - start);

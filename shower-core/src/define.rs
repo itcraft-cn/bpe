@@ -41,7 +41,7 @@ pub enum FieldDef {
 
 pub(crate) fn init_define_store() {
     unsafe {
-        WALKER = Some(AtomicU16::new(0));
+        WALKER = Some(AtomicU16::new(1));
         MAP = Some(SimpleU16Map::new());
     }
 }
