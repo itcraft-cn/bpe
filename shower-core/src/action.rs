@@ -1,13 +1,66 @@
 use crate::{
+    aux::SimpleU16Map,
+    data::U8Bytes,
     element::Element,
     error::ActionError,
     func::{eq, fetch_val, gt, gt_eq, lt, lt_eq, neq, Executor, FnHolder, Func},
-    sql::{ExprEntity, OpType, ParsedSql, ValType},
+    sql::parse_options,
+    sql::{parse_sql, ExprEntity, OpType, ParsedSql, ValType},
     store::{self, DataIterator},
 };
+use sql_parse::ParseOptions;
 use std::str::FromStr;
 
-pub(crate) fn gen_action<'a>(parsed_sql: &ParsedSql) -> Result<Action<'a>, ActionError> {
+static mut ACTION_MAP: Option<SimpleU16Map<Vec<(Action, FnHolder)>>> = None;
+static mut PARSE_OPTIONS: Option<ParseOptions> = None;
+
+pub(crate) fn init_action_store() {
+    unsafe {
+        PARSE_OPTIONS = Some(parse_options());
+        ACTION_MAP = Some(SimpleU16Map::new());
+    }
+}
+
+pub(crate) fn define_action(sql: &str, func_holder: FnHolder) -> bool {
+    let opt_parsed_sql = parse_sql(sql, unsafe { PARSE_OPTIONS.as_ref().unwrap() });
+    if let Some(parsed_sql) = opt_parsed_sql {
+        let rs = gen_action(&parsed_sql);
+        if let Ok(action) = rs {
+            let id = action.id();
+            let map = unsafe { ACTION_MAP.as_mut().unwrap() };
+            map.entry(id).or_insert_with(map, Vec::new);
+            map.get_mut(id).push((action, func_holder));
+            true
+        } else {
+            log::warn!(
+                "fail to create action from sql[{}], hit unexpected error: {:?}",
+                sql,
+                rs.err().unwrap()
+            );
+            false
+        }
+    } else {
+        log::warn!("not supported sql statement: [{}]", sql);
+        false
+    }
+}
+
+#[inline]
+pub(crate) fn call_action(data: &U8Bytes) {
+    let id = data.id();
+    let opt_actions = search_aciton(id);
+    if let Some(actions) = opt_actions {
+        for (action, fn_holder) in actions {
+            invoke(id, action, fn_holder);
+        }
+    }
+}
+fn search_aciton<'a>(id: u16) -> Option<&'a Vec<(Action<'a>, FnHolder)>> {
+    let map = unsafe { ACTION_MAP.as_ref().unwrap() };
+    map.get(id)
+}
+
+fn gen_action<'a>(parsed_sql: &ParsedSql) -> Result<Action<'a>, ActionError> {
     let tab_id_array = &parsed_sql.tables();
     if tab_id_array.len() != 1 {
         return Err(ActionError::new(format!(
@@ -155,12 +208,12 @@ fn parse_args_fetchers(
     }
 }
 
-pub(crate) fn invoke(action: &Action, fn_holder: &FnHolder) {
+pub(crate) fn invoke(id: u16, action: &Action, fn_holder: &FnHolder) {
     let vec: Vec<[u8; 512]> = action
         .iterator
-        .filter(|slice| action.filter.is_match(slice))
+        .filter(|slice| action.filter.is_match(id, slice))
         .take(action.limit)
-        .map(|slice| action.fetch(slice))
+        .map(|slice| action.fetch(id, slice))
         .collect();
     match fn_holder {
         FnHolder::NotExist => {}
@@ -170,77 +223,77 @@ pub(crate) fn invoke(action: &Action, fn_holder: &FnHolder) {
 }
 
 #[inline]
-fn op_or(slice: &[u8], v1: &Filter, v2: &Filter) -> bool {
-    op_logical(slice, v1, v2, or)
+fn op_or(slice: &[u8], id: u16, v1: &Filter, v2: &Filter) -> bool {
+    op_logical(slice, id, v1, v2, or)
 }
 #[inline]
-fn op_and(slice: &[u8], v1: &Filter, v2: &Filter) -> bool {
-    op_logical(slice, v1, v2, and)
+fn op_and(slice: &[u8], id: u16, v1: &Filter, v2: &Filter) -> bool {
+    op_logical(slice, id, v1, v2, and)
 }
 #[inline]
-fn op_logical<F>(slice: &[u8], v1: &Filter, v2: &Filter, f: F) -> bool
+fn op_logical<F>(slice: &[u8], id: u16, v1: &Filter, v2: &Filter, f: F) -> bool
 where
-    F: Fn(&[u8], &Filter, &Filter) -> bool,
+    F: Fn(&[u8], u16, &Filter, &Filter) -> bool,
 {
     match (v1, v2) {
-        (Filter::Mixed(_), Filter::Mixed(_)) => f(slice, v1, v2),
+        (Filter::Mixed(_), Filter::Mixed(_)) => f(slice, id, v1, v2),
         _ => false,
     }
 }
 
 #[inline]
-fn or(slice: &[u8], v1: &Filter, v2: &Filter) -> bool {
-    v1.is_match(slice) || v2.is_match(slice)
+fn or(slice: &[u8], id: u16, v1: &Filter, v2: &Filter) -> bool {
+    v1.is_match(id, slice) || v2.is_match(id, slice)
 }
 
 #[inline]
-fn and(slice: &[u8], v1: &Filter, v2: &Filter) -> bool {
-    v1.is_match(slice) && v2.is_match(slice)
+fn and(slice: &[u8], id: u16, v1: &Filter, v2: &Filter) -> bool {
+    v1.is_match(id, slice) && v2.is_match(id, slice)
 }
 
 #[inline]
-fn op_eq(slice: &[u8], v1: &Filter, v2: &Filter) -> bool {
-    compare_slice_val(slice, v1, v2, eq)
+fn op_eq(slice: &[u8], id: u16, v1: &Filter, v2: &Filter) -> bool {
+    compare_slice_val(slice, id, v1, v2, eq)
 }
 #[inline]
-fn op_gt_eq(slice: &[u8], v1: &Filter, v2: &Filter) -> bool {
-    compare_slice_val(slice, v1, v2, gt_eq)
+fn op_gt_eq(slice: &[u8], id: u16, v1: &Filter, v2: &Filter) -> bool {
+    compare_slice_val(slice, id, v1, v2, gt_eq)
 }
 #[inline]
-fn op_gt(slice: &[u8], v1: &Filter, v2: &Filter) -> bool {
-    compare_slice_val(slice, v1, v2, gt)
+fn op_gt(slice: &[u8], id: u16, v1: &Filter, v2: &Filter) -> bool {
+    compare_slice_val(slice, id, v1, v2, gt)
 }
 #[inline]
-fn op_lt_eq(slice: &[u8], v1: &Filter, v2: &Filter) -> bool {
-    compare_slice_val(slice, v1, v2, lt_eq)
+fn op_lt_eq(slice: &[u8], id: u16, v1: &Filter, v2: &Filter) -> bool {
+    compare_slice_val(slice, id, v1, v2, lt_eq)
 }
 #[inline]
-fn op_lt(slice: &[u8], v1: &Filter, v2: &Filter) -> bool {
-    compare_slice_val(slice, v1, v2, lt)
+fn op_lt(slice: &[u8], id: u16, v1: &Filter, v2: &Filter) -> bool {
+    compare_slice_val(slice, id, v1, v2, lt)
 }
 #[inline]
-fn op_neq(slice: &[u8], v1: &Filter, v2: &Filter) -> bool {
-    compare_slice_val(slice, v1, v2, neq)
+fn op_neq(slice: &[u8], id: u16, v1: &Filter, v2: &Filter) -> bool {
+    compare_slice_val(slice, id, v1, v2, neq)
 }
 
 #[inline]
-fn compare_slice_val<F>(slice: &[u8], v1: &Filter, v2: &Filter, f: F) -> bool
+fn compare_slice_val<F>(slice: &[u8], id: u16, v1: &Filter, v2: &Filter, f: F) -> bool
 where
     F: Fn(Element, Element) -> bool,
 {
     match (v1, v2) {
         (Filter::Original(expr1), Filter::Original(expr2)) => match (expr1, expr2) {
             (ExprEntity::Field(idx), ExprEntity::Val(v_type)) => {
-                compare_with_op(slice, *idx, v_type, f)
+                compare_with_op(slice, id, *idx, v_type, f)
             }
             (ExprEntity::FieldWithTab(_, field_idx), ExprEntity::Val(v_type)) => {
-                compare_with_op(slice, *field_idx, v_type, f)
+                compare_with_op(slice, id, *field_idx, v_type, f)
             }
             (ExprEntity::Val(v_type), ExprEntity::Field(idx)) => {
-                compare_with_op(slice, *idx, v_type, f)
+                compare_with_op(slice, id, *idx, v_type, f)
             }
             (ExprEntity::Val(v_type), ExprEntity::FieldWithTab(_, field_idx)) => {
-                compare_with_op(slice, *field_idx, v_type, f)
+                compare_with_op(slice, id, *field_idx, v_type, f)
             }
             _ => false,
         },
@@ -249,13 +302,13 @@ where
 }
 
 #[inline]
-fn compare_with_op<F>(slice: &[u8], idx: u16, v_type: &ValType, f: F) -> bool
+fn compare_with_op<F>(slice: &[u8], id: u16, idx: u16, v_type: &ValType, f: F) -> bool
 where
     F: Fn(Element, Element) -> bool,
 {
     let opt_expacted = fetch_expacted(v_type);
     if let Some(expacted) = opt_expacted {
-        let val = fetch_val(slice, idx);
+        let val = fetch_val(slice, id, idx);
         compare_val(expacted, val, f)
     } else {
         false
@@ -292,14 +345,14 @@ impl<'a> Action<'a> {
         self.id
     }
 
-    fn fetch(&self, slice: &[u8]) -> [u8; 512] {
+    fn fetch(&self, id: u16, slice: &[u8]) -> [u8; 512] {
         let mut result = [0u8; 512];
         let target = result.as_mut_slice();
         let mut val;
         let mut offset = 0 as usize;
         let len = self.executors.len();
         for i in 0..len {
-            val = self.executors[i].fetch(slice);
+            val = self.executors[i].fetch(id, slice);
             val.copy_to_target(&mut target[offset..offset + 8]);
             offset += 8;
         }
@@ -314,27 +367,28 @@ pub(crate) enum Filter {
     Mixed(Vec<Filter>),
 }
 impl Filter {
-    fn is_match(&self, slice: &[u8]) -> bool {
+    fn is_match(&self, id: u16, slice: &[u8]) -> bool {
         match self {
             Filter::Empty => true,
             Filter::Original(_) => false,
-            Filter::Mixed(filters) => self.filter_slice(filters, slice),
+            Filter::Mixed(filters) => self.filter_slice(id, filters, slice),
         }
     }
 
-    fn filter_slice(&self, filters: &[Filter], slice: &[u8]) -> bool {
+    fn filter_slice(&self, id: u16, filters: &[Filter], slice: &[u8]) -> bool {
         let v1 = &filters[0];
         let v2 = &filters[1];
         let op = &filters[2];
         match op {
             Filter::Empty => true,
-            Filter::Original(expr) => self.filter_slice_by_expr(expr, v1, v2, slice),
+            Filter::Original(expr) => self.filter_slice_by_expr(id, expr, v1, v2, slice),
             Filter::Mixed(_) => false,
         }
     }
 
     fn filter_slice_by_expr(
         &self,
+        id: u16,
         expr: &ExprEntity,
         v1: &Filter,
         v2: &Filter,
@@ -342,14 +396,14 @@ impl Filter {
     ) -> bool {
         match expr {
             ExprEntity::Op(op_type) => match op_type {
-                OpType::Or => op_or(slice, v1, v2),
-                OpType::And => op_and(slice, v1, v2),
-                OpType::Eq => op_eq(slice, v1, v2),
-                OpType::GtEq => op_gt_eq(slice, v1, v2),
-                OpType::Gt => op_gt(slice, v1, v2),
-                OpType::LtEq => op_lt_eq(slice, v1, v2),
-                OpType::Lt => op_lt(slice, v1, v2),
-                OpType::Neq => op_neq(slice, v1, v2),
+                OpType::Or => op_or(slice, id, v1, v2),
+                OpType::And => op_and(slice, id, v1, v2),
+                OpType::Eq => op_eq(slice, id, v1, v2),
+                OpType::GtEq => op_gt_eq(slice, id, v1, v2),
+                OpType::Gt => op_gt(slice, id, v1, v2),
+                OpType::LtEq => op_lt_eq(slice, id, v1, v2),
+                OpType::Lt => op_lt(slice, id, v1, v2),
+                OpType::Neq => op_neq(slice, id, v1, v2),
             },
             _ => false,
         }
@@ -361,7 +415,9 @@ mod tests {
     use super::*;
     use crate::{
         cfg::{get_config, load_config},
+        core::def_record,
         data::U8Bytes,
+        define::{FieldDef, LONG},
         logger::init_logger,
         sql::{parse_options, parse_sql},
         store::insert,
@@ -380,6 +436,14 @@ mod tests {
         env::set_var("SHOWER_HOME", "/home/helly/code/rust/shower");
         load_config();
         init_logger(get_config());
+        let id = def_record(vec![
+            FieldDef::Num(LONG),
+            FieldDef::Num(LONG),
+            FieldDef::Num(LONG),
+            FieldDef::Num(LONG),
+            FieldDef::Num(LONG),
+            FieldDef::Str(248),
+        ]);
         let mut vec = vec![0u8; 288];
         vec.as_mut_slice()[3] = 1;
         let u8data = U8Bytes::new_from_vec(1, 288, vec);
@@ -390,7 +454,7 @@ mod tests {
         if let Some(parsed_sql) = parse_sql(SQL, &parse_options) {
             let rs_action = gen_action(&parsed_sql);
             if let Ok(action) = rs_action {
-                invoke(&action, &FnHolder::NotExist);
+                invoke(id, &action, &FnHolder::NotExist);
             }
         }
     }

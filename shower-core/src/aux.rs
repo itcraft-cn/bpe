@@ -48,6 +48,10 @@ impl<T> SimpleU16Map<T> {
         SimpleU16Map { vec }
     }
     #[inline]
+    pub(crate) fn insert(&mut self, key: u16, value: T) {
+        self.vec[key as usize] = Some(value);
+    }
+    #[inline]
     pub(crate) fn entry(&mut self, id: u16) -> SimpleU16Entry {
         let opt = self.vec[id as usize].as_mut();
         match opt {

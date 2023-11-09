@@ -1,22 +1,18 @@
 use crate::{
-    action::{gen_action, invoke, Action},
-    aux::SimpleU16Map,
+    action::{call_action, define_action, init_action_store},
     cfg::{get_config, load_config},
     consts::KEY_DEV_MODE,
-    data::{FieldDef, U8Bytes},
+    data::U8Bytes,
+    define::{init_define_store, insert_define, FieldDef},
     ffi::FfiFunc,
     func::FnHolder,
     logger::init_logger,
-    sql::{parse_options, parse_sql},
     store::insert,
 };
 use log::*;
-use sql_parse::ParseOptions;
 use std::sync::Once;
 
 static mut DEBUG: bool = false;
-static mut PARSE_OPTIONS: Option<ParseOptions> = None;
-static mut ACTION_MAP: Option<SimpleU16Map<Vec<(Action, FnHolder)>>> = None;
 
 pub fn start() -> bool {
     static START: Once = Once::new();
@@ -40,10 +36,9 @@ fn actual_start() -> bool {
 
     unsafe {
         DEBUG = cfg.fetch_cfg_bool(KEY_DEV_MODE);
-        PARSE_OPTIONS = Some(parse_options());
-        ACTION_MAP = Some(SimpleU16Map::new());
+        init_action_store();
+        init_define_store();
     }
-
     true
 }
 
@@ -52,15 +47,8 @@ pub fn stop() {
     STOP.call_once(actual_stop);
 }
 
-pub fn def_record(defines: Vec<FieldDef>) -> i32 {
-    let len = defines.len();
-    for i in 0..len {
-        match defines[i] {
-            FieldDef::Num(num) => log::info!("type: {:?}, len: {}", num.num_type(), num.len()),
-            FieldDef::Str(len) => log::info!("type: Str, len: {}", len),
-        }
-    }
-    0
+pub fn def_record(defines: Vec<FieldDef>) -> u16 {
+    insert_define(defines)
 }
 
 fn actual_stop() {
@@ -78,56 +66,17 @@ fn process_data(data: &U8Bytes) {
     call_action(data);
 }
 
-#[inline]
-fn call_action(data: &U8Bytes) {
-    let opt_actions = search_aciton(data.id());
-    if let Some(actions) = opt_actions {
-        for (action, fn_holder) in actions {
-            invoke(action, fn_holder);
-        }
-    }
-}
-
-fn search_aciton<'a>(id: u16) -> Option<&'a Vec<(Action<'a>, FnHolder)>> {
-    let map = unsafe { ACTION_MAP.as_ref().unwrap() };
-    map.get(id)
-}
-
 pub fn def_action(sql: &str) -> bool {
-    actual_def_action(sql, FnHolder::NotExist)
+    define_action(sql, FnHolder::NotExist)
 }
 
 pub fn def_action_with_callback<F>(sql: &str, func: F) -> bool
 where
     F: Fn(Vec<[u8; 512]>) + Send + 'static,
 {
-    actual_def_action(sql, FnHolder::Func(Box::new(func)))
+    define_action(sql, FnHolder::Func(Box::new(func)))
 }
 
 pub fn def_action_ffi(sql: &str, ffi: Box<dyn FfiFunc>) -> bool {
-    actual_def_action(sql, FnHolder::FfiFunc(ffi))
-}
-
-fn actual_def_action(sql: &str, func_holder: FnHolder) -> bool {
-    let opt_parsed_sql = parse_sql(sql, unsafe { PARSE_OPTIONS.as_ref().unwrap() });
-    if let Some(parsed_sql) = opt_parsed_sql {
-        let rs = gen_action(&parsed_sql);
-        if let Ok(action) = rs {
-            let id = action.id();
-            let map = unsafe { ACTION_MAP.as_mut().unwrap() };
-            map.entry(id).or_insert_with(map, Vec::new);
-            map.get_mut(id).push((action, func_holder));
-            true
-        } else {
-            log::warn!(
-                "fail to create action from sql[{}], hit unexpected error: {:?}",
-                sql,
-                rs.err().unwrap()
-            );
-            false
-        }
-    } else {
-        log::warn!("not supported sql statement: [{}]", sql);
-        false
-    }
+    define_action(sql, FnHolder::FfiFunc(ffi))
 }

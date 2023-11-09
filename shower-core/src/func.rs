@@ -1,4 +1,4 @@
-use crate::{aux::fetch_u64, element::Element, ffi::FfiFunc};
+use crate::{aux::fetch_u64, define::get_field_define, element::Element, ffi::FfiFunc};
 use strum_macros::EnumString;
 
 #[derive(Debug, Clone)]
@@ -7,17 +7,18 @@ pub(crate) enum Executor {
     Compute(Func, Vec<Executor>),
 }
 impl Executor {
-    pub(crate) fn fetch(&self, slice: &[u8]) -> Element {
+    pub(crate) fn fetch(&self, id: u16, slice: &[u8]) -> Element {
         match self {
-            Executor::Fetch(_, field_id) => fetch_val(slice, *field_id),
-            Executor::Compute(f, executors) => compute_func(slice, f, executors),
+            Executor::Fetch(_, field_id) => fetch_val(slice, id, *field_id),
+            Executor::Compute(f, executors) => compute_func(slice, id, f, executors),
         }
     }
 }
 
 #[inline]
-pub(crate) fn fetch_val(slice: &[u8], idx: u16) -> Element {
+pub(crate) fn fetch_val(slice: &[u8], id: u16, idx: u16) -> Element {
     let real_idx = idx - 1;
+    let _x = get_field_define(id, real_idx);
     Element::Long(fetch_u64(&slice[real_idx as usize * 8..idx as usize * 8]))
 }
 
@@ -46,17 +47,17 @@ pub(crate) fn neq(expacted: Element, val: Element) -> bool {
     val.neq(expacted)
 }
 
-pub(crate) fn compute_func(slice: &[u8], f: &Func, executors: &[Executor]) -> Element {
+pub(crate) fn compute_func(slice: &[u8], id: u16, f: &Func, executors: &[Executor]) -> Element {
     match f {
-        Func::Add => add(slice, executors),
-        Func::Sub => sub(slice, executors),
-        Func::Mul => mul(slice, executors),
-        Func::Div => div(slice, executors),
-        Func::Mod => mod_(slice, executors),
+        Func::Add => add(slice, id, executors),
+        Func::Sub => sub(slice, id, executors),
+        Func::Mul => mul(slice, id, executors),
+        Func::Div => div(slice, id, executors),
+        Func::Mod => mod_(slice, id, executors),
     }
 }
 
-fn add(slice: &[u8], executors: &[Executor]) -> Element {
+fn add(slice: &[u8], id: u16, executors: &[Executor]) -> Element {
     if executors.len() != 2 {
         log::warn!(
             "Invalid parameters for add function, should be 2, but was {}",
@@ -64,12 +65,12 @@ fn add(slice: &[u8], executors: &[Executor]) -> Element {
         );
         return Element::Long(0);
     }
-    let v1 = executors[0].fetch(slice);
-    let v2 = executors[1].fetch(slice);
+    let v1 = executors[0].fetch(id, slice);
+    let v2 = executors[1].fetch(id, slice);
     v1.add(v2)
 }
 
-fn sub(slice: &[u8], executors: &[Executor]) -> Element {
+fn sub(slice: &[u8], id: u16, executors: &[Executor]) -> Element {
     if executors.len() != 2 {
         log::warn!(
             "Invalid parameters for add function, should be 2, but was {}",
@@ -77,12 +78,12 @@ fn sub(slice: &[u8], executors: &[Executor]) -> Element {
         );
         return Element::Long(0);
     }
-    let v1 = executors[0].fetch(slice);
-    let v2 = executors[1].fetch(slice);
+    let v1 = executors[0].fetch(id, slice);
+    let v2 = executors[1].fetch(id, slice);
     v1.sub(v2)
 }
 
-fn mul(slice: &[u8], executors: &[Executor]) -> Element {
+fn mul(slice: &[u8], id: u16, executors: &[Executor]) -> Element {
     if executors.len() != 2 {
         log::warn!(
             "Invalid parameters for add function, should be 2, but was {}",
@@ -90,12 +91,12 @@ fn mul(slice: &[u8], executors: &[Executor]) -> Element {
         );
         return Element::Long(0);
     }
-    let v1 = executors[0].fetch(slice);
-    let v2 = executors[1].fetch(slice);
+    let v1 = executors[0].fetch(id, slice);
+    let v2 = executors[1].fetch(id, slice);
     v1.mul(v2)
 }
 
-fn div(slice: &[u8], executors: &[Executor]) -> Element {
+fn div(slice: &[u8], id: u16, executors: &[Executor]) -> Element {
     if executors.len() != 2 {
         log::warn!(
             "Invalid parameters for add function, should be 2, but was {}",
@@ -103,12 +104,12 @@ fn div(slice: &[u8], executors: &[Executor]) -> Element {
         );
         return Element::Long(0);
     }
-    let v1 = executors[0].fetch(slice);
-    let v2 = executors[1].fetch(slice);
+    let v1 = executors[0].fetch(id, slice);
+    let v2 = executors[1].fetch(id, slice);
     v1.div(v2)
 }
 
-fn mod_(slice: &[u8], executors: &[Executor]) -> Element {
+fn mod_(slice: &[u8], id: u16, executors: &[Executor]) -> Element {
     if executors.len() != 2 {
         log::warn!(
             "Invalid parameters for add function, should be 2, but was {}",
@@ -116,8 +117,8 @@ fn mod_(slice: &[u8], executors: &[Executor]) -> Element {
         );
         return Element::Long(0);
     }
-    let v1 = executors[0].fetch(slice);
-    let v2 = executors[1].fetch(slice);
+    let v1 = executors[0].fetch(id, slice);
+    let v2 = executors[1].fetch(id, slice);
     v1.mod_(v2)
 }
 

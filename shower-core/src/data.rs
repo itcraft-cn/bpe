@@ -1,15 +1,6 @@
 use crate::consts::U8_DATA_MAX_SIZE;
 use std::cmp::Ordering;
 
-pub const LONG: Number = Number {
-    num_type: NumType::Long,
-    len: 8,
-};
-pub const DOUBLE: Number = Number {
-    num_type: NumType::Double,
-    len: 8,
-};
-
 #[derive(Clone, Copy, Debug)]
 pub struct U8Bytes {
     id: u16,
@@ -62,30 +53,4 @@ impl U8Bytes {
 
 fn copy(len: usize, bytes: &mut [u8; U8_DATA_MAX_SIZE], slice: &[u8]) {
     bytes.as_mut_slice()[0..len].copy_from_slice(&slice[0..len]);
-}
-
-#[derive(Clone, Copy, Debug)]
-pub enum NumType {
-    Long,
-    Double,
-}
-
-#[derive(Clone, Copy, Debug)]
-pub struct Number {
-    num_type: NumType,
-    len: usize,
-}
-impl Number {
-    pub(crate) fn num_type(self) -> NumType {
-        self.num_type
-    }
-    pub(crate) fn len(self) -> usize {
-        self.len
-    }
-}
-
-#[derive(Clone, Copy, Debug)]
-pub enum FieldDef {
-    Num(Number),
-    Str(usize),
 }
