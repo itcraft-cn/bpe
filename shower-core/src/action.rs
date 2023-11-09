@@ -1,4 +1,5 @@
 use crate::{
+    element::Element,
     error::ActionError,
     func::{eq, fetch_val, gt, gt_eq, lt, lt_eq, neq, Executor, FnHolder, Func},
     sql::{ExprEntity, OpType, ParsedSql, ValType},
@@ -225,7 +226,7 @@ fn op_neq(slice: &[u8], v1: &Filter, v2: &Filter) -> bool {
 #[inline]
 fn compare_slice_val<F>(slice: &[u8], v1: &Filter, v2: &Filter, f: F) -> bool
 where
-    F: Fn(u64, u64) -> bool,
+    F: Fn(Element, Element) -> bool,
 {
     match (v1, v2) {
         (Filter::Original(expr1), Filter::Original(expr2)) => match (expr1, expr2) {
@@ -250,7 +251,7 @@ where
 #[inline]
 fn compare_with_op<F>(slice: &[u8], idx: u16, v_type: &ValType, f: F) -> bool
 where
-    F: Fn(u64, u64) -> bool,
+    F: Fn(Element, Element) -> bool,
 {
     let opt_expacted = fetch_expacted(v_type);
     if let Some(expacted) = opt_expacted {
@@ -262,17 +263,18 @@ where
 }
 
 #[inline]
-fn fetch_expacted(v_type: &ValType) -> Option<u64> {
+fn fetch_expacted(v_type: &ValType) -> Option<Element> {
     match v_type {
-        ValType::Int(val) => Some(*val as u64),
+        ValType::Int(val) => Some(Element::Long(*val as u64)),
+        ValType::Float(val) => Some(Element::Double(*val as f64)),
         _ => None,
     }
 }
 
 #[inline]
-fn compare_val<F>(expacted: u64, val: u64, f: F) -> bool
+fn compare_val<F>(expacted: Element, val: Element, f: F) -> bool
 where
-    F: Fn(u64, u64) -> bool,
+    F: Fn(Element, Element) -> bool,
 {
     f(expacted, val)
 }
@@ -298,7 +300,7 @@ impl<'a> Action<'a> {
         let len = self.executors.len();
         for i in 0..len {
             val = self.executors[i].fetch(slice);
-            target[offset..offset + 8].copy_from_slice(val.to_ne_bytes().as_slice());
+            val.copy_to_target(&mut target[offset..offset + 8]);
             offset += 8;
         }
         result

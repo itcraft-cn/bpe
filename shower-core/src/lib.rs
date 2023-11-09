@@ -8,6 +8,7 @@ pub(crate) mod cfg;
 pub(crate) mod consts;
 pub(crate) mod core;
 pub(crate) mod data;
+pub(crate) mod element;
 pub(crate) mod error;
 pub(crate) mod func;
 pub(crate) mod logger;
