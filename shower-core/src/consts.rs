@@ -6,7 +6,7 @@ pub(crate) const U8_DATA_MAX_SIZE: usize = 512;
 
 pub(crate) const DEFALUT_SELECT_SIZE: usize = 10;
 
-/// cfg keies
+/// cfg keys
 pub(crate) const KEY_DEV_MODE: &str = "dev_mode";
 
 pub(crate) const KEY_LOG_DEV_CONFIG_FILE: &str = "log_dev_config_file";
