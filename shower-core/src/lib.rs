@@ -25,5 +25,8 @@ pub use crate::core::def_record;
 pub use crate::core::new_data;
 pub use crate::core::start;
 pub use crate::core::stop;
+pub use crate::data::FieldDef;
 pub use crate::data::U8Bytes;
+pub use crate::data::DOUBLE;
+pub use crate::data::LONG;
 pub use crate::ffi::FfiFunc;

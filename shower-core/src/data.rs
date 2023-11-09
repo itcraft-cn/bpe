@@ -1,6 +1,15 @@
 use crate::consts::U8_DATA_MAX_SIZE;
 use std::cmp::Ordering;
 
+pub const LONG: Number = Number {
+    num_type: NumType::Long,
+    len: 8,
+};
+pub const DOUBLE: Number = Number {
+    num_type: NumType::Double,
+    len: 8,
+};
+
 #[derive(Clone, Copy, Debug)]
 pub struct U8Bytes {
     id: u16,
@@ -9,7 +18,11 @@ pub struct U8Bytes {
 }
 impl U8Bytes {
     pub fn new(id: u16, data_len: usize, bytes: [u8; U8_DATA_MAX_SIZE]) -> U8Bytes {
-        U8Bytes { id, data_len, bytes }
+        U8Bytes {
+            id,
+            data_len,
+            bytes,
+        }
     }
     pub fn new_from_vec(id: u16, data_len: usize, vec: Vec<u8>) -> U8Bytes {
         let mut bytes = [0u8; U8_DATA_MAX_SIZE];
@@ -18,7 +31,11 @@ impl U8Bytes {
             Ordering::Less => copy(slice.len(), &mut bytes, slice),
             Ordering::Equal | Ordering::Greater => copy(U8_DATA_MAX_SIZE, &mut bytes, slice),
         }
-        U8Bytes { id, data_len, bytes }
+        U8Bytes {
+            id,
+            data_len,
+            bytes,
+        }
     }
     pub fn new_from_slice(id: u16, data_len: usize, slice: &[u8]) -> U8Bytes {
         let mut bytes = [0u8; U8_DATA_MAX_SIZE];
@@ -26,7 +43,11 @@ impl U8Bytes {
             Ordering::Less => copy(slice.len(), &mut bytes, slice),
             Ordering::Equal | Ordering::Greater => copy(U8_DATA_MAX_SIZE, &mut bytes, slice),
         }
-        U8Bytes { id, data_len, bytes }
+        U8Bytes {
+            id,
+            data_len,
+            bytes,
+        }
     }
     pub fn id(&self) -> u16 {
         self.id
@@ -41,4 +62,30 @@ impl U8Bytes {
 
 fn copy(len: usize, bytes: &mut [u8; U8_DATA_MAX_SIZE], slice: &[u8]) {
     bytes.as_mut_slice()[0..len].copy_from_slice(&slice[0..len]);
+}
+
+#[derive(Clone, Copy, Debug)]
+pub enum NumType {
+    Long,
+    Double,
+}
+
+#[derive(Clone, Copy, Debug)]
+pub struct Number {
+    num_type: NumType,
+    len: usize,
+}
+impl Number {
+    pub(crate) fn num_type(self) -> NumType {
+        self.num_type
+    }
+    pub(crate) fn len(self) -> usize {
+        self.len
+    }
+}
+
+#[derive(Clone, Copy, Debug)]
+pub enum FieldDef {
+    Num(Number),
+    Str(usize),
 }

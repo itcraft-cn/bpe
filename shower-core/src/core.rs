@@ -3,7 +3,7 @@ use crate::{
     aux::SimpleU16Map,
     cfg::{get_config, load_config},
     consts::KEY_DEV_MODE,
-    data::U8Bytes,
+    data::{FieldDef, U8Bytes},
     ffi::FfiFunc,
     func::FnHolder,
     logger::init_logger,
@@ -52,16 +52,13 @@ pub fn stop() {
     STOP.call_once(actual_stop);
 }
 
-pub fn def_record(define: &[u16]) -> i32 {
-    let len = define.len();
-    if len % 2 != 0 {
-        return -1;
-    }
-    let real_len = len / 2;
-    for i in 0..real_len {
-        let val_type = define[i];
-        let val_len = define[i + 1];
-        log::info!("type: {}, len: {}", val_type, val_len);
+pub fn def_record(defines: Vec<FieldDef>) -> i32 {
+    let len = defines.len();
+    for i in 0..len {
+        match defines[i] {
+            FieldDef::Num(num) => log::info!("type: {:?}, len: {}", num.num_type(), num.len()),
+            FieldDef::Str(len) => log::info!("type: Str, len: {}", len),
+        }
     }
     0
 }
