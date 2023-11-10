@@ -1,4 +1,9 @@
-use crate::{aux::fetch_u64, define::get_field_define, element::Element, ffi::FfiFunc};
+use crate::{
+    aux::{fetch_f64, fetch_u64},
+    define::{Column, ColumnType},
+    element::Element,
+    ffi::FfiFunc,
+};
 use strum_macros::EnumString;
 
 #[derive(Debug, Clone)]
@@ -7,19 +12,31 @@ pub(crate) enum Executor {
     Compute(Func, Vec<Executor>),
 }
 impl Executor {
-    pub(crate) fn fetch(&self, id: u16, slice: &[u8]) -> Element {
+    pub(crate) fn fetch(&self, id: u16, defines: &Vec<Column>, slice: &'static [u8]) -> Element {
         match self {
-            Executor::Fetch(_, field_id) => fetch_val(slice, id, *field_id),
-            Executor::Compute(f, executors) => compute_func(slice, id, f, executors),
+            Executor::Fetch(_, field_id) => fetch_val(slice, id, defines, *field_id),
+            Executor::Compute(f, executors) => compute_func(slice, id, defines, f, executors),
         }
     }
 }
 
 #[inline]
-pub(crate) fn fetch_val(slice: &[u8], id: u16, idx: u16) -> Element {
-    let real_idx = idx - 1;
-    let _x = get_field_define(id, real_idx);
-    Element::Long(fetch_u64(&slice[real_idx as usize * 8..idx as usize * 8]))
+pub(crate) fn fetch_val(slice: &'static [u8], _id: u16, defines: &Vec<Column>, idx: u16) -> Element {
+    let column = defines.as_slice()[idx as usize];
+    match column.data_type() {
+        ColumnType::Long => {
+            let offset = column.offset();
+            Element::Long(fetch_u64(&slice[offset..offset + 8]))
+        }
+        ColumnType::Double => {
+            let offset = column.offset();
+            Element::Double(fetch_f64(&slice[offset..offset + 8]))
+        }
+        ColumnType::Str(len) => {
+            let offset = column.offset();
+            Element::_Str(&slice[offset..offset + len], *len)
+        }
+    }
 }
 
 #[inline]
@@ -47,17 +64,23 @@ pub(crate) fn neq(expacted: Element, val: Element) -> bool {
     val.neq(expacted)
 }
 
-pub(crate) fn compute_func(slice: &[u8], id: u16, f: &Func, executors: &[Executor]) -> Element {
+pub(crate) fn compute_func(
+    slice: &'static [u8],
+    id: u16,
+    defines: &Vec<Column>,
+    f: &Func,
+    executors: &[Executor],
+) -> Element {
     match f {
-        Func::Add => add(slice, id, executors),
-        Func::Sub => sub(slice, id, executors),
-        Func::Mul => mul(slice, id, executors),
-        Func::Div => div(slice, id, executors),
-        Func::Mod => mod_(slice, id, executors),
+        Func::Add => add(slice, id, defines, executors),
+        Func::Sub => sub(slice, id, defines, executors),
+        Func::Mul => mul(slice, id, defines, executors),
+        Func::Div => div(slice, id, defines, executors),
+        Func::Mod => mod_(slice, id, defines, executors),
     }
 }
 
-fn add(slice: &[u8], id: u16, executors: &[Executor]) -> Element {
+fn add(slice: &'static [u8], id: u16, defines: &Vec<Column>, executors: &[Executor]) -> Element {
     if executors.len() != 2 {
         log::warn!(
             "Invalid parameters for add function, should be 2, but was {}",
@@ -65,12 +88,12 @@ fn add(slice: &[u8], id: u16, executors: &[Executor]) -> Element {
         );
         return Element::Long(0);
     }
-    let v1 = executors[0].fetch(id, slice);
-    let v2 = executors[1].fetch(id, slice);
+    let v1 = executors[0].fetch(id, defines, slice);
+    let v2 = executors[1].fetch(id, defines, slice);
     v1.add(v2)
 }
 
-fn sub(slice: &[u8], id: u16, executors: &[Executor]) -> Element {
+fn sub(slice: &'static [u8], id: u16, defines: &Vec<Column>, executors: &[Executor]) -> Element {
     if executors.len() != 2 {
         log::warn!(
             "Invalid parameters for add function, should be 2, but was {}",
@@ -78,12 +101,12 @@ fn sub(slice: &[u8], id: u16, executors: &[Executor]) -> Element {
         );
         return Element::Long(0);
     }
-    let v1 = executors[0].fetch(id, slice);
-    let v2 = executors[1].fetch(id, slice);
+    let v1 = executors[0].fetch(id, defines, slice);
+    let v2 = executors[1].fetch(id, defines, slice);
     v1.sub(v2)
 }
 
-fn mul(slice: &[u8], id: u16, executors: &[Executor]) -> Element {
+fn mul(slice: &'static [u8], id: u16, defines: &Vec<Column>, executors: &[Executor]) -> Element {
     if executors.len() != 2 {
         log::warn!(
             "Invalid parameters for add function, should be 2, but was {}",
@@ -91,12 +114,12 @@ fn mul(slice: &[u8], id: u16, executors: &[Executor]) -> Element {
         );
         return Element::Long(0);
     }
-    let v1 = executors[0].fetch(id, slice);
-    let v2 = executors[1].fetch(id, slice);
+    let v1 = executors[0].fetch(id, defines, slice);
+    let v2 = executors[1].fetch(id, defines, slice);
     v1.mul(v2)
 }
 
-fn div(slice: &[u8], id: u16, executors: &[Executor]) -> Element {
+fn div(slice: &'static [u8], id: u16, defines: &Vec<Column>, executors: &[Executor]) -> Element {
     if executors.len() != 2 {
         log::warn!(
             "Invalid parameters for add function, should be 2, but was {}",
@@ -104,12 +127,12 @@ fn div(slice: &[u8], id: u16, executors: &[Executor]) -> Element {
         );
         return Element::Long(0);
     }
-    let v1 = executors[0].fetch(id, slice);
-    let v2 = executors[1].fetch(id, slice);
+    let v1 = executors[0].fetch(id, defines, slice);
+    let v2 = executors[1].fetch(id, defines, slice);
     v1.div(v2)
 }
 
-fn mod_(slice: &[u8], id: u16, executors: &[Executor]) -> Element {
+fn mod_(slice: &'static [u8], id: u16, defines: &Vec<Column>, executors: &[Executor]) -> Element {
     if executors.len() != 2 {
         log::warn!(
             "Invalid parameters for add function, should be 2, but was {}",
@@ -117,8 +140,8 @@ fn mod_(slice: &[u8], id: u16, executors: &[Executor]) -> Element {
         );
         return Element::Long(0);
     }
-    let v1 = executors[0].fetch(id, slice);
-    let v2 = executors[1].fetch(id, slice);
+    let v1 = executors[0].fetch(id, defines, slice);
+    let v2 = executors[1].fetch(id, defines, slice);
     v1.mod_(v2)
 }
 

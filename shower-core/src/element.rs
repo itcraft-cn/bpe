@@ -4,21 +4,21 @@ const TINY_SMALL_F64: f64 = 0.00000001;
 pub(crate) enum Element {
     Long(u64),
     Double(f64),
-    _Str(&'static [u8]),
+    _Str(&'static [u8], usize),
 }
 impl Element {
     pub(crate) fn copy_to_target(&self, target: &mut [u8]) {
         match self {
             Element::Long(val) => target.copy_from_slice(val.to_ne_bytes().as_slice()),
             Element::Double(val) => target.copy_from_slice(val.to_ne_bytes().as_slice()),
-            Element::_Str(slice) => target.copy_from_slice(slice),
+            Element::_Str(slice, _len) => target.copy_from_slice(slice),
         };
     }
     pub(crate) fn _is_computable(&self) -> bool {
         match self {
             Element::Long(_) => true,
             Element::Double(_) => true,
-            Element::_Str(_) => false,
+            Element::_Str(_, _) => false,
         }
     }
     pub(crate) fn add(self, other: Element) -> Element {

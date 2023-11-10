@@ -3,7 +3,7 @@ use crate::{
     cfg::{get_config, load_config},
     consts::KEY_DEV_MODE,
     data::U8Bytes,
-    define::{init_define_store, insert_define, FieldDef},
+    define::{init_define_store, insert_define, Column},
     ffi::FfiFunc,
     func::FnHolder,
     logger::init_logger,
@@ -48,7 +48,7 @@ pub fn stop() {
     STOP.call_once(actual_stop);
 }
 
-pub fn def_record(defines: Vec<FieldDef>) -> u16 {
+pub fn def_record(defines: Vec<Column>) -> u16 {
     let id = insert_define(defines);
     let idx = id / 8;
     let bit = id % 8;

@@ -1,5 +1,5 @@
 use log::*;
-use shower::{def_record, new_data, start, stop, FieldDef, U8Bytes, DOUBLE, LONG};
+use shower::{def_record, new_data, start, stop, Column, U8Bytes};
 use std::{env, thread};
 
 const LOOP_SIZE: usize = 10000000;
@@ -17,11 +17,11 @@ fn gen_new_data() {
     core_affinity::set_for_current(core_ids[core_ids.len() - 1]);
     info!("thread:{} started", thread::current().name().unwrap());
     let id = def_record(vec![
-        FieldDef::Num(LONG),
-        FieldDef::Num(DOUBLE),
-        FieldDef::Num(LONG),
-        FieldDef::Num(DOUBLE),
-        FieldDef::Str(240),
+        Column::new_long(),
+        Column::new_double(),
+        Column::new_long(),
+        Column::new_double(),
+        Column::new_string(240),
     ]);
     let u8data = U8Bytes::new_from_vec(id, 288, vec![0u8; 288]);
     for _ in 1..=LOOP_SIZE {

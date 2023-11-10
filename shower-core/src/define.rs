@@ -1,42 +1,57 @@
 use crate::aux::SimpleU16Map;
 use std::sync::atomic::{AtomicU16, Ordering};
 
-pub const LONG: Number = Number {
-    _num_type: NumType::Long,
-    _len: 8,
-};
-pub const DOUBLE: Number = Number {
-    _num_type: NumType::Double,
-    _len: 8,
-};
-
 static mut WALKER: Option<AtomicU16> = None;
-static mut MAP: Option<SimpleU16Map<Vec<FieldDef>>> = None;
+static mut MAP: Option<SimpleU16Map<Vec<Column>>> = None;
 
 #[derive(Clone, Copy, Debug)]
-pub enum NumType {
+pub enum ColumnType {
     Long,
     Double,
-}
-
-#[derive(Clone, Copy, Debug)]
-pub struct Number {
-    _num_type: NumType,
-    _len: usize,
-}
-impl Number {
-    pub(crate) fn _num_type(self) -> NumType {
-        self._num_type
-    }
-    pub(crate) fn _len(self) -> usize {
-        self._len
-    }
-}
-
-#[derive(Clone, Copy, Debug)]
-pub enum FieldDef {
-    Num(Number),
     Str(usize),
+}
+
+#[derive(Clone, Copy, Debug)]
+pub struct Column {
+    data_type: ColumnType,
+    _idx: usize,
+    offset: usize,
+}
+impl Column {
+    pub fn new_long() -> Column {
+        Column {
+            data_type: ColumnType::Long,
+            _idx: 0,
+            offset: 0,
+        }
+    }
+    pub fn new_double() -> Column {
+        Column {
+            data_type: ColumnType::Double,
+            _idx: 0,
+            offset: 0,
+        }
+    }
+    pub fn new_string(len: usize) -> Column {
+        Column {
+            data_type: ColumnType::Str(len),
+            _idx: 0,
+            offset: 0,
+        }
+    }
+    pub(crate) fn data_type(&self) -> &ColumnType {
+        &self.data_type
+    }
+    pub(crate) fn _idx(&self) -> usize {
+        self._idx
+    }
+    pub(crate) fn offset(&self) -> usize {
+        self.offset
+    }
+    pub(crate) fn _adjust(&mut self, idx: usize, offset: usize) {
+        self._idx = idx;
+        self.offset = offset;
+    }
 }
 
 pub(crate) fn init_define_store() {
@@ -46,7 +61,7 @@ pub(crate) fn init_define_store() {
     }
 }
 
-pub(crate) fn insert_define(defines: Vec<FieldDef>) -> u16 {
+pub(crate) fn insert_define(defines: Vec<Column>) -> u16 {
     unsafe {
         let map = MAP.as_mut().unwrap();
         let key = WALKER.as_ref().unwrap().fetch_add(1, Ordering::SeqCst);
@@ -55,15 +70,11 @@ pub(crate) fn insert_define(defines: Vec<FieldDef>) -> u16 {
     }
 }
 
-pub(crate) fn get_field_define(id: u16, field_idx: u16) -> Option<FieldDef> {
+pub(crate) fn get_define<'a>(id: u16) -> Option<&'a Vec<Column>> {
     unsafe {
         let map = MAP.as_ref().unwrap();
         if let Some(defines) = map.get(id) {
-            if field_idx as usize >= defines.len() {
-                None
-            } else {
-                Some(defines[field_idx as usize].clone())
-            }
+            Some(defines)
         } else {
             None
         }

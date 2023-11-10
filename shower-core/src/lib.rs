@@ -27,7 +27,5 @@ pub use crate::core::new_data;
 pub use crate::core::start;
 pub use crate::core::stop;
 pub use crate::data::U8Bytes;
-pub use crate::define::FieldDef;
-pub use crate::define::DOUBLE;
-pub use crate::define::LONG;
+pub use crate::define::Column;
 pub use crate::ffi::FfiFunc;

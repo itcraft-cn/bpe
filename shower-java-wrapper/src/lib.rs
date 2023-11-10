@@ -6,7 +6,7 @@ use jni::{
 use shower::{def_action, def_action_ffi, new_data, start, stop, FfiFunc, U8Bytes};
 use std::sync::Once;
 
-static mut OPT_GLOBAL_REF: Option<Vec<Box<GlobalRef>>> = None;
+static mut OPT_GLOBAL_REF: Option<Vec<GlobalRef>> = None;
 
 #[no_mangle]
 pub extern "system" fn Java_com_erayt_shower4j_Shower_start<'local>(
@@ -143,8 +143,8 @@ impl FfiFunc for JavaFfiFunc {
 fn conv_array<'a>(env: &JNIEnv<'a>, data: Vec<[u8; 512]>) -> JPrimitiveArray<'a, i8> {
     let len = data.len();
     let array = env.new_byte_array((len * 512) as i32).unwrap();
-    for i in 0..len {
-        let u8slice = data[i].as_slice();
+    for (i, item) in data.iter().enumerate().take(len) {
+        let u8slice = item.as_slice();
         let i8slice = unsafe { &*(u8slice as *const [u8] as *const [i8]) };
         let _ = env.set_byte_array_region(&array, (i * 512) as i32, i8slice);
     }

@@ -1,6 +1,7 @@
 use crate::{
     aux::SimpleU16Map,
     data::U8Bytes,
+    define::{get_define, Column},
     element::Element,
     error::ActionError,
     func::{eq, fetch_val, gt, gt_eq, lt, lt_eq, neq, Executor, FnHolder, Func},
@@ -49,12 +50,17 @@ pub(crate) fn define_action(sql: &str, func_holder: FnHolder) -> bool {
 pub(crate) fn call_action(data: &U8Bytes) {
     let id = data.id();
     let opt_actions = search_aciton(id);
-    if let Some(actions) = opt_actions {
-        for (action, fn_holder) in actions {
-            invoke(id, action, fn_holder);
-        }
+    let opt_defines = get_define(id);
+    if opt_actions.is_none() || opt_defines.is_none() {
+        return;
+    }
+    let actions = opt_actions.unwrap();
+    let defines = opt_defines.unwrap();
+    for (action, fn_holder) in actions {
+        invoke(id, action, defines, fn_holder);
     }
 }
+
 fn search_aciton<'a>(id: u16) -> Option<&'a Vec<(Action<'a>, FnHolder)>> {
     let map = unsafe { ACTION_MAP.as_ref().unwrap() };
     map.get(id)
@@ -98,7 +104,7 @@ fn create_iterator<'a>(id: u16) -> DataIterator<'a> {
 }
 
 fn create_filter(entities: &[ExprEntity]) -> Result<Filter, ActionError> {
-    if entities.len() == 0 {
+    if entities.is_empty() {
         return Ok(Filter::Empty);
     }
     let mut filters: Vec<Filter> = entities
@@ -208,12 +214,17 @@ fn parse_args_fetchers(
     }
 }
 
-pub(crate) fn invoke(id: u16, action: &Action, fn_holder: &FnHolder) {
+pub(crate) fn invoke(
+    id: u16,
+    action: &'static Action,
+    defines: &Vec<Column>,
+    fn_holder: &FnHolder,
+) {
     let vec: Vec<[u8; 512]> = action
         .iterator
-        .filter(|slice| action.filter.is_match(id, slice))
+        .filter(|slice| action.filter.is_match(id, defines, slice))
         .take(action.limit)
-        .map(|slice| action.fetch(id, slice))
+        .map(|slice| action.fetch(id, defines, slice))
         .collect();
     match fn_holder {
         FnHolder::NotExist => {}
@@ -223,77 +234,103 @@ pub(crate) fn invoke(id: u16, action: &Action, fn_holder: &FnHolder) {
 }
 
 #[inline]
-fn op_or(slice: &[u8], id: u16, v1: &Filter, v2: &Filter) -> bool {
-    op_logical(slice, id, v1, v2, or)
+fn op_or(slice: &'static [u8], id: u16, defines: &Vec<Column>, v1: &Filter, v2: &Filter) -> bool {
+    op_logical(slice, id, defines, v1, v2, or)
 }
 #[inline]
-fn op_and(slice: &[u8], id: u16, v1: &Filter, v2: &Filter) -> bool {
-    op_logical(slice, id, v1, v2, and)
+fn op_and(slice: &'static [u8], id: u16, defines: &Vec<Column>, v1: &Filter, v2: &Filter) -> bool {
+    op_logical(slice, id, defines, v1, v2, and)
 }
 #[inline]
-fn op_logical<F>(slice: &[u8], id: u16, v1: &Filter, v2: &Filter, f: F) -> bool
+fn op_logical<F>(
+    slice: &'static [u8],
+    id: u16,
+    defines: &Vec<Column>,
+    v1: &Filter,
+    v2: &Filter,
+    f: F,
+) -> bool
 where
-    F: Fn(&[u8], u16, &Filter, &Filter) -> bool,
+    F: Fn(&'static [u8], u16, &Vec<Column>, &Filter, &Filter) -> bool,
 {
     match (v1, v2) {
-        (Filter::Mixed(_), Filter::Mixed(_)) => f(slice, id, v1, v2),
+        (Filter::Mixed(_), Filter::Mixed(_)) => f(slice, id, defines, v1, v2),
         _ => false,
     }
 }
 
 #[inline]
-fn or(slice: &[u8], id: u16, v1: &Filter, v2: &Filter) -> bool {
-    v1.is_match(id, slice) || v2.is_match(id, slice)
+fn or(slice: &'static [u8], id: u16, defines: &Vec<Column>, v1: &Filter, v2: &Filter) -> bool {
+    v1.is_match(id, defines, slice) || v2.is_match(id, defines, slice)
 }
 
 #[inline]
-fn and(slice: &[u8], id: u16, v1: &Filter, v2: &Filter) -> bool {
-    v1.is_match(id, slice) && v2.is_match(id, slice)
+fn and(slice: &'static [u8], id: u16, defines: &Vec<Column>, v1: &Filter, v2: &Filter) -> bool {
+    v1.is_match(id, defines, slice) && v2.is_match(id, defines, slice)
 }
 
 #[inline]
-fn op_eq(slice: &[u8], id: u16, v1: &Filter, v2: &Filter) -> bool {
-    compare_slice_val(slice, id, v1, v2, eq)
+fn op_eq(slice: &'static [u8], id: u16, defines: &Vec<Column>, v1: &Filter, v2: &Filter) -> bool {
+    compare_slice_val(slice, id, defines, v1, v2, eq)
 }
 #[inline]
-fn op_gt_eq(slice: &[u8], id: u16, v1: &Filter, v2: &Filter) -> bool {
-    compare_slice_val(slice, id, v1, v2, gt_eq)
+fn op_gt_eq(
+    slice: &'static [u8],
+    id: u16,
+    defines: &Vec<Column>,
+    v1: &Filter,
+    v2: &Filter,
+) -> bool {
+    compare_slice_val(slice, id, defines, v1, v2, gt_eq)
 }
 #[inline]
-fn op_gt(slice: &[u8], id: u16, v1: &Filter, v2: &Filter) -> bool {
-    compare_slice_val(slice, id, v1, v2, gt)
+fn op_gt(slice: &'static [u8], id: u16, defines: &Vec<Column>, v1: &Filter, v2: &Filter) -> bool {
+    compare_slice_val(slice, id, defines, v1, v2, gt)
 }
 #[inline]
-fn op_lt_eq(slice: &[u8], id: u16, v1: &Filter, v2: &Filter) -> bool {
-    compare_slice_val(slice, id, v1, v2, lt_eq)
+fn op_lt_eq(
+    slice: &'static [u8],
+    id: u16,
+    defines: &Vec<Column>,
+    v1: &Filter,
+    v2: &Filter,
+) -> bool {
+    compare_slice_val(slice, id, defines, v1, v2, lt_eq)
 }
 #[inline]
-fn op_lt(slice: &[u8], id: u16, v1: &Filter, v2: &Filter) -> bool {
-    compare_slice_val(slice, id, v1, v2, lt)
+fn op_lt(slice: &'static [u8], id: u16, defines: &Vec<Column>, v1: &Filter, v2: &Filter) -> bool {
+    compare_slice_val(slice, id, defines, v1, v2, lt)
 }
 #[inline]
-fn op_neq(slice: &[u8], id: u16, v1: &Filter, v2: &Filter) -> bool {
-    compare_slice_val(slice, id, v1, v2, neq)
+fn op_neq(slice: &'static [u8], id: u16, defines: &Vec<Column>, v1: &Filter, v2: &Filter) -> bool {
+    compare_slice_val(slice, id, defines, v1, v2, neq)
 }
 
 #[inline]
-fn compare_slice_val<F>(slice: &[u8], id: u16, v1: &Filter, v2: &Filter, f: F) -> bool
+fn compare_slice_val<F>(
+    slice: &'static [u8],
+    id: u16,
+    defines: &Vec<Column>,
+    v1: &Filter,
+    v2: &Filter,
+    f: F,
+) -> bool
 where
     F: Fn(Element, Element) -> bool,
 {
     match (v1, v2) {
         (Filter::Original(expr1), Filter::Original(expr2)) => match (expr1, expr2) {
             (ExprEntity::Field(idx), ExprEntity::Val(v_type)) => {
-                compare_with_op(slice, id, *idx, v_type, f)
+                compare_with_op(slice, id, defines, *idx, v_type, f)
             }
             (ExprEntity::FieldWithTab(_, field_idx), ExprEntity::Val(v_type)) => {
-                compare_with_op(slice, id, *field_idx, v_type, f)
+                compare_with_op(slice, id, defines, *field_idx, v_type, f)
             }
             (ExprEntity::Val(v_type), ExprEntity::Field(idx)) => {
-                compare_with_op(slice, id, *idx, v_type, f)
+                compare_with_op(slice, id, defines, *idx, v_type, f)
             }
             (ExprEntity::Val(v_type), ExprEntity::FieldWithTab(_, field_idx)) => {
-                compare_with_op(slice, id, *field_idx, v_type, f)
+                compare_with_op(slice, id, defines, *field_idx, v_type, f)
             }
             _ => false,
         },
@@ -302,13 +339,20 @@ where
 }
 
 #[inline]
-fn compare_with_op<F>(slice: &[u8], id: u16, idx: u16, v_type: &ValType, f: F) -> bool
+fn compare_with_op<F>(
+    slice: &'static [u8],
+    id: u16,
+    defines: &Vec<Column>,
+    idx: u16,
+    v_type: &ValType,
+    f: F,
+) -> bool
 where
     F: Fn(Element, Element) -> bool,
 {
     let opt_expacted = fetch_expacted(v_type);
     if let Some(expacted) = opt_expacted {
-        let val = fetch_val(slice, id, idx);
+        let val = fetch_val(slice, id, defines, idx);
         compare_val(expacted, val, f)
     } else {
         false
@@ -319,7 +363,7 @@ where
 fn fetch_expacted(v_type: &ValType) -> Option<Element> {
     match v_type {
         ValType::Int(val) => Some(Element::Long(*val as u64)),
-        ValType::Float(val) => Some(Element::Double(*val as f64)),
+        ValType::Float(val) => Some(Element::Double(*val)),
         _ => None,
     }
 }
@@ -345,14 +389,14 @@ impl<'a> Action<'a> {
         self.id
     }
 
-    fn fetch(&self, id: u16, slice: &[u8]) -> [u8; 512] {
+    fn fetch(&self, id: u16, defines: &Vec<Column>, slice: &'static [u8]) -> [u8; 512] {
         let mut result = [0u8; 512];
         let target = result.as_mut_slice();
         let mut val;
-        let mut offset = 0 as usize;
+        let mut offset = 0usize;
         let len = self.executors.len();
         for i in 0..len {
-            val = self.executors[i].fetch(id, slice);
+            val = self.executors[i].fetch(id, defines, slice);
             val.copy_to_target(&mut target[offset..offset + 8]);
             offset += 8;
         }
@@ -367,21 +411,27 @@ pub(crate) enum Filter {
     Mixed(Vec<Filter>),
 }
 impl Filter {
-    fn is_match(&self, id: u16, slice: &[u8]) -> bool {
+    fn is_match(&self, id: u16, defines: &Vec<Column>, slice: &'static [u8]) -> bool {
         match self {
             Filter::Empty => true,
             Filter::Original(_) => false,
-            Filter::Mixed(filters) => self.filter_slice(id, filters, slice),
+            Filter::Mixed(filters) => self.filter_slice(id, defines, filters, slice),
         }
     }
 
-    fn filter_slice(&self, id: u16, filters: &[Filter], slice: &[u8]) -> bool {
+    fn filter_slice(
+        &self,
+        id: u16,
+        defines: &Vec<Column>,
+        filters: &[Filter],
+        slice: &'static [u8],
+    ) -> bool {
         let v1 = &filters[0];
         let v2 = &filters[1];
         let op = &filters[2];
         match op {
             Filter::Empty => true,
-            Filter::Original(expr) => self.filter_slice_by_expr(id, expr, v1, v2, slice),
+            Filter::Original(expr) => self.filter_slice_by_expr(id, defines, expr, v1, v2, slice),
             Filter::Mixed(_) => false,
         }
     }
@@ -389,21 +439,22 @@ impl Filter {
     fn filter_slice_by_expr(
         &self,
         id: u16,
+        defines: &Vec<Column>,
         expr: &ExprEntity,
         v1: &Filter,
         v2: &Filter,
-        slice: &[u8],
+        slice: &'static [u8],
     ) -> bool {
         match expr {
             ExprEntity::Op(op_type) => match op_type {
-                OpType::Or => op_or(slice, id, v1, v2),
-                OpType::And => op_and(slice, id, v1, v2),
-                OpType::Eq => op_eq(slice, id, v1, v2),
-                OpType::GtEq => op_gt_eq(slice, id, v1, v2),
-                OpType::Gt => op_gt(slice, id, v1, v2),
-                OpType::LtEq => op_lt_eq(slice, id, v1, v2),
-                OpType::Lt => op_lt(slice, id, v1, v2),
-                OpType::Neq => op_neq(slice, id, v1, v2),
+                OpType::Or => op_or(slice, id, defines, v1, v2),
+                OpType::And => op_and(slice, id, defines, v1, v2),
+                OpType::Eq => op_eq(slice, id, defines, v1, v2),
+                OpType::GtEq => op_gt_eq(slice, id, defines, v1, v2),
+                OpType::Gt => op_gt(slice, id, defines, v1, v2),
+                OpType::LtEq => op_lt_eq(slice, id, defines, v1, v2),
+                OpType::Lt => op_lt(slice, id, defines, v1, v2),
+                OpType::Neq => op_neq(slice, id, defines, v1, v2),
             },
             _ => false,
         }
