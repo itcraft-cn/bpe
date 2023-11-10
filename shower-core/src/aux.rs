@@ -7,25 +7,37 @@ const U16_FULL_VAL: u32 = u16::MAX as u32 + 1;
 #[inline]
 pub(crate) fn fill_u64(slice: &mut [u8], data: u64) {
     slice[0] = data as u8;
-    slice[1] = (data >> 1) as u8;
-    slice[2] = (data >> 2) as u8;
-    slice[3] = (data >> 3) as u8;
-    slice[4] = (data >> 4) as u8;
-    slice[5] = (data >> 5) as u8;
-    slice[6] = (data >> 6) as u8;
-    slice[7] = (data >> 7) as u8;
+    slice[1] = (data >> 1 * 8) as u8;
+    slice[2] = (data >> 2 * 8) as u8;
+    slice[3] = (data >> 3 * 8) as u8;
+    slice[4] = (data >> 4 * 8) as u8;
+    slice[5] = (data >> 5 * 8) as u8;
+    slice[6] = (data >> 6 * 8) as u8;
+    slice[7] = (data >> 7 * 8) as u8;
 }
 
 #[inline]
 pub(crate) fn fetch_u64(slice: &[u8]) -> u64 {
     (slice[0] as u64)
-        | ((slice[1] as u64) << 1)
-        | ((slice[2] as u64) << 2)
-        | ((slice[3] as u64) << 3)
-        | ((slice[4] as u64) << 4)
-        | ((slice[5] as u64) << 5)
-        | ((slice[6] as u64) << 6)
-        | ((slice[7] as u64) << 7)
+        | ((slice[1] as u64) << 1 * 8)
+        | ((slice[2] as u64) << 2 * 8)
+        | ((slice[3] as u64) << 3 * 8)
+        | ((slice[4] as u64) << 4 * 8)
+        | ((slice[5] as u64) << 5 * 8)
+        | ((slice[6] as u64) << 6 * 8)
+        | ((slice[7] as u64) << 7 * 8)
+}
+
+#[inline]
+pub(crate) fn fill_f64(slice: &mut [u8], data: f64) {
+    log::info!("f->u u64: {}", data.to_bits());
+    fill_u64(slice, data.to_bits());
+}
+
+#[inline]
+pub(crate) fn fetch_f64(slice: &[u8]) -> f64 {
+    log::info!("u->f u64: {}", fetch_u64(slice));
+    f64::from_bits(fetch_u64(slice))
 }
 
 #[inline]
@@ -93,5 +105,27 @@ impl SimpleU16Entry {
             SimpleU16Entry::Exist(id) => Some(map.get_mut(id)),
             _ => None,
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{fetch_f64, fetch_u64, fill_f64, fill_u64};
+    use crate::utest_base::test_init;
+
+    #[test]
+    fn test() {
+        test_init();
+        log::info!("max u64: {}", u64::MAX);
+        let mut array = [0u8; 8];
+        let slice = array.as_mut_slice();
+        let u64v = 1234;
+        fill_u64(slice, u64v);
+        let fetched = fetch_u64(slice);
+        log::info!("{},{}", u64v, fetched);
+        let f64v = 1234.5678;
+        fill_f64(slice, f64v);
+        let fetched = fetch_f64(slice);
+        log::info!("{},{}", f64v, fetched);
     }
 }
