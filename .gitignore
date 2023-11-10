@@ -6,6 +6,5 @@ Cargo.lock
 pyvenv.cfg
 *.zip
 
-perf.data
-perf.data.old
-flamegraph.svg
+perf.data*
+flamegraph*
