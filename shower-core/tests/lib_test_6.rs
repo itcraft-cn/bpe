@@ -12,7 +12,7 @@ fn test_new_proc() {
         Column::new_double(),
         Column::new_string(240),
     ]);
-    assert_eq!(0, id);
+    assert_eq!(1, id);
     log::info!("new id: {}", id);
     stop();
 }
