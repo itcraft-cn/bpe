@@ -9,20 +9,16 @@ const U16_FULL_VAL: u32 = u16::MAX as u32 + 1;
 
 #[inline]
 pub(crate) fn fill_u64(slice: &mut [u8], data: u64) {
-    let p_val = ptr::addr_of!(data);
-    let p_u8 = p_val as *const [u8; 8];
-    let array = unsafe { *p_u8 };
-    slice.copy_from_slice(array.as_slice());
+    let p_val = ptr::addr_of!(*slice);
+    let p_u64 = p_val as *mut u64;
+    unsafe { *p_u64 = data };
 }
 
 #[inline]
 pub(crate) fn fetch_u64(slice: &[u8]) -> u64 {
-    let val = 0u64;
-    let p_val = ptr::addr_of!(val);
-    let p_u8 = p_val as *mut [u8; 8];
-    let mut array = unsafe { *p_u8 };
-    array.copy_from_slice(slice);
-    val
+    let p_val = ptr::addr_of!(*slice);
+    let p_u64 = p_val as *const u64;
+    unsafe { *p_u64 }
 }
 
 #[inline]
