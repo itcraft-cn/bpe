@@ -1,42 +1,37 @@
 #![allow(dead_code)]
 
-use std::time::{Duration, SystemTime, UNIX_EPOCH};
+use std::{
+    ptr,
+    time::{Duration, SystemTime, UNIX_EPOCH},
+};
 
 const U16_FULL_VAL: u32 = u16::MAX as u32 + 1;
 
 #[inline]
 pub(crate) fn fill_u64(slice: &mut [u8], data: u64) {
-    slice[0] = data as u8;
-    slice[1] = (data >> 1 * 8) as u8;
-    slice[2] = (data >> 2 * 8) as u8;
-    slice[3] = (data >> 3 * 8) as u8;
-    slice[4] = (data >> 4 * 8) as u8;
-    slice[5] = (data >> 5 * 8) as u8;
-    slice[6] = (data >> 6 * 8) as u8;
-    slice[7] = (data >> 7 * 8) as u8;
+    let p_val = ptr::addr_of!(data);
+    let p_u8 = p_val as *const [u8; 8];
+    let array = unsafe { *p_u8 };
+    slice.copy_from_slice(array.as_slice());
 }
 
 #[inline]
 pub(crate) fn fetch_u64(slice: &[u8]) -> u64 {
-    (slice[0] as u64)
-        | ((slice[1] as u64) << 1 * 8)
-        | ((slice[2] as u64) << 2 * 8)
-        | ((slice[3] as u64) << 3 * 8)
-        | ((slice[4] as u64) << 4 * 8)
-        | ((slice[5] as u64) << 5 * 8)
-        | ((slice[6] as u64) << 6 * 8)
-        | ((slice[7] as u64) << 7 * 8)
+    let val = 0u64;
+    let p_val = ptr::addr_of!(val);
+    let p_u8 = p_val as *mut [u8; 8];
+    let mut array = unsafe { *p_u8 };
+    array.copy_from_slice(slice);
+    val
 }
 
 #[inline]
 pub(crate) fn fill_f64(slice: &mut [u8], data: f64) {
-    log::info!("f->u u64: {}", data.to_bits());
     fill_u64(slice, data.to_bits());
 }
 
 #[inline]
 pub(crate) fn fetch_f64(slice: &[u8]) -> f64 {
-    log::info!("u->f u64: {}", fetch_u64(slice));
     f64::from_bits(fetch_u64(slice))
 }
 
