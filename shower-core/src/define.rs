@@ -71,12 +71,6 @@ pub(crate) fn insert_define(defines: Vec<Column>) -> u16 {
 }
 
 pub(crate) fn get_define<'a>(id: u16) -> Option<&'a Vec<Column>> {
-    unsafe {
-        let map = MAP.as_ref().unwrap();
-        if let Some(defines) = map.get(id) {
-            Some(defines)
-        } else {
-            None
-        }
-    }
+    let map = unsafe { MAP.as_ref().unwrap() };
+    map.get(id)
 }
