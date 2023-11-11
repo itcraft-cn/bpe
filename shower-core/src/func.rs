@@ -21,8 +21,13 @@ impl Executor {
 }
 
 #[inline]
-pub(crate) fn fetch_val(slice: &'static [u8], _id: u16, defines: &Vec<Column>, idx: u16) -> Element {
-    let column = defines.as_slice()[idx as usize];
+pub(crate) fn fetch_val(
+    slice: &'static [u8],
+    _id: u16,
+    defines: &Vec<Column>,
+    idx: u16,
+) -> Element {
+    let column = defines.as_slice()[(idx - 1) as usize];
     match column.data_type() {
         ColumnType::Long => {
             let offset = column.offset();

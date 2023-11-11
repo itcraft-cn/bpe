@@ -52,6 +52,23 @@ impl Column {
         self._idx = idx;
         self.offset = offset;
     }
+
+    fn copy_from_defines(defines: &Vec<Column>) -> Vec<Column> {
+        let mut target = vec![];
+        let mut offset = 0usize;
+        for col_with_id in defines.iter().enumerate() {
+            let mut column = col_with_id.1.clone();
+            column._idx = col_with_id.0;
+            column.offset = offset;
+            offset += match column.data_type {
+                ColumnType::Long => 8,
+                ColumnType::Double => 8,
+                ColumnType::Str(len) => len,
+            };
+            target.push(column);
+        }
+        target
+    }
 }
 
 pub(crate) fn init_define_store() {
@@ -65,7 +82,7 @@ pub(crate) fn insert_define(defines: Vec<Column>) -> u16 {
     unsafe {
         let map = MAP.as_mut().unwrap();
         let key = WALKER.as_ref().unwrap().fetch_add(1, Ordering::SeqCst);
-        map.insert(key, defines);
+        map.insert(key, Column::copy_from_defines(&defines));
         key
     }
 }

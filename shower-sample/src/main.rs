@@ -1,10 +1,10 @@
 use shower::{def_action_with_callback, def_record, new_data, start, stop, Column, U8Bytes};
 use std::{
-    env, thread,
+    env, ptr, thread,
     time::{Duration, SystemTime},
 };
 
-const LOOP_SIZE: usize = 100000;
+const LOOP_SIZE: usize = 10000000;
 
 const SQL: &str = r#"
     SELECT _1.__1, _1.__2, _1.__3, _sub(_add(_1.__4, _1.__4), _1.__5)
@@ -51,14 +51,11 @@ fn gen_new_data() {
 fn gen_u8_bytes(id: u16) -> U8Bytes {
     let mut u8array = [0u8; 512];
     let slice = u8array.as_mut_slice();
-    slice[0] = 1;
-    slice[8] = 2;
-    slice[16] = 3;
-    slice[24] = 4;
-    slice[32] = 5;
-    slice[40] = 6;
-    slice[48] = 7;
-    slice[56] = 8;
+    fill_u64(&mut slice[0..8], 1);
+    fill_u64(&mut slice[8..16], 2);
+    fill_u64(&mut slice[16..24], 3);
+    fill_u64(&mut slice[24..32], 4);
+    fill_u64(&mut slice[32..40], 5);
     U8Bytes::new_from_vec(id, 512, Vec::from(u8array))
 }
 
@@ -77,4 +74,11 @@ where
         duration.as_millis(),
         duration.as_nanos()
     );
+}
+
+#[inline]
+pub(crate) fn fill_u64(slice: &mut [u8], data: u64) {
+    let p_val = ptr::addr_of!(*slice);
+    let p_u64 = p_val as *mut u64;
+    unsafe { *p_u64 = data };
 }
