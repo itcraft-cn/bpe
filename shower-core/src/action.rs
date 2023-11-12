@@ -1,12 +1,13 @@
 use crate::{
     aux::SimpleU16Map,
-    data::U8Bytes,
-    define::{get_define, Column},
+    data::{get_define, Column, U8Bytes},
     element::Element,
     error::ActionError,
     func::{eq, fetch_val, gt, gt_eq, lt, lt_eq, neq, Executor, FnHolder, Func},
-    sql::parse_options,
-    sql::{parse_sql, ExprEntity, OpType, ParsedSql, ValType},
+    sql::{
+        base::{parse_options, ExprEntity, OpType, ParsedSql, ValType},
+        select::parse_select,
+    },
     store::{self, DataIterator},
 };
 use sql_parse::ParseOptions;
@@ -23,7 +24,7 @@ pub(crate) fn init_action_store() {
 }
 
 pub(crate) fn define_action(sql: &str, func_holder: FnHolder) -> bool {
-    let opt_parsed_sql = parse_sql(sql, unsafe { PARSE_OPTIONS.as_ref().unwrap() });
+    let opt_parsed_sql = parse_select(sql, unsafe { PARSE_OPTIONS.as_ref().unwrap() });
     if let Some(parsed_sql) = opt_parsed_sql {
         let rs = gen_action(&parsed_sql);
         if let Ok(action) = rs {

@@ -1,45 +1,21 @@
-use crate::consts::DEFALUT_SELECT_SIZE;
+use crate::{
+    consts::DEFALUT_SELECT_SIZE,
+    sql::base::{parse_sql, ExprEntity, OpType, ParsedSql, ValType},
+};
 use sql_parse::{
-    self, BinaryOperator, Expression, IdentifierPart, ParseOptions, SQLArguments, SQLDialect,
-    Select, SelectExpr, Statement, TableReference,
+    self, BinaryOperator, Expression, IdentifierPart, ParseOptions, Select, SelectExpr, Statement,
+    TableReference,
 };
 use std::ops::Range;
 
-pub(crate) fn parse_options() -> ParseOptions {
-    ParseOptions::new()
-        .dialect(SQLDialect::MariaDB)
-        .arguments(SQLArguments::QuestionMark)
-        .warn_unquoted_identifiers(false)
-}
-
-pub(crate) fn parse_sql(sql: &str, options: &ParseOptions) -> Option<ParsedSql> {
-    let mut issues = Vec::new();
-    let ast_opt = sql_parse::parse_statement(sql, &mut issues, options);
-    if !issues.is_empty() {
-        for issue in &issues {
-            log::warn!(
-                "found issue: [{:?}]{:?} at {:?}",
-                issue.level,
-                issue.message,
-                issue.span
-            );
-            for fragment in &issue.fragments {
-                log::warn!("detail: {:?}, {:?}", fragment.0, fragment.1);
-            }
+pub(crate) fn parse_stream(sql: &str, options: &ParseOptions) -> Option<ParsedSql> {
+    parse_sql(sql, options, |ast| match ast {
+        Statement::Select(stat) => {
+            let mut issues2 = Vec::new();
+            parse_select_statement(stat, &mut issues2)
         }
-        return None;
-    }
-    if let Some(ast) = ast_opt {
-        match ast {
-            Statement::Select(stat) => {
-                let mut issues2 = Vec::new();
-                parse_select_statement(stat, &mut issues2)
-            }
-            _ => None,
-        }
-    } else {
-        None
-    }
+        _ => None,
+    })
 }
 
 fn parse_select_statement(select_stat: Select<'_>, issues: &mut Vec<String>) -> Option<ParsedSql> {
@@ -450,71 +426,5 @@ fn fetch_id_part(id_part: &IdentifierPart<'_>) -> (String, bool) {
             }
         }
         IdentifierPart::Star(_) => (String::from("star is not supported"), false),
-    }
-}
-
-#[derive(Debug, Clone)]
-pub(crate) enum ExprEntity {
-    Op(OpType),
-    Val(ValType),
-    Field(u16),
-    FieldWithTab(u16, u16),
-    Function(String, Vec<ExprEntity>),
-}
-#[derive(Debug, Clone)]
-pub(crate) enum ValType {
-    Bool(bool),
-    Str(String),
-    Int(i64),
-    Float(f64),
-}
-#[derive(Debug, Clone)]
-pub(crate) enum OpType {
-    Or,
-    And,
-    Eq,
-    GtEq,
-    Gt,
-    LtEq,
-    Lt,
-    Neq,
-}
-
-#[derive(Debug, Clone)]
-pub(crate) struct ParsedSql {
-    tables: Vec<u16>,
-    filters: Vec<ExprEntity>,
-    limit: usize,
-    fields: Vec<ExprEntity>,
-}
-impl ParsedSql {
-    pub(crate) fn new(
-        tables: Vec<u16>,
-        filters: Vec<ExprEntity>,
-        limit: usize,
-        fields: Vec<ExprEntity>,
-    ) -> ParsedSql {
-        ParsedSql {
-            tables,
-            filters,
-            limit,
-            fields,
-        }
-    }
-
-    pub(crate) fn tables(&self) -> Vec<u16> {
-        self.tables.clone()
-    }
-
-    pub(crate) fn filters(&self) -> Vec<ExprEntity> {
-        self.filters.clone()
-    }
-
-    pub(crate) fn limit(&self) -> usize {
-        self.limit
-    }
-
-    pub(crate) fn fields(&self) -> Vec<ExprEntity> {
-        self.fields.clone()
     }
 }

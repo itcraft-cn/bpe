@@ -7,7 +7,6 @@ pub(crate) mod cfg;
 pub(crate) mod consts;
 pub(crate) mod core;
 pub(crate) mod data;
-pub(crate) mod define;
 pub(crate) mod element;
 pub(crate) mod error;
 pub(crate) mod ffi;
@@ -17,7 +16,7 @@ pub(crate) mod sql;
 pub(crate) mod store;
 
 #[cfg(test)]
-pub(crate) mod utest_base;
+pub(crate) mod utest;
 
 pub use crate::core::def_action;
 pub use crate::core::def_action_ffi;
@@ -26,6 +25,6 @@ pub use crate::core::def_record;
 pub use crate::core::new_data;
 pub use crate::core::start;
 pub use crate::core::stop;
+pub use crate::data::Column;
 pub use crate::data::U8Bytes;
-pub use crate::define::Column;
 pub use crate::ffi::FfiFunc;

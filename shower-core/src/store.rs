@@ -137,7 +137,7 @@ impl WrappedArray {
 #[cfg(test)]
 mod tests {
     use super::{create_iterator, insert, WrappedArray};
-    use crate::{aux::SimpleU16Map, utest_base::test_init, U8Bytes};
+    use crate::{aux::SimpleU16Map, utest::base::test_init, U8Bytes};
 
     #[test]
     fn test() {

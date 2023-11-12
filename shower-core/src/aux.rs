@@ -102,7 +102,7 @@ impl SimpleU16Entry {
 #[cfg(test)]
 mod tests {
     use super::{fetch_f64, fetch_u64, fill_f64, fill_u64};
-    use crate::utest_base::test_init;
+    use crate::utest::base::test_init;
 
     #[test]
     fn test() {

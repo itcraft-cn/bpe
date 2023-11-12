@@ -1,6 +1,6 @@
 use crate::{
     aux::{fetch_f64, fetch_u64},
-    define::{Column, ColumnType},
+    data::{Column, ColumnType},
     element::Element,
     ffi::FfiFunc,
 };
