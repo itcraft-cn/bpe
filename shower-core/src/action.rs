@@ -214,12 +214,7 @@ fn parse_args_fetchers(
     }
 }
 
-pub(crate) fn invoke(
-    id: u16,
-    action: &'static Action,
-    defines: &Vec<Column>,
-    fn_holder: &FnHolder,
-) {
+fn invoke(id: u16, action: &'static Action, defines: &Vec<Column>, fn_holder: &FnHolder) {
     let vec: Vec<[u8; 512]> = action
         .iterator
         .filter(|slice| action.filter.is_match(id, defines, slice))
