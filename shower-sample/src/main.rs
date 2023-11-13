@@ -4,7 +4,7 @@ use std::{
     time::{Duration, SystemTime},
 };
 
-const LOOP_SIZE: usize = 1000000;
+const LOOP_SIZE: usize = 100000;
 
 const SQL: &str = r#"
     SELECT _1.__1, _1.__2, _1.__3, _sub(_add(_1.__4, _1.__4), _1.__5)
