@@ -9,7 +9,6 @@ use crate::{
     mapper::{call_mapper, define_mapper, init_mapper_store},
     store::insert,
 };
-use log::*;
 use std::sync::Once;
 
 static mut DEBUG: bool = false;
@@ -22,7 +21,7 @@ pub fn start() -> bool {
         opt.replace(actual_start());
     });
     if opt.is_none() {
-        debug!("already started, skipping");
+        log::debug!("already started, skipping");
         true
     } else {
         opt.unwrap_or(false)
@@ -51,20 +50,17 @@ pub fn stop() {
 
 pub fn def_record(columns: Vec<Column>) -> u16 {
     let id = insert_record(columns);
-    let idx = id / 8;
-    let bit = id % 8;
+    let (idx, bit) = fetch_idx_bit(id);
     unsafe { ID_STORE[idx as usize] |= 1 << bit };
     id
 }
 
 fn actual_stop() {
-    info!("mark as deactived");
+    log::info!("mark as deactived");
 }
 
 pub fn new_data(data: &U8Bytes) -> bool {
-    let id = data.id();
-    let idx = id / 8;
-    let bit = id % 8;
+    let (idx, bit) = fetch_idx_bit(data.id());
     if unsafe { ID_STORE[idx as usize] & (1 << bit) == 0 } {
         false
     } else {
@@ -86,10 +82,10 @@ where
     define_mapper(sql, FnHolder::Func(Box::new(func)))
 }
 
-pub fn def_mapper_with_aggregate(sql: &str, id: u16) -> bool {
-    let opt_aggregate = search_aggregate(id);
+pub fn def_mapper_with_aggregate(sql: &str, aggregate_id: u16) -> bool {
+    let opt_aggregate = search_aggregate(aggregate_id);
     if let Some(_aggregate) = opt_aggregate {
-        let f = move |_vec| {};
+        let f = move |_vec| todo!();
         define_mapper(sql, FnHolder::Func(Box::new(f)))
     } else {
         false
@@ -105,4 +101,14 @@ where
     F: Fn(Vec<[u8; 512]>) + Send + 'static,
 {
     define_aggregate(sql, FnHolder::Func(Box::new(func)))
+}
+
+pub fn def_aggregate_ffi(sql: &str, ffi: Box<dyn FfiFunc>) -> bool {
+    define_aggregate(sql, FnHolder::FfiFunc(ffi))
+}
+
+fn fetch_idx_bit(id: u16) -> (u16, u16) {
+    let idx = id / 8;
+    let bit = id % 8;
+    (idx, bit)
 }

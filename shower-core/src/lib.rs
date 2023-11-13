@@ -20,6 +20,7 @@ pub(crate) mod store;
 pub(crate) mod utest;
 
 pub use crate::core::def_aggregate;
+pub use crate::core::def_aggregate_ffi;
 pub use crate::core::def_mapper;
 pub use crate::core::def_mapper_ffi;
 pub use crate::core::def_mapper_with_aggregate;
