@@ -1,8 +1,8 @@
 use crate::{
-    action::{call_action, define_action, init_action_store},
+    mapper::{call_mapper, define_mapper, init_mapper_store},
     cfg::{get_config, load_config},
     consts::KEY_DEV_MODE,
-    data::{init_define_store, insert_define, Column, U8Bytes},
+    data::{init_record_store, insert_record, Column, U8Bytes},
     ffi::FfiFunc,
     func::FnHolder,
     logger::init_logger,
@@ -36,8 +36,8 @@ fn actual_start() -> bool {
 
     unsafe {
         DEBUG = cfg.fetch_cfg_bool(KEY_DEV_MODE);
-        init_action_store();
-        init_define_store();
+        init_mapper_store();
+        init_record_store();
     }
     true
 }
@@ -47,8 +47,8 @@ pub fn stop() {
     STOP.call_once(actual_stop);
 }
 
-pub fn def_record(defines: Vec<Column>) -> u16 {
-    let id = insert_define(defines);
+pub fn def_record(columns: Vec<Column>) -> u16 {
+    let id = insert_record(columns);
     let idx = id / 8;
     let bit = id % 8;
     unsafe { ID_STORE[idx as usize] |= 1 << bit };
@@ -74,20 +74,20 @@ pub fn new_data(data: &U8Bytes) -> bool {
 #[inline]
 fn process_data(data: &U8Bytes) {
     insert(data);
-    call_action(data);
+    call_mapper(data);
 }
 
-pub fn def_action(sql: &str) -> bool {
-    define_action(sql, FnHolder::NotExist)
+pub fn def_mapper(sql: &str) -> bool {
+    define_mapper(sql, FnHolder::NotExist)
 }
 
-pub fn def_action_with_callback<F>(sql: &str, func: F) -> bool
+pub fn def_mapper_with_callback<F>(sql: &str, func: F) -> bool
 where
     F: Fn(Vec<[u8; 512]>) + Send + 'static,
 {
-    define_action(sql, FnHolder::Func(Box::new(func)))
+    define_mapper(sql, FnHolder::Func(Box::new(func)))
 }
 
-pub fn def_action_ffi(sql: &str, ffi: Box<dyn FfiFunc>) -> bool {
-    define_action(sql, FnHolder::FfiFunc(ffi))
+pub fn def_mapper_ffi(sql: &str, ffi: Box<dyn FfiFunc>) -> bool {
+    define_mapper(sql, FnHolder::FfiFunc(ffi))
 }

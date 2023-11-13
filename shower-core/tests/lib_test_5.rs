@@ -1,4 +1,4 @@
-use shower::{def_action, start, stop, new_data, U8Bytes};
+use shower::{def_mapper, start, stop, new_data, U8Bytes};
 use std::env;
 
 const SQL: &str = r#"
@@ -11,7 +11,7 @@ const SQL: &str = r#"
 fn test_new_proc() {
     env::set_var("SHOWER_HOME", "/home/helly/code/rust/shower");
     start();
-    def_action(SQL);
+    def_mapper(SQL);
     let u8data = U8Bytes::new_from_vec(1, 64, vec![0u8; 64]);
     new_data(&u8data);
     stop();

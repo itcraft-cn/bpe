@@ -1,8 +1,8 @@
 use crate::{
     aux::SimpleU16Map,
-    data::{get_define, Column, U8Bytes},
+    data::{get_column, Column, U8Bytes},
     element::Element,
-    error::ActionError,
+    error::MapperError,
     func::{eq, fetch_val, gt, gt_eq, lt, lt_eq, neq, Executor, FnHolder, Func},
     sql::{
         base::{parse_options, ExprEntity, OpType, ParsedSql, ValType},
@@ -13,29 +13,29 @@ use crate::{
 use sql_parse::ParseOptions;
 use std::str::FromStr;
 
-static mut ACTION_MAP: Option<SimpleU16Map<Vec<(Action, FnHolder)>>> = None;
+static mut MAPPER_MAP: Option<SimpleU16Map<Vec<(Mapper, FnHolder)>>> = None;
 static mut PARSE_OPTIONS: Option<ParseOptions> = None;
 
-pub(crate) fn init_action_store() {
+pub(crate) fn init_mapper_store() {
     unsafe {
         PARSE_OPTIONS = Some(parse_options());
-        ACTION_MAP = Some(SimpleU16Map::new());
+        MAPPER_MAP = Some(SimpleU16Map::new());
     }
 }
 
-pub(crate) fn define_action(sql: &str, func_holder: FnHolder) -> bool {
+pub(crate) fn define_mapper(sql: &str, func_holder: FnHolder) -> bool {
     let opt_parsed_sql = parse_select(sql, unsafe { PARSE_OPTIONS.as_ref().unwrap() });
     if let Some(parsed_sql) = opt_parsed_sql {
-        let rs = gen_action(&parsed_sql);
-        if let Ok(action) = rs {
-            let id = action.id();
-            let map = unsafe { ACTION_MAP.as_mut().unwrap() };
+        let rs = gen_mapper(&parsed_sql);
+        if let Ok(mapper) = rs {
+            let id = mapper.id();
+            let map = unsafe { MAPPER_MAP.as_mut().unwrap() };
             map.entry(id).or_insert_with(map, Vec::new);
-            map.get_mut(id).push((action, func_holder));
+            map.get_mut(id).push((mapper, func_holder));
             true
         } else {
             log::warn!(
-                "fail to create action from sql[{}], hit unexpected error: {:?}",
+                "fail to create mapper from sql[{}], hit unexpected error: {:?}",
                 sql,
                 rs.err().unwrap()
             );
@@ -48,29 +48,29 @@ pub(crate) fn define_action(sql: &str, func_holder: FnHolder) -> bool {
 }
 
 #[inline]
-pub(crate) fn call_action(data: &U8Bytes) {
+pub(crate) fn call_mapper(data: &U8Bytes) {
     let id = data.id();
-    let opt_actions = search_aciton(id);
-    let opt_defines = get_define(id);
-    if opt_actions.is_none() || opt_defines.is_none() {
+    let opt_mappers = search_mapper(id);
+    let opt_columns = get_column(id);
+    if opt_mappers.is_none() || opt_columns.is_none() {
         return;
     }
-    let actions = opt_actions.unwrap();
-    let defines = opt_defines.unwrap();
-    for (action, fn_holder) in actions {
-        invoke(id, action, defines, fn_holder);
+    let mappers = opt_mappers.unwrap();
+    let columns = opt_columns.unwrap();
+    for (mapper, fn_holder) in mappers {
+        invoke(id, mapper, columns, fn_holder);
     }
 }
 
-fn search_aciton<'a>(id: u16) -> Option<&'a Vec<(Action<'a>, FnHolder)>> {
-    let map = unsafe { ACTION_MAP.as_ref().unwrap() };
+fn search_mapper<'a>(id: u16) -> Option<&'a Vec<(Mapper<'a>, FnHolder)>> {
+    let map = unsafe { MAPPER_MAP.as_ref().unwrap() };
     map.get(id)
 }
 
-fn gen_action<'a>(parsed_sql: &ParsedSql) -> Result<Action<'a>, ActionError> {
+fn gen_mapper<'a>(parsed_sql: &ParsedSql) -> Result<Mapper<'a>, MapperError> {
     let tab_id_array = &parsed_sql.tables();
     if tab_id_array.len() != 1 {
-        return Err(ActionError::new(format!(
+        return Err(MapperError::new(format!(
             "only support one table, but {} tables",
             tab_id_array.len()
         )));
@@ -79,19 +79,19 @@ fn gen_action<'a>(parsed_sql: &ParsedSql) -> Result<Action<'a>, ActionError> {
     let iterator = create_iterator(id);
     let rs_filter = create_filter(&parsed_sql.filters());
     if rs_filter.is_err() {
-        return Err(ActionError::new(format!(
+        return Err(MapperError::new(format!(
             "failed to parse filter: {}",
             rs_filter.err().unwrap()
         )));
     }
     let rs_executors = create_executor(tab_id_array, &parsed_sql.fields());
     if rs_executors.is_err() {
-        return Err(ActionError::new(format!(
+        return Err(MapperError::new(format!(
             "failed to parse executors: {}",
             rs_executors.err().unwrap()
         )));
     }
-    Ok(Action {
+    Ok(Mapper {
         id,
         iterator,
         filter: rs_filter.unwrap(),
@@ -104,7 +104,7 @@ fn create_iterator<'a>(id: u16) -> DataIterator<'a> {
     store::create_iterator(id)
 }
 
-fn create_filter(entities: &[ExprEntity]) -> Result<Filter, ActionError> {
+fn create_filter(entities: &[ExprEntity]) -> Result<Filter, MapperError> {
     if entities.is_empty() {
         return Ok(Filter::Empty);
     }
@@ -135,7 +135,7 @@ fn create_filter(entities: &[ExprEntity]) -> Result<Filter, ActionError> {
     if tmp.len() == 1 {
         Ok(tmp.first().unwrap().clone())
     } else {
-        Err(ActionError::new(
+        Err(MapperError::new(
             "the last element is not found.".to_owned(),
         ))
     }
@@ -144,7 +144,7 @@ fn create_filter(entities: &[ExprEntity]) -> Result<Filter, ActionError> {
 fn create_executor(
     tab_id_array: &Vec<u16>,
     entities: &Vec<ExprEntity>,
-) -> Result<Vec<Executor>, ActionError> {
+) -> Result<Vec<Executor>, MapperError> {
     let mut executors = vec![];
     for entity in entities {
         let rs = conv_as_executor(entity, tab_id_array);
@@ -157,7 +157,7 @@ fn create_executor(
     Ok(executors)
 }
 
-fn conv_as_executor(entity: &ExprEntity, tab_id_array: &Vec<u16>) -> Result<Executor, ActionError> {
+fn conv_as_executor(entity: &ExprEntity, tab_id_array: &Vec<u16>) -> Result<Executor, MapperError> {
     let fetcher = match entity {
         ExprEntity::Field(field_id) => Executor::Fetch(*tab_id_array.first().unwrap(), *field_id),
         ExprEntity::FieldWithTab(tab_id, field_id) => Executor::Fetch(*tab_id, *field_id),
@@ -174,14 +174,14 @@ fn conv_as_executor(entity: &ExprEntity, tab_id_array: &Vec<u16>) -> Result<Exec
                         return Err(rs.err().unwrap());
                     }
                 } else {
-                    return Err(ActionError::new(format!("unknown func: {:?}", func_name)));
+                    return Err(MapperError::new(format!("unknown func: {:?}", func_name)));
                 }
             } else {
-                return Err(ActionError::new(format!("unknown func: {:?}", func_name)));
+                return Err(MapperError::new(format!("unknown func: {:?}", func_name)));
             }
         }
         _ => {
-            return Err(ActionError::new(format!(
+            return Err(MapperError::new(format!(
                 "cannot hit this case: {:?}",
                 entity
             )));
@@ -193,7 +193,7 @@ fn conv_as_executor(entity: &ExprEntity, tab_id_array: &Vec<u16>) -> Result<Exec
 fn parse_args_fetchers(
     args: &Vec<ExprEntity>,
     tab_id_array: &Vec<u16>,
-) -> Result<Vec<Executor>, ActionError> {
+) -> Result<Vec<Executor>, MapperError> {
     let mut args_fetchers = vec![];
     let mut hit_error = false;
     args.iter()
@@ -206,7 +206,7 @@ fn parse_args_fetchers(
             }
         });
     if hit_error {
-        Err(ActionError::new(format!(
+        Err(MapperError::new(format!(
             "failed to parse args: {:?}",
             args
         )))
@@ -215,12 +215,12 @@ fn parse_args_fetchers(
     }
 }
 
-fn invoke(id: u16, action: &'static Action, defines: &Vec<Column>, fn_holder: &FnHolder) {
-    let vec: Vec<[u8; 512]> = action
+fn invoke(id: u16, mapper: &'static Mapper, columns: &Vec<Column>, fn_holder: &FnHolder) {
+    let vec: Vec<[u8; 512]> = mapper
         .iterator
-        .filter(|slice| action.filter.is_match(id, defines, slice))
-        .take(action.limit)
-        .map(|slice| action.fetch(id, defines, slice))
+        .filter(|slice| mapper.filter.is_match(id, columns, slice))
+        .take(mapper.limit)
+        .map(|slice| mapper.fetch(id, columns, slice))
         .collect();
     match fn_holder {
         FnHolder::NotExist => {}
@@ -230,18 +230,18 @@ fn invoke(id: u16, action: &'static Action, defines: &Vec<Column>, fn_holder: &F
 }
 
 #[inline]
-fn op_or(slice: &'static [u8], id: u16, defines: &Vec<Column>, v1: &Filter, v2: &Filter) -> bool {
-    op_logical(slice, id, defines, v1, v2, or)
+fn op_or(slice: &'static [u8], id: u16, columns: &Vec<Column>, v1: &Filter, v2: &Filter) -> bool {
+    op_logical(slice, id, columns, v1, v2, or)
 }
 #[inline]
-fn op_and(slice: &'static [u8], id: u16, defines: &Vec<Column>, v1: &Filter, v2: &Filter) -> bool {
-    op_logical(slice, id, defines, v1, v2, and)
+fn op_and(slice: &'static [u8], id: u16, columns: &Vec<Column>, v1: &Filter, v2: &Filter) -> bool {
+    op_logical(slice, id, columns, v1, v2, and)
 }
 #[inline]
 fn op_logical<F>(
     slice: &'static [u8],
     id: u16,
-    defines: &Vec<Column>,
+    columns: &Vec<Column>,
     v1: &Filter,
     v2: &Filter,
     f: F,
@@ -250,63 +250,63 @@ where
     F: Fn(&'static [u8], u16, &Vec<Column>, &Filter, &Filter) -> bool,
 {
     match (v1, v2) {
-        (Filter::Mixed(_), Filter::Mixed(_)) => f(slice, id, defines, v1, v2),
+        (Filter::Mixed(_), Filter::Mixed(_)) => f(slice, id, columns, v1, v2),
         _ => false,
     }
 }
 
 #[inline]
-fn or(slice: &'static [u8], id: u16, defines: &Vec<Column>, v1: &Filter, v2: &Filter) -> bool {
-    v1.is_match(id, defines, slice) || v2.is_match(id, defines, slice)
+fn or(slice: &'static [u8], id: u16, columns: &Vec<Column>, v1: &Filter, v2: &Filter) -> bool {
+    v1.is_match(id, columns, slice) || v2.is_match(id, columns, slice)
 }
 
 #[inline]
-fn and(slice: &'static [u8], id: u16, defines: &Vec<Column>, v1: &Filter, v2: &Filter) -> bool {
-    v1.is_match(id, defines, slice) && v2.is_match(id, defines, slice)
+fn and(slice: &'static [u8], id: u16, columns: &Vec<Column>, v1: &Filter, v2: &Filter) -> bool {
+    v1.is_match(id, columns, slice) && v2.is_match(id, columns, slice)
 }
 
 #[inline]
-fn op_eq(slice: &'static [u8], id: u16, defines: &Vec<Column>, v1: &Filter, v2: &Filter) -> bool {
-    compare_slice_val(slice, id, defines, v1, v2, eq)
+fn op_eq(slice: &'static [u8], id: u16, columns: &Vec<Column>, v1: &Filter, v2: &Filter) -> bool {
+    compare_slice_val(slice, id, columns, v1, v2, eq)
 }
 #[inline]
 fn op_gt_eq(
     slice: &'static [u8],
     id: u16,
-    defines: &Vec<Column>,
+    columns: &Vec<Column>,
     v1: &Filter,
     v2: &Filter,
 ) -> bool {
-    compare_slice_val(slice, id, defines, v1, v2, gt_eq)
+    compare_slice_val(slice, id, columns, v1, v2, gt_eq)
 }
 #[inline]
-fn op_gt(slice: &'static [u8], id: u16, defines: &Vec<Column>, v1: &Filter, v2: &Filter) -> bool {
-    compare_slice_val(slice, id, defines, v1, v2, gt)
+fn op_gt(slice: &'static [u8], id: u16, columns: &Vec<Column>, v1: &Filter, v2: &Filter) -> bool {
+    compare_slice_val(slice, id, columns, v1, v2, gt)
 }
 #[inline]
 fn op_lt_eq(
     slice: &'static [u8],
     id: u16,
-    defines: &Vec<Column>,
+    columns: &Vec<Column>,
     v1: &Filter,
     v2: &Filter,
 ) -> bool {
-    compare_slice_val(slice, id, defines, v1, v2, lt_eq)
+    compare_slice_val(slice, id, columns, v1, v2, lt_eq)
 }
 #[inline]
-fn op_lt(slice: &'static [u8], id: u16, defines: &Vec<Column>, v1: &Filter, v2: &Filter) -> bool {
-    compare_slice_val(slice, id, defines, v1, v2, lt)
+fn op_lt(slice: &'static [u8], id: u16, columns: &Vec<Column>, v1: &Filter, v2: &Filter) -> bool {
+    compare_slice_val(slice, id, columns, v1, v2, lt)
 }
 #[inline]
-fn op_neq(slice: &'static [u8], id: u16, defines: &Vec<Column>, v1: &Filter, v2: &Filter) -> bool {
-    compare_slice_val(slice, id, defines, v1, v2, neq)
+fn op_neq(slice: &'static [u8], id: u16, columns: &Vec<Column>, v1: &Filter, v2: &Filter) -> bool {
+    compare_slice_val(slice, id, columns, v1, v2, neq)
 }
 
 #[inline]
 fn compare_slice_val<F>(
     slice: &'static [u8],
     id: u16,
-    defines: &Vec<Column>,
+    columns: &Vec<Column>,
     v1: &Filter,
     v2: &Filter,
     f: F,
@@ -317,16 +317,16 @@ where
     match (v1, v2) {
         (Filter::Original(expr1), Filter::Original(expr2)) => match (expr1, expr2) {
             (ExprEntity::Field(idx), ExprEntity::Val(v_type)) => {
-                compare_with_op(slice, id, defines, *idx, v_type, f)
+                compare_with_op(slice, id, columns, *idx, v_type, f)
             }
             (ExprEntity::FieldWithTab(_, field_idx), ExprEntity::Val(v_type)) => {
-                compare_with_op(slice, id, defines, *field_idx, v_type, f)
+                compare_with_op(slice, id, columns, *field_idx, v_type, f)
             }
             (ExprEntity::Val(v_type), ExprEntity::Field(idx)) => {
-                compare_with_op(slice, id, defines, *idx, v_type, f)
+                compare_with_op(slice, id, columns, *idx, v_type, f)
             }
             (ExprEntity::Val(v_type), ExprEntity::FieldWithTab(_, field_idx)) => {
-                compare_with_op(slice, id, defines, *field_idx, v_type, f)
+                compare_with_op(slice, id, columns, *field_idx, v_type, f)
             }
             _ => false,
         },
@@ -338,7 +338,7 @@ where
 fn compare_with_op<F>(
     slice: &'static [u8],
     id: u16,
-    defines: &Vec<Column>,
+    columns: &Vec<Column>,
     idx: u16,
     v_type: &ValType,
     f: F,
@@ -348,7 +348,7 @@ where
 {
     let opt_expacted = fetch_expacted(v_type);
     if let Some(expacted) = opt_expacted {
-        let val = fetch_val(slice, id, defines, idx);
+        let val = fetch_val(slice, id, columns, idx);
         compare_val(expacted, val, f)
     } else {
         false
@@ -373,26 +373,26 @@ where
 }
 
 #[derive(Debug)]
-pub(crate) struct Action<'a> {
+pub(crate) struct Mapper<'a> {
     id: u16,
     iterator: DataIterator<'a>,
     filter: Filter,
     limit: usize,
     executors: Vec<Executor>,
 }
-impl<'a> Action<'a> {
+impl<'a> Mapper<'a> {
     pub(crate) fn id(&self) -> u16 {
         self.id
     }
 
-    fn fetch(&self, id: u16, defines: &Vec<Column>, slice: &'static [u8]) -> [u8; 512] {
+    fn fetch(&self, id: u16, columns: &Vec<Column>, slice: &'static [u8]) -> [u8; 512] {
         let mut result = [0u8; 512];
         let target = result.as_mut_slice();
         let mut val;
         let mut offset = 0usize;
         let len = self.executors.len();
         for i in 0..len {
-            val = self.executors[i].fetch(id, defines, slice);
+            val = self.executors[i].fetch(id, columns, slice);
             val.copy_to_target(&mut target[offset..offset + 8]);
             offset += 8;
         }
@@ -407,18 +407,18 @@ pub(crate) enum Filter {
     Mixed(Vec<Filter>),
 }
 impl Filter {
-    fn is_match(&self, id: u16, defines: &Vec<Column>, slice: &'static [u8]) -> bool {
+    fn is_match(&self, id: u16, columns: &Vec<Column>, slice: &'static [u8]) -> bool {
         match self {
             Filter::Empty => true,
             Filter::Original(_) => false,
-            Filter::Mixed(filters) => self.filter_slice(id, defines, filters, slice),
+            Filter::Mixed(filters) => self.filter_slice(id, columns, filters, slice),
         }
     }
 
     fn filter_slice(
         &self,
         id: u16,
-        defines: &Vec<Column>,
+        columns: &Vec<Column>,
         filters: &[Filter],
         slice: &'static [u8],
     ) -> bool {
@@ -427,7 +427,7 @@ impl Filter {
         let op = &filters[2];
         match op {
             Filter::Empty => true,
-            Filter::Original(expr) => self.filter_slice_by_expr(id, defines, expr, v1, v2, slice),
+            Filter::Original(expr) => self.filter_slice_by_expr(id, columns, expr, v1, v2, slice),
             Filter::Mixed(_) => false,
         }
     }
@@ -435,7 +435,7 @@ impl Filter {
     fn filter_slice_by_expr(
         &self,
         id: u16,
-        defines: &Vec<Column>,
+        columns: &Vec<Column>,
         expr: &ExprEntity,
         v1: &Filter,
         v2: &Filter,
@@ -443,14 +443,14 @@ impl Filter {
     ) -> bool {
         match expr {
             ExprEntity::Op(op_type) => match op_type {
-                OpType::Or => op_or(slice, id, defines, v1, v2),
-                OpType::And => op_and(slice, id, defines, v1, v2),
-                OpType::Eq => op_eq(slice, id, defines, v1, v2),
-                OpType::GtEq => op_gt_eq(slice, id, defines, v1, v2),
-                OpType::Gt => op_gt(slice, id, defines, v1, v2),
-                OpType::LtEq => op_lt_eq(slice, id, defines, v1, v2),
-                OpType::Lt => op_lt(slice, id, defines, v1, v2),
-                OpType::Neq => op_neq(slice, id, defines, v1, v2),
+                OpType::Or => op_or(slice, id, columns, v1, v2),
+                OpType::And => op_and(slice, id, columns, v1, v2),
+                OpType::Eq => op_eq(slice, id, columns, v1, v2),
+                OpType::GtEq => op_gt_eq(slice, id, columns, v1, v2),
+                OpType::Gt => op_gt(slice, id, columns, v1, v2),
+                OpType::LtEq => op_lt_eq(slice, id, columns, v1, v2),
+                OpType::Lt => op_lt(slice, id, columns, v1, v2),
+                OpType::Neq => op_neq(slice, id, columns, v1, v2),
             },
             _ => false,
         }

@@ -110,10 +110,10 @@ impl Column {
         self.offset = offset;
     }
 
-    fn copy_from_defines(defines: &Vec<Column>) -> Vec<Column> {
+    fn copy_from_columns(columns: &Vec<Column>) -> Vec<Column> {
         let mut target = vec![];
         let mut offset = 0usize;
-        for col_with_id in defines.iter().enumerate() {
+        for col_with_id in columns.iter().enumerate() {
             let mut column = col_with_id.1.clone();
             column._idx = col_with_id.0;
             column.offset = offset;
@@ -128,23 +128,23 @@ impl Column {
     }
 }
 
-pub(crate) fn init_define_store() {
+pub(crate) fn init_record_store() {
     unsafe {
         WALKER = Some(AtomicU16::new(1));
         MAP = Some(SimpleU16Map::new());
     }
 }
 
-pub(crate) fn insert_define(defines: Vec<Column>) -> u16 {
+pub(crate) fn insert_record(columns: Vec<Column>) -> u16 {
     unsafe {
         let map = MAP.as_mut().unwrap();
         let key = WALKER.as_ref().unwrap().fetch_add(1, Ordering::SeqCst);
-        map.insert(key, Column::copy_from_defines(&defines));
+        map.insert(key, Column::copy_from_columns(&columns));
         key
     }
 }
 
-pub(crate) fn get_define<'a>(id: u16) -> Option<&'a Vec<Column>> {
+pub(crate) fn get_column<'a>(id: u16) -> Option<&'a Vec<Column>> {
     let map = unsafe { MAP.as_ref().unwrap() };
     map.get(id)
 }

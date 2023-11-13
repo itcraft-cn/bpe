@@ -1,4 +1,4 @@
-use shower::{def_action, start, stop};
+use shower::{def_mapper, start, stop};
 use std::env;
 
 const SQL: &str = r#"
@@ -12,6 +12,6 @@ const SQL: &str = r#"
 fn test_sql_parse() {
     env::set_var("SHOWER_HOME", "/home/helly/code/rust/shower");
     start();
-    def_action(SQL);
+    def_mapper(SQL);
     stop();
 }

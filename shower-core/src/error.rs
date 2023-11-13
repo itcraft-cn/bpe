@@ -4,20 +4,20 @@ use std::{
 };
 
 #[derive(Debug)]
-pub(crate) struct ActionError {
+pub(crate) struct MapperError {
     msg: String,
 }
-impl ActionError {
+impl MapperError {
     pub(crate) fn new(msg: String) -> Self {
         Self { msg: msg.clone() }
     }
 }
-impl Display for ActionError {
+impl Display for MapperError {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         write!(f, "error[{}] occurred when generating action", self.msg)
     }
 }
-impl Error for ActionError {
+impl Error for MapperError {
     fn source(&self) -> Option<&(dyn Error + 'static)> {
         None
     }

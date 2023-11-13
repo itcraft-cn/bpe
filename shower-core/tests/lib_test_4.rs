@@ -1,4 +1,4 @@
-use shower::{def_action, start, stop};
+use shower::{def_mapper, start, stop};
 use std::env;
 
 #[test]
@@ -14,7 +14,7 @@ fn test_new_proc() {
     env::set_var("SHOWER_HOME", "/home/helly/code/rust/shower");
     start();
     for sql in test_sql_vec {
-        def_action(sql);
+        def_mapper(sql);
     }
     stop();
 }

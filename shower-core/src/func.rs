@@ -12,10 +12,10 @@ pub(crate) enum Executor {
     Compute(Func, Vec<Executor>),
 }
 impl Executor {
-    pub(crate) fn fetch(&self, id: u16, defines: &Vec<Column>, slice: &'static [u8]) -> Element {
+    pub(crate) fn fetch(&self, id: u16, columns: &Vec<Column>, slice: &'static [u8]) -> Element {
         match self {
-            Executor::Fetch(_, field_id) => fetch_val(slice, id, defines, *field_id),
-            Executor::Compute(f, executors) => compute_func(slice, id, defines, f, executors),
+            Executor::Fetch(_, field_id) => fetch_val(slice, id, columns, *field_id),
+            Executor::Compute(f, executors) => compute_func(slice, id, columns, f, executors),
         }
     }
 }
@@ -24,10 +24,10 @@ impl Executor {
 pub(crate) fn fetch_val(
     slice: &'static [u8],
     _id: u16,
-    defines: &Vec<Column>,
+    columns: &Vec<Column>,
     idx: u16,
 ) -> Element {
-    let column = defines.as_slice()[(idx - 1) as usize];
+    let column = columns.as_slice()[(idx - 1) as usize];
     match column.data_type() {
         ColumnType::Long => {
             let offset = column.offset();
@@ -72,20 +72,20 @@ pub(crate) fn neq(expacted: Element, val: Element) -> bool {
 pub(crate) fn compute_func(
     slice: &'static [u8],
     id: u16,
-    defines: &Vec<Column>,
+    columns: &Vec<Column>,
     f: &Func,
     executors: &[Executor],
 ) -> Element {
     match f {
-        Func::Add => add(slice, id, defines, executors),
-        Func::Sub => sub(slice, id, defines, executors),
-        Func::Mul => mul(slice, id, defines, executors),
-        Func::Div => div(slice, id, defines, executors),
-        Func::Mod => mod_(slice, id, defines, executors),
+        Func::Add => add(slice, id, columns, executors),
+        Func::Sub => sub(slice, id, columns, executors),
+        Func::Mul => mul(slice, id, columns, executors),
+        Func::Div => div(slice, id, columns, executors),
+        Func::Mod => mod_(slice, id, columns, executors),
     }
 }
 
-fn add(slice: &'static [u8], id: u16, defines: &Vec<Column>, executors: &[Executor]) -> Element {
+fn add(slice: &'static [u8], id: u16, columns: &Vec<Column>, executors: &[Executor]) -> Element {
     if executors.len() != 2 {
         log::warn!(
             "Invalid parameters for add function, should be 2, but was {}",
@@ -93,12 +93,12 @@ fn add(slice: &'static [u8], id: u16, defines: &Vec<Column>, executors: &[Execut
         );
         return Element::Long(0);
     }
-    let v1 = executors[0].fetch(id, defines, slice);
-    let v2 = executors[1].fetch(id, defines, slice);
+    let v1 = executors[0].fetch(id, columns, slice);
+    let v2 = executors[1].fetch(id, columns, slice);
     v1.add(v2)
 }
 
-fn sub(slice: &'static [u8], id: u16, defines: &Vec<Column>, executors: &[Executor]) -> Element {
+fn sub(slice: &'static [u8], id: u16, columns: &Vec<Column>, executors: &[Executor]) -> Element {
     if executors.len() != 2 {
         log::warn!(
             "Invalid parameters for add function, should be 2, but was {}",
@@ -106,12 +106,12 @@ fn sub(slice: &'static [u8], id: u16, defines: &Vec<Column>, executors: &[Execut
         );
         return Element::Long(0);
     }
-    let v1 = executors[0].fetch(id, defines, slice);
-    let v2 = executors[1].fetch(id, defines, slice);
+    let v1 = executors[0].fetch(id, columns, slice);
+    let v2 = executors[1].fetch(id, columns, slice);
     v1.sub(v2)
 }
 
-fn mul(slice: &'static [u8], id: u16, defines: &Vec<Column>, executors: &[Executor]) -> Element {
+fn mul(slice: &'static [u8], id: u16, columns: &Vec<Column>, executors: &[Executor]) -> Element {
     if executors.len() != 2 {
         log::warn!(
             "Invalid parameters for add function, should be 2, but was {}",
@@ -119,12 +119,12 @@ fn mul(slice: &'static [u8], id: u16, defines: &Vec<Column>, executors: &[Execut
         );
         return Element::Long(0);
     }
-    let v1 = executors[0].fetch(id, defines, slice);
-    let v2 = executors[1].fetch(id, defines, slice);
+    let v1 = executors[0].fetch(id, columns, slice);
+    let v2 = executors[1].fetch(id, columns, slice);
     v1.mul(v2)
 }
 
-fn div(slice: &'static [u8], id: u16, defines: &Vec<Column>, executors: &[Executor]) -> Element {
+fn div(slice: &'static [u8], id: u16, columns: &Vec<Column>, executors: &[Executor]) -> Element {
     if executors.len() != 2 {
         log::warn!(
             "Invalid parameters for add function, should be 2, but was {}",
@@ -132,12 +132,12 @@ fn div(slice: &'static [u8], id: u16, defines: &Vec<Column>, executors: &[Execut
         );
         return Element::Long(0);
     }
-    let v1 = executors[0].fetch(id, defines, slice);
-    let v2 = executors[1].fetch(id, defines, slice);
+    let v1 = executors[0].fetch(id, columns, slice);
+    let v2 = executors[1].fetch(id, columns, slice);
     v1.div(v2)
 }
 
-fn mod_(slice: &'static [u8], id: u16, defines: &Vec<Column>, executors: &[Executor]) -> Element {
+fn mod_(slice: &'static [u8], id: u16, columns: &Vec<Column>, executors: &[Executor]) -> Element {
     if executors.len() != 2 {
         log::warn!(
             "Invalid parameters for add function, should be 2, but was {}",
@@ -145,8 +145,8 @@ fn mod_(slice: &'static [u8], id: u16, defines: &Vec<Column>, executors: &[Execu
         );
         return Element::Long(0);
     }
-    let v1 = executors[0].fetch(id, defines, slice);
-    let v2 = executors[1].fetch(id, defines, slice);
+    let v1 = executors[0].fetch(id, columns, slice);
+    let v2 = executors[1].fetch(id, columns, slice);
     v1.mod_(v2)
 }
 
