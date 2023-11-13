@@ -2,7 +2,7 @@ use log::*;
 use shower::{def_mapper, new_data, start, stop, U8Bytes};
 use std::{env, thread};
 
-const LOOP_SIZE: usize = 10000000;
+const LOOP_SIZE: usize = 10;
 
 const SQL: &str = r#"
     SELECT _1.__1, _1.__2, _1.__3, _sub(_add(_1.__4, _1.__4), _1.__5)

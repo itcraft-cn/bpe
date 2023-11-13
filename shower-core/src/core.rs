@@ -60,8 +60,10 @@ fn actual_stop() {
 }
 
 pub fn new_data(data: &U8Bytes) -> bool {
-    let (idx, bit) = fetch_idx_bit(data.id());
+    let id = data.id();
+    let (idx, bit) = fetch_idx_bit(id);
     if unsafe { ID_STORE[idx as usize] & (1 << bit) == 0 } {
+        log::warn!("id [{}] is not defined", id);
         false
     } else {
         process_data(data);
@@ -84,10 +86,8 @@ where
 
 pub fn def_mapper_with_aggregate(sql: &str, aggregate_id: u16) -> bool {
     let opt_aggregate = search_aggregate(aggregate_id);
-    if let Some(_aggregate) = opt_aggregate {
-        let f = move |_vec| {
-            call_aggregate(aggregate_id, _aggregate, _vec);
-        };
+    if let Some(_wrapped) = opt_aggregate {
+        let f = move |_data| call_aggregate(aggregate_id, _wrapped, _data);
         define_mapper(sql, FnHolder::Lambda(Box::new(f)))
     } else {
         false
