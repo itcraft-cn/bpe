@@ -1,5 +1,5 @@
 use crate::{
-    aux::SimpleU16Map,
+    aux::{SimpleU16Entry, SimpleU16Map},
     data::{get_column, Column, U8Bytes},
     element::Element,
     error::MapperError,
@@ -13,7 +13,7 @@ use crate::{
 use sql_parse::ParseOptions;
 use std::str::FromStr;
 
-static mut MAPPER_MAP: Option<SimpleU16Map<Vec<(Mapper, FnHolder)>>> = None;
+static mut MAPPER_MAP: Option<SimpleU16Map<WrappedMapper>> = None;
 static mut PARSE_OPTIONS: Option<ParseOptions> = None;
 
 pub(crate) fn init_mapper_store() {
@@ -30,9 +30,17 @@ pub(crate) fn define_mapper(sql: &str, func_holder: FnHolder) -> bool {
         if let Ok(mapper) = rs {
             let id = mapper.id();
             let map = unsafe { MAPPER_MAP.as_mut().unwrap() };
-            map.entry(id).or_insert_with(map, Vec::new);
-            map.get_mut(id).push((mapper, func_holder));
-            true
+            let entry = map.entry(id);
+            match entry {
+                SimpleU16Entry::Exist(_) => {
+                    log::warn!("id {} already exists, sql[{}] is skipped", id, sql);
+                    false
+                }
+                SimpleU16Entry::NotExist(_) => {
+                    map.insert(id, WrappedMapper::new(mapper, func_holder));
+                    true
+                }
+            }
         } else {
             log::warn!(
                 "fail to create mapper from sql[{}], hit unexpected error: {:?}",
@@ -55,14 +63,12 @@ pub(crate) fn call_mapper(data: &U8Bytes) {
     if opt_mappers.is_none() || opt_columns.is_none() {
         return;
     }
-    let mappers = opt_mappers.unwrap();
+    let wrapped = opt_mappers.unwrap();
     let columns = opt_columns.unwrap();
-    for (mapper, fn_holder) in mappers {
-        invoke(id, mapper, columns, fn_holder);
-    }
+    invoke(id, &wrapped.mapper, columns, &wrapped.fn_holder);
 }
 
-fn search_mapper<'a>(id: u16) -> Option<&'a Vec<(Mapper<'a>, FnHolder)>> {
+fn search_mapper<'a>(id: u16) -> Option<&'a WrappedMapper<'a>> {
     let map = unsafe { MAPPER_MAP.as_ref().unwrap() };
     map.get(id)
 }
@@ -225,6 +231,7 @@ fn invoke(id: u16, mapper: &'static Mapper, columns: &Vec<Column>, fn_holder: &F
     match fn_holder {
         FnHolder::Func(f) => f(vec),
         FnHolder::FfiFunc(ffi) => ffi.callback(vec),
+        FnHolder::Lambda(f) => f(vec),
     }
 }
 
@@ -396,6 +403,16 @@ impl<'a> Mapper<'a> {
             offset += 8;
         }
         result
+    }
+}
+
+pub(crate) struct WrappedMapper<'a> {
+    mapper: Mapper<'a>,
+    fn_holder: FnHolder,
+}
+impl<'a> WrappedMapper<'a> {
+    fn new(mapper: Mapper<'a>, fn_holder: FnHolder) -> Self {
+        WrappedMapper { mapper, fn_holder }
     }
 }
 

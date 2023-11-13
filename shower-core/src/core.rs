@@ -1,5 +1,5 @@
 use crate::{
-    aggregate::{define_aggregate, init_aggregate_store, search_aggregate},
+    aggregate::{call_aggregate, define_aggregate, init_aggregate_store, search_aggregate},
     cfg::{get_config, load_config},
     consts::KEY_DEV_MODE,
     data::{init_record_store, insert_record, Column, U8Bytes},
@@ -85,8 +85,10 @@ where
 pub fn def_mapper_with_aggregate(sql: &str, aggregate_id: u16) -> bool {
     let opt_aggregate = search_aggregate(aggregate_id);
     if let Some(_aggregate) = opt_aggregate {
-        let f = move |_vec| todo!();
-        define_mapper(sql, FnHolder::Func(Box::new(f)))
+        let f = move |_vec| {
+            call_aggregate(aggregate_id, _aggregate, _vec);
+        };
+        define_mapper(sql, FnHolder::Lambda(Box::new(f)))
     } else {
         false
     }
