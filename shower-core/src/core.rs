@@ -1,11 +1,12 @@
 use crate::{
-    mapper::{call_mapper, define_mapper, init_mapper_store},
+    aggregate::{define_aggregate, init_aggregate_store, search_aggregate},
     cfg::{get_config, load_config},
     consts::KEY_DEV_MODE,
     data::{init_record_store, insert_record, Column, U8Bytes},
     ffi::FfiFunc,
     func::FnHolder,
     logger::init_logger,
+    mapper::{call_mapper, define_mapper, init_mapper_store},
     store::insert,
 };
 use log::*;
@@ -37,6 +38,7 @@ fn actual_start() -> bool {
     unsafe {
         DEBUG = cfg.fetch_cfg_bool(KEY_DEV_MODE);
         init_mapper_store();
+        init_aggregate_store();
         init_record_store();
     }
     true
@@ -77,17 +79,30 @@ fn process_data(data: &U8Bytes) {
     call_mapper(data);
 }
 
-pub fn def_mapper(sql: &str) -> bool {
-    define_mapper(sql, FnHolder::NotExist)
-}
-
-pub fn def_mapper_with_callback<F>(sql: &str, func: F) -> bool
+pub fn def_mapper<F>(sql: &str, func: F) -> bool
 where
     F: Fn(Vec<[u8; 512]>) + Send + 'static,
 {
     define_mapper(sql, FnHolder::Func(Box::new(func)))
 }
 
+pub fn def_mapper_with_aggregate(sql: &str, id: u16) -> bool {
+    let opt_aggregate = search_aggregate(id);
+    if let Some(_aggregate) = opt_aggregate {
+        let f = move |_vec| {};
+        define_mapper(sql, FnHolder::Func(Box::new(f)))
+    } else {
+        false
+    }
+}
+
 pub fn def_mapper_ffi(sql: &str, ffi: Box<dyn FfiFunc>) -> bool {
     define_mapper(sql, FnHolder::FfiFunc(ffi))
+}
+
+pub fn def_aggregate<F>(sql: &str, func: F) -> bool
+where
+    F: Fn(Vec<[u8; 512]>) + Send + 'static,
+{
+    define_aggregate(sql, FnHolder::Func(Box::new(func)))
 }

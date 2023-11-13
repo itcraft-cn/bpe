@@ -23,13 +23,7 @@ fn new_data(id: u16, bdata: &[u8]) -> PyResult<bool> {
 
 #[pyfunction]
 #[allow(dead_code)]
-fn def_mapper(sql: &str) -> PyResult<bool> {
-    Ok(shower::def_mapper(sql))
-}
-
-#[pyfunction]
-#[allow(dead_code)]
-fn def_mapper_with_callback(sql: &str, callback: PyObject) -> PyResult<bool> {
+fn def_mapper(sql: &str, callback: PyObject) -> PyResult<bool> {
     Ok(shower::def_mapper_ffi(
         sql,
         Box::new(PythonFfiFunc { callback }),
@@ -44,7 +38,6 @@ fn shower4py(_py: Python, m: &PyModule) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(stop, m)?)?;
     m.add_function(wrap_pyfunction!(new_data, m)?)?;
     m.add_function(wrap_pyfunction!(def_mapper, m)?)?;
-    m.add_function(wrap_pyfunction!(def_mapper_with_callback, m)?)?;
     Ok(())
 }
 

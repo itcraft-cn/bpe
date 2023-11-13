@@ -1,4 +1,4 @@
-use shower::{def_mapper_with_callback, def_record, new_data, start, stop, Column, U8Bytes};
+use shower::{def_mapper, def_record, new_data, start, stop, Column, U8Bytes};
 use std::{
     env, ptr, thread,
     time::{Duration, SystemTime},
@@ -16,7 +16,7 @@ const SQL: &str = r#"
 pub fn main() {
     env::set_var("SHOWER_HOME", "/home/helly/code/rust/shower");
     start();
-    def_mapper_with_callback(SQL, |_vec| {});
+    def_mapper(SQL, |_vec| {});
     exec_with_time_it(gen_new_data);
     stop();
 }

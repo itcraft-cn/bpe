@@ -14,7 +14,7 @@ fn test_new_proc() {
     env::set_var("SHOWER_HOME", "/home/helly/code/rust/shower");
     start();
     for sql in test_sql_vec {
-        def_mapper(sql);
+        def_mapper(sql, |_vec| {});
     }
     stop();
 }

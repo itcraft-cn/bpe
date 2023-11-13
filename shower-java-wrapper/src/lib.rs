@@ -3,7 +3,7 @@ use jni::{
     sys::{jboolean, jint},
     JNIEnv, JavaVM,
 };
-use shower::{def_mapper, def_mapper_ffi, new_data, start, stop, FfiFunc, U8Bytes};
+use shower::{def_mapper_ffi, new_data, start, stop, FfiFunc, U8Bytes};
 use std::sync::Once;
 
 static mut OPT_GLOBAL_REF: Option<Vec<GlobalRef>> = None;
@@ -52,24 +52,6 @@ pub extern "system" fn Java_com_erayt_shower4j_Shower_newData<'local>(
 
 #[no_mangle]
 pub extern "system" fn Java_com_erayt_shower4j_Shower_defMapper<'local>(
-    env: JNIEnv<'local>,
-    // This is the class that owns our static method. It's not going to be used,
-    // but still must be present to match the expected signature of a static
-    // native method.
-    _class: JClass<'local>,
-    j_sql: JString<'local>,
-) -> jboolean {
-    let rs = conv(&env, j_sql);
-    if let Ok(sql) = rs {
-        def_mapper(&sql) as jboolean
-    } else {
-        log::warn!("def_mapper failed: {:?}", rs.err().unwrap());
-        false as jboolean
-    }
-}
-
-#[no_mangle]
-pub extern "system" fn Java_com_erayt_shower4j_Shower_defMapperWithCallback<'local>(
     env: JNIEnv<'local>,
     // This is the class that owns our static method. It's not going to be used,
     // but still must be present to match the expected signature of a static

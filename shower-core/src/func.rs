@@ -165,7 +165,6 @@ pub(crate) enum Func {
 }
 
 pub(crate) enum FnHolder {
-    NotExist,
     Func(Box<dyn Fn(Vec<[u8; 512]>) + Send + 'static>),
     FfiFunc(Box<dyn FfiFunc>),
 }

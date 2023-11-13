@@ -223,7 +223,6 @@ fn invoke(id: u16, mapper: &'static Mapper, columns: &Vec<Column>, fn_holder: &F
         .map(|slice| mapper.fetch(id, columns, slice))
         .collect();
     match fn_holder {
-        FnHolder::NotExist => {}
         FnHolder::Func(f) => f(vec),
         FnHolder::FfiFunc(ffi) => ffi.callback(vec),
     }

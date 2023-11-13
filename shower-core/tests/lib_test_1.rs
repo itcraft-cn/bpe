@@ -12,6 +12,6 @@ const SQL: &str = r#"
 fn test_sql_parse() {
     env::set_var("SHOWER_HOME", "/home/helly/code/rust/shower");
     start();
-    def_mapper(SQL);
+    def_mapper(SQL, |_vec| {});
     stop();
 }
