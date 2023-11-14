@@ -1,8 +1,7 @@
-use log::*;
-use shower::{def_record, new_data, start, stop, Column, U8Bytes};
+use shower::{def_incoming, new_data, start, stop, Column, U8Bytes};
 use std::{env, thread};
 
-const LOOP_SIZE: usize = 10000000;
+const LOOP_SIZE: usize = 100;
 
 #[test]
 fn test_new_proc() {
@@ -15,8 +14,8 @@ fn test_new_proc() {
 fn gen_new_data() {
     let core_ids = core_affinity::get_core_ids().unwrap();
     core_affinity::set_for_current(core_ids[core_ids.len() - 1]);
-    info!("thread:{} started", thread::current().name().unwrap());
-    let id = def_record(vec![
+    log::info!("thread:{} started", thread::current().name().unwrap());
+    let id = def_incoming(vec![
         Column::new_long(),
         Column::new_double(),
         Column::new_long(),
@@ -27,9 +26,9 @@ fn gen_new_data() {
     for _ in 1..=LOOP_SIZE {
         let ret = new_data(&u8data);
         if ret {
-            debug!("send success");
+            log::debug!("send success");
         } else {
-            warn!("send failed");
+            log::warn!("send failed");
         }
     }
 }

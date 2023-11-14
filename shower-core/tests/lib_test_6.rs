@@ -1,11 +1,11 @@
-use shower::{def_record, start, stop, Column};
+use shower::{def_incoming, start, stop, Column};
 use std::env;
 
 #[test]
 fn test_new_proc() {
     env::set_var("SHOWER_HOME", "/home/helly/code/rust/shower");
     start();
-    let id = def_record(vec![
+    let id = def_incoming(vec![
         Column::new_long(),
         Column::new_double(),
         Column::new_long(),

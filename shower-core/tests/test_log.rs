@@ -1,11 +1,10 @@
-use log::info;
 use std::sync::Once;
 
 /// 日志初始化，写入 `stdout`，并写入临时文件夹下 `shower.log`
 pub fn init_logger() {
     static INIT: Once = Once::new();
     INIT.call_once(init_log4rs);
-    info!("booting up");
+    log::info!("booting up");
 }
 
 fn init_log4rs() {

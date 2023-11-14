@@ -2,7 +2,7 @@ use crate::{
     aggregate::{call_aggregate, define_aggregate, init_aggregate_store, search_aggregate},
     cfg::{get_config, load_config},
     consts::KEY_DEV_MODE,
-    data::{init_record_store, insert_record, Column, U8Bytes},
+    data::{check_id, init_record_store, insert_record, Column, RecordType, U8Bytes},
     ffi::FfiFunc,
     func::FnHolder,
     logger::init_logger,
@@ -12,7 +12,6 @@ use crate::{
 use std::sync::Once;
 
 static mut DEBUG: bool = false;
-static mut ID_STORE: [u8; 8192] = [0; 8192];
 
 pub fn start() -> bool {
     static START: Once = Once::new();
@@ -48,11 +47,12 @@ pub fn stop() {
     STOP.call_once(actual_stop);
 }
 
-pub fn def_record(columns: Vec<Column>) -> u16 {
-    let id = insert_record(columns);
-    let (idx, bit) = fetch_idx_bit(id);
-    unsafe { ID_STORE[idx as usize] |= 1 << bit };
-    id
+pub fn def_incoming(columns: Vec<Column>) -> u16 {
+    insert_record(RecordType::Incoming, columns)
+}
+
+pub fn def_stream(columns: Vec<Column>) -> u16 {
+    insert_record(RecordType::Stream, columns)
 }
 
 fn actual_stop() {
@@ -61,8 +61,7 @@ fn actual_stop() {
 
 pub fn new_data(data: &U8Bytes) -> bool {
     let id = data.id();
-    let (idx, bit) = fetch_idx_bit(id);
-    if unsafe { ID_STORE[idx as usize] & (1 << bit) == 0 } {
+    if check_id(id) {
         log::warn!("id [{}] is not defined", id);
         false
     } else {
@@ -107,10 +106,4 @@ where
 
 pub fn def_aggregate_ffi(sql: &str, ffi: Box<dyn FfiFunc>) -> bool {
     define_aggregate(sql, FnHolder::FfiFunc(ffi))
-}
-
-fn fetch_idx_bit(id: u16) -> (u16, u16) {
-    let idx = id / 8;
-    let bit = id % 8;
-    (idx, bit)
 }

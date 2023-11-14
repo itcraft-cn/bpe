@@ -1,4 +1,3 @@
-use log::*;
 use shower::{def_mapper, new_data, start, stop, U8Bytes};
 use std::{env, thread};
 
@@ -23,14 +22,14 @@ fn test_new_proc() {
 fn gen_new_data() {
     let core_ids = core_affinity::get_core_ids().unwrap();
     core_affinity::set_for_current(core_ids[core_ids.len() - 1]);
-    info!("thread:{} started", thread::current().name().unwrap());
+    log::info!("thread:{} started", thread::current().name().unwrap());
     let u8data = U8Bytes::new_from_vec(1, 288, vec![0u8; 288]);
     for _ in 1..=LOOP_SIZE {
         let ret = new_data(&u8data);
         if ret {
-            debug!("send success");
+            log::debug!("send success");
         } else {
-            warn!("send failed");
+            log::warn!("send failed");
         }
     }
 }

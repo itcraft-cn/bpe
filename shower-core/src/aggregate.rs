@@ -12,6 +12,8 @@ pub(crate) fn init_aggregate_store() {
 }
 
 pub(crate) fn define_aggregate(_sql: &str, _func_holder: FnHolder) -> bool {
+    let map = unsafe { AGGREGATE_MAP.as_mut().unwrap() };
+    map.insert(1, WrappedAggregate::new(Aggregate {}, _func_holder));
     true
 }
 
@@ -20,7 +22,13 @@ pub(crate) fn search_aggregate<'a>(id: u16) -> Option<&'a WrappedAggregate> {
     map.get(id)
 }
 
-pub(crate) fn call_aggregate<'a>(_id: u16, _wrapped: &WrappedAggregate, _data: Vec<[u8; 512]>) {}
+pub(crate) fn call_aggregate<'a>(_id: u16, _wrapped: &WrappedAggregate, _data: Vec<[u8; 512]>) {
+    match &_wrapped._fn_holder {
+        FnHolder::Func(f) => f(_data),
+        FnHolder::FfiFunc(f) => f.callback(_data),
+        FnHolder::Lambda(f) => f(_data),
+    }
+}
 
 pub(crate) struct Aggregate {}
 
@@ -29,7 +37,7 @@ pub(crate) struct WrappedAggregate {
     _fn_holder: FnHolder,
 }
 impl WrappedAggregate {
-    fn _new(_aggregate: Aggregate, _fn_holder: FnHolder) -> Self {
+    fn new(_aggregate: Aggregate, _fn_holder: FnHolder) -> Self {
         WrappedAggregate {
             _aggregate,
             _fn_holder,

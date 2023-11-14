@@ -1,4 +1,4 @@
-use shower::{def_mapper, def_record, new_data, start, stop, Column, U8Bytes};
+use shower::{def_mapper, def_incoming, new_data, start, stop, Column, U8Bytes};
 use std::{
     env, ptr, thread,
     time::{Duration, SystemTime},
@@ -25,7 +25,7 @@ fn gen_new_data() {
     let core_ids = core_affinity::get_core_ids().unwrap();
     core_affinity::set_for_current(core_ids[core_ids.len() - 1]);
     log::info!("thread:{} started", thread::current().name().unwrap());
-    let id = def_record(vec![
+    let id = def_incoming(vec![
         Column::new_long(),
         Column::new_long(),
         Column::new_long(),

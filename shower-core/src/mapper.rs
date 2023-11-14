@@ -59,13 +59,13 @@ pub(crate) fn define_mapper(sql: &str, func_holder: FnHolder) -> bool {
 pub(crate) fn call_mapper(data: &U8Bytes) {
     let id = data.id();
     let opt_mappers = search_mapper(id);
-    let opt_columns = get_column(id);
-    if opt_mappers.is_none() || opt_columns.is_none() {
+    let opt_record = get_column(id);
+    if opt_mappers.is_none() || opt_record.is_none() {
         return;
     }
     let wrapped = opt_mappers.unwrap();
-    let columns = opt_columns.unwrap();
-    invoke(id, &wrapped.mapper, columns, &wrapped.fn_holder);
+    let record = opt_record.unwrap();
+    invoke(id, &wrapped.mapper, record.columns(), &wrapped.fn_holder);
 }
 
 fn search_mapper<'a>(id: u16) -> Option<&'a WrappedMapper<'a>> {
