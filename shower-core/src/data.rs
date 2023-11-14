@@ -1,11 +1,13 @@
 use crate::{aux::SimpleU16Map, consts::U8_DATA_MAX_SIZE};
+use hashbrown::HashMap;
 use std::{
     cmp::Ordering as CmpOrdering,
     sync::atomic::{AtomicU16, Ordering},
 };
 
 static mut WALKER: Option<AtomicU16> = None;
-static mut MAP: Option<SimpleU16Map<Record>> = None;
+static mut RECORD_MAP: Option<SimpleU16Map<Record>> = None;
+static mut NAME_MAP: Option<HashMap<String, u16>> = None;
 
 static mut ID_STORE: [u8; 8192] = [0; 8192];
 
@@ -70,45 +72,52 @@ pub enum ColumnType {
     Str(usize),
 }
 
-#[derive(Clone, Copy, Debug)]
+#[derive(Clone, Debug)]
 pub struct Column {
+    name: String,
     data_type: ColumnType,
-    _idx: usize,
+    idx: u16,
     offset: usize,
 }
 impl Column {
-    pub fn new_long() -> Column {
+    pub fn new_long(name: &str) -> Column {
         Column {
+            name: String::from(name),
             data_type: ColumnType::Long,
-            _idx: 0,
+            idx: 0,
             offset: 0,
         }
     }
-    pub fn new_double() -> Column {
+    pub fn new_double(name: &str) -> Column {
         Column {
+            name: String::from(name),
             data_type: ColumnType::Double,
-            _idx: 0,
+            idx: 0,
             offset: 0,
         }
     }
-    pub fn new_string(len: usize) -> Column {
+    pub fn new_string(name: &str, len: usize) -> Column {
         Column {
+            name: String::from(name),
             data_type: ColumnType::Str(len),
-            _idx: 0,
+            idx: 0,
             offset: 0,
         }
+    }
+    pub(crate) fn _name(&self) -> &str {
+        &self.name
     }
     pub(crate) fn data_type(&self) -> &ColumnType {
         &self.data_type
     }
-    pub(crate) fn _idx(&self) -> usize {
-        self._idx
+    pub(crate) fn _idx(&self) -> u16 {
+        self.idx
     }
     pub(crate) fn offset(&self) -> usize {
         self.offset
     }
-    pub(crate) fn _adjust(&mut self, idx: usize, offset: usize) {
-        self._idx = idx;
+    pub(crate) fn _adjust(&mut self, idx: u16, offset: usize) {
+        self.idx = idx;
         self.offset = offset;
     }
 
@@ -117,7 +126,7 @@ impl Column {
         let mut offset = 0usize;
         for col_with_id in columns.iter().enumerate() {
             let mut column = col_with_id.1.clone();
-            column._idx = col_with_id.0;
+            column.idx = col_with_id.0 as u16 + 1;
             column.offset = offset;
             offset += match column.data_type {
                 ColumnType::Long => 8,
@@ -138,14 +147,37 @@ pub(crate) enum RecordType {
 
 #[derive(Clone, Debug)]
 pub(crate) struct Record {
+    _name: String,
+    _id: u16,
     _record_type: RecordType,
     columns: Vec<Column>,
+    columns_map: HashMap<String, u16>,
 }
 impl Record {
-    fn new(record_type: RecordType, columns: Vec<Column>) -> Self {
+    fn new(name: &str, id: u16, record_type: RecordType, columns: Vec<Column>) -> Self {
+        let mut map = HashMap::new();
+        for column in &columns {
+            map.insert(column.name.clone(), column.idx);
+        }
         Record {
+            _name: String::from(name),
+            _id: id,
             _record_type: record_type,
             columns,
+            columns_map: map,
+        }
+    }
+    pub(crate) fn fetch_record_id(name: &str) -> Option<&u16> {
+        unsafe {
+            let name_map = NAME_MAP.as_ref().unwrap();
+            name_map.get(&String::from(name))
+        }
+    }
+    pub(crate) fn fetch_field_id(record_id: u16, column_name: &str) -> Option<&u16> {
+        if let Some(record) = get_record(record_id) {
+            record.column_id(column_name)
+        } else {
+            None
         }
     }
     pub(crate) fn _record_type(&self) -> &RecordType {
@@ -154,31 +186,47 @@ impl Record {
     pub(crate) fn columns(&self) -> &Vec<Column> {
         &self.columns
     }
+    pub(crate) fn column_id(&self, column_name: &str) -> Option<&u16> {
+        self.columns_map.get(&String::from(column_name))
+    }
 }
 
 pub(crate) fn init_record_store() {
     unsafe {
         WALKER = Some(AtomicU16::new(1));
-        MAP = Some(SimpleU16Map::new());
+        RECORD_MAP = Some(SimpleU16Map::new());
+        NAME_MAP = Some(HashMap::new());
     }
 }
 
-pub(crate) fn insert_record(record_type: RecordType, columns: Vec<Column>) -> u16 {
+pub(crate) fn insert_record(
+    name: &str,
+    record_type: RecordType,
+    columns: Vec<Column>,
+) -> Option<u16> {
     unsafe {
-        let map = MAP.as_mut().unwrap();
-        let key = WALKER.as_ref().unwrap().fetch_add(1, Ordering::SeqCst);
-        map.insert(
-            key,
-            Record::new(record_type, Column::copy_from_columns(&columns)),
+        let record_map = RECORD_MAP.as_mut().unwrap();
+        let id = WALKER.as_ref().unwrap().fetch_add(1, Ordering::SeqCst);
+        record_map.insert(
+            id,
+            Record::new(name, id, record_type, Column::copy_from_columns(&columns)),
         );
-        let (idx, bit) = fetch_idx_bit(key);
-        ID_STORE[idx as usize] |= 1 << bit;
-        key
+        let name_map = NAME_MAP.as_mut().unwrap();
+        let key = String::from(name);
+        if name_map.contains_key(&key) {
+            log::warn!("Record name {} already exists", name);
+            None
+        } else {
+            name_map.insert(key, id);
+            let (idx, bit) = fetch_idx_bit(id);
+            ID_STORE[idx as usize] |= 1 << bit;
+            Some(id)
+        }
     }
 }
 
-pub(crate) fn get_column<'a>(id: u16) -> Option<&'a Record> {
-    let map = unsafe { MAP.as_ref().unwrap() };
+pub(crate) fn get_record<'a>(id: u16) -> Option<&'a Record> {
+    let map = unsafe { RECORD_MAP.as_ref().unwrap() };
     map.get(id)
 }
 

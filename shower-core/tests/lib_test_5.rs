@@ -2,9 +2,7 @@ use shower::{def_mapper, start, stop, new_data, U8Bytes};
 use std::env;
 
 const SQL: &str = r#"
-    SELECT _1.__1
-    FROM _1
-    LIMIT 1
+    SELECT demo.a FROM demo LIMIT 1
     "#;
 
 #[test]

@@ -9,19 +9,23 @@ const LOOP_SIZE: usize = 10;
 fn test_new_proc() {
     env::set_var("SHOWER_HOME", "/home/helly/code/rust/shower");
     start();
-    let id = def_incoming(vec![
-        Column::new_long(),
-        Column::new_long(),
-        Column::new_long(),
-        Column::new_long(),
-        Column::new_string(240),
-    ]);
-    log::info!("defined record: {:?}", id);
-    def_aggregate("select 1 from 1", |data| {
-        log::info!("data len: [{}]", data.len());
-    });
-    def_mapper_with_aggregate("select _1.__1 from _1 limit 1", 1);
-    gen_new_data(id);
+    if let Some(id) = def_incoming(
+        "demo",
+        vec![
+            Column::new_long("a"),
+            Column::new_double("b"),
+            Column::new_long("c"),
+            Column::new_double("d"),
+            Column::new_string("e", 240),
+        ],
+    ) {
+        log::info!("defined record: {:?}", id);
+        def_aggregate("select 1 from 1", |data| {
+            log::info!("data len: [{}]", data.len());
+        });
+        def_mapper_with_aggregate("select demo.a from demo limit 1", 1);
+        gen_new_data(id);
+    }
     stop();
 }
 

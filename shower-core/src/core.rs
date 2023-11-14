@@ -47,12 +47,12 @@ pub fn stop() {
     STOP.call_once(actual_stop);
 }
 
-pub fn def_incoming(columns: Vec<Column>) -> u16 {
-    insert_record(RecordType::Incoming, columns)
+pub fn def_incoming(name: &str, columns: Vec<Column>) -> Option<u16> {
+    insert_record(name, RecordType::Incoming, columns)
 }
 
-pub fn def_stream(columns: Vec<Column>) -> u16 {
-    insert_record(RecordType::Stream, columns)
+pub fn def_stream(name: &str, columns: Vec<Column>) -> Option<u16> {
+    insert_record(name, RecordType::Stream, columns)
 }
 
 fn actual_stop() {

@@ -1,6 +1,6 @@
 use crate::{
     aux::{SimpleU16Entry, SimpleU16Map},
-    data::{get_column, Column, U8Bytes},
+    data::{get_record, Column, U8Bytes},
     element::Element,
     error::MapperError,
     func::{eq, fetch_val, gt, gt_eq, lt, lt_eq, neq, Executor, FnHolder, Func},
@@ -59,7 +59,7 @@ pub(crate) fn define_mapper(sql: &str, func_holder: FnHolder) -> bool {
 pub(crate) fn call_mapper(data: &U8Bytes) {
     let id = data.id();
     let opt_mappers = search_mapper(id);
-    let opt_record = get_column(id);
+    let opt_record = get_record(id);
     if opt_mappers.is_none() || opt_record.is_none() {
         return;
     }
@@ -366,7 +366,13 @@ fn fetch_expacted(v_type: &ValType) -> Option<Element> {
     match v_type {
         ValType::Int(val) => Some(Element::Long(*val as u64)),
         ValType::Float(val) => Some(Element::Double(*val)),
-        _ => None,
+        _ => {
+            log::warn!(
+                "not a valid data type: {:?}, not supported, skipping",
+                v_type
+            );
+            None
+        }
     }
 }
 

@@ -1,4 +1,4 @@
-use shower::{def_mapper, def_incoming, new_data, start, stop, Column, U8Bytes};
+use shower::{def_incoming, def_mapper, new_data, start, stop, Column, U8Bytes};
 use std::{
     env, ptr, thread,
     time::{Duration, SystemTime},
@@ -7,16 +7,15 @@ use std::{
 const LOOP_SIZE: usize = 100000;
 
 const SQL: &str = r#"
-    SELECT _1.__1, _1.__2, _1.__3, _sub(_add(_1.__4, _1.__4), _1.__5)
-    FROM _1
-    WHERE (_1.__1 = 1 AND _1.__2 = 2) OR (_1.__1 = 3 AND _1.__2 = 4)
+    SELECT demo.a, demo.b, demo.c, _sub(_add(demo.d, demo.d), demo.e)
+    FROM demo
+    WHERE (demo.a = 1 AND demo.b = 2) OR (demo.a = 3 AND demo.b = 4)
     LIMIT 10
     "#;
 
 pub fn main() {
     env::set_var("SHOWER_HOME", "/home/helly/code/rust/shower");
     start();
-    def_mapper(SQL, |_vec| {});
     exec_with_time_it(gen_new_data);
     stop();
 }
@@ -25,25 +24,30 @@ fn gen_new_data() {
     let core_ids = core_affinity::get_core_ids().unwrap();
     core_affinity::set_for_current(core_ids[core_ids.len() - 1]);
     log::info!("thread:{} started", thread::current().name().unwrap());
-    let id = def_incoming(vec![
-        Column::new_long(),
-        Column::new_long(),
-        Column::new_long(),
-        Column::new_long(),
-        Column::new_long(),
-        Column::new_long(),
-        Column::new_long(),
-        Column::new_long(),
-        Column::new_string(448),
-    ]);
-    log::info!("assigned id:{}", id);
-    let u8data = gen_u8_bytes(id);
-    for _ in 1..=LOOP_SIZE {
-        let ret = new_data(&u8data);
-        if ret {
-            log::debug!("send success");
-        } else {
-            log::warn!("send failed");
+    if let Some(id) = def_incoming(
+        "demo",
+        vec![
+            Column::new_long("a"),
+            Column::new_long("b"),
+            Column::new_long("c"),
+            Column::new_long("d"),
+            Column::new_long("e"),
+            Column::new_long("f"),
+            Column::new_long("g"),
+            Column::new_long("h"),
+            Column::new_string("i", 448),
+        ],
+    ) {
+        log::info!("assigned id:{}", id);
+        let u8data = gen_u8_bytes(id);
+        def_mapper(SQL, |_vec| {});
+        for _ in 1..=LOOP_SIZE {
+            let ret = new_data(&u8data);
+            if ret {
+                log::debug!("send success");
+            } else {
+                log::warn!("send failed");
+            }
         }
     }
 }

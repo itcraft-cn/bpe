@@ -1,5 +1,6 @@
 use crate::{
     consts::DEFALUT_SELECT_SIZE,
+    data::Record,
     sql::base::{parse_sql, ExprEntity, OpType, ParsedSql, ValType},
 };
 use sql_parse::{
@@ -21,12 +22,16 @@ fn parse_select_statement(select_stat: Select<'_>) -> Option<ParsedSql> {
     if issues.is_empty() {
         // 识别表名
         let tables = parse_select_target(&select_stat.table_references, &mut issues);
+        if check_table_invalid(&tables) {
+            return None;
+        }
+        let table = tables[0];
         // 辨识过滤条件
-        let filters = parse_select_condition(&select_stat.where_, &mut issues);
+        let filters = parse_select_condition(&select_stat.where_, table, &mut issues);
         // 限制数据范围
         let limit_range = parse_select_limitor(&select_stat.limit, &mut issues);
         // 辨识字段
-        let fields = parse_select_fields(&select_stat.select_exprs, &mut issues);
+        let fields = parse_select_fields(&select_stat.select_exprs, table, &mut issues);
         if issues.is_empty() {
             Some(ParsedSql::new(tables, filters, limit_range, fields))
         } else {
@@ -37,6 +42,21 @@ fn parse_select_statement(select_stat: Select<'_>) -> Option<ParsedSql> {
         }
     } else {
         None
+    }
+}
+
+fn check_table_invalid(tables: &Vec<u16>) -> bool {
+    if tables.is_empty() {
+        log::warn!("no tables found in sql query");
+        true
+    } else if tables.len() != 1 {
+        log::warn!("not support multi table select, skipping");
+        for table in tables {
+            log::warn!("table id in sql:{}", table);
+        }
+        true
+    } else {
+        false
     }
 }
 
@@ -84,16 +104,12 @@ fn parse_tab_ref(tab: &TableReference<'_>, tab_ref_vec: &mut Vec<u16>) -> Option
                 return Some(String::from("as is not supported"));
             }
             for id in identifier {
-                if !id.starts_with('_') {
-                    return Some(String::from("should be a valid identifier, start with `_`"));
-                }
-                let rs = conv_tab_id(String::from(id.value));
-                let tab_id = if let Ok(tid) = rs {
-                    tid
+                let name = id.as_str();
+                if let Some(tab_id) = Record::fetch_record_id(name) {
+                    tab_ref_vec.push(*tab_id);
                 } else {
-                    return Some(rs.err().unwrap());
-                };
-                tab_ref_vec.push(tab_id);
+                    return Some(format!("record define: [{}] is not found", name));
+                }
             }
         }
         TableReference::Query {
@@ -117,11 +133,12 @@ fn parse_tab_ref(tab: &TableReference<'_>, tab_ref_vec: &mut Vec<u16>) -> Option
 
 fn parse_select_condition(
     where_: &Option<(Expression<'_>, Range<usize>)>,
+    tab_id: u16,
     issues: &mut Vec<String>,
 ) -> Vec<ExprEntity> {
     if let Some(where_part) = where_ {
         let mut expr_entity_vec = vec![];
-        if let Some(issue) = parse_condition(&where_part.0, &mut expr_entity_vec) {
+        if let Some(issue) = parse_condition(&where_part.0, tab_id, &mut expr_entity_vec) {
             issues.push(issue);
             vec![]
         } else {
@@ -152,6 +169,7 @@ fn parse_select_limitor(
 
 fn parse_select_fields(
     select_exprs: &[SelectExpr<'_>],
+    tab_id: u16,
     issues: &mut Vec<String>,
 ) -> Vec<ExprEntity> {
     let mut expr_vec = vec![];
@@ -164,7 +182,7 @@ fn parse_select_fields(
             issues.push(value);
             return vec![];
         }
-        if let Some(value) = parse_expr(&select_expr.expr, &mut expr_vec) {
+        if let Some(value) = parse_expr(&select_expr.expr, tab_id, &mut expr_vec) {
             issues.push(value);
             return vec![];
         }
@@ -172,7 +190,11 @@ fn parse_select_fields(
     expr_vec
 }
 
-fn parse_condition(expr: &Expression<'_>, expr_entity_vec: &mut Vec<ExprEntity>) -> Option<String> {
+fn parse_condition(
+    expr: &Expression<'_>,
+    tab_id: u16,
+    expr_entity_vec: &mut Vec<ExprEntity>,
+) -> Option<String> {
     match expr {
         Expression::Binary {
             op,
@@ -186,12 +208,12 @@ fn parse_condition(expr: &Expression<'_>, expr_entity_vec: &mut Vec<ExprEntity>)
                 return Some(format!("op[{:?}] is not supported", op));
             }
             let mut left_vec = vec![];
-            if let Some(issue) = parse_condition(lhs.as_ref(), &mut left_vec) {
+            if let Some(issue) = parse_condition(lhs.as_ref(), tab_id, &mut left_vec) {
                 return Some(issue);
             }
             expr_entity_vec.append(&mut left_vec);
             let mut right_vec = vec![];
-            if let Some(issue) = parse_condition(rhs.as_ref(), &mut right_vec) {
+            if let Some(issue) = parse_condition(rhs.as_ref(), tab_id, &mut right_vec) {
                 return Some(issue);
             }
             expr_entity_vec.append(&mut right_vec);
@@ -200,7 +222,7 @@ fn parse_condition(expr: &Expression<'_>, expr_entity_vec: &mut Vec<ExprEntity>)
             if let Some(issue) = check_not_allow_expr(expr) {
                 return Some(issue);
             }
-            if let Some(issue) = parse_expr(expr, expr_entity_vec) {
+            if let Some(issue) = parse_expr(expr, tab_id, expr_entity_vec) {
                 return Some(issue);
             }
         }
@@ -313,7 +335,11 @@ fn check_not_allow_expr(expr: &Expression<'_>) -> Option<String> {
     }
 }
 
-fn parse_expr(expr: &Expression<'_>, expr_entity_vec: &mut Vec<ExprEntity>) -> Option<String> {
+fn parse_expr(
+    expr: &Expression<'_>,
+    tab_id: u16,
+    expr_entity_vec: &mut Vec<ExprEntity>,
+) -> Option<String> {
     match expr {
         Expression::Bool(v, _) => {
             expr_entity_vec.push(ExprEntity::Val(ValType::Bool(*v)));
@@ -334,7 +360,7 @@ fn parse_expr(expr: &Expression<'_>, expr_entity_vec: &mut Vec<ExprEntity>) -> O
             };
             let mut expr_sub_entity_vec = vec![];
             for expr in expr_vec {
-                parse_expr(expr, &mut expr_sub_entity_vec);
+                parse_expr(expr, tab_id, &mut expr_sub_entity_vec);
             }
             if fn_tuple.1 {
                 expr_entity_vec.push(ExprEntity::Function(fn_tuple.0, expr_sub_entity_vec));
@@ -346,39 +372,24 @@ fn parse_expr(expr: &Expression<'_>, expr_entity_vec: &mut Vec<ExprEntity>) -> O
             if id_vec.len() == 2 {
                 let id_part1 = id_vec.get(0).unwrap();
                 let id_part2 = id_vec.get(1).unwrap();
-                let converted_id_part1 = fetch_id_part(id_part1);
-                if !converted_id_part1.1 {
-                    return Some(converted_id_part1.0);
+                let rs1 = fetch_tab_id(tab_id, id_part1);
+                if rs1.is_err() {
+                    return Some(rs1.err().unwrap());
                 }
-                let converted_id_part2 = fetch_id_part(id_part2);
-                if !converted_id_part2.1 {
-                    return Some(converted_id_part2.0);
+                let rs2 = fetch_field_id(tab_id, id_part2);
+                if rs2.is_err() {
+                    return Some(rs2.err().unwrap());
                 }
-                let rs_tab_id = conv_tab_id(converted_id_part1.0);
-                let tab_id = if let Ok(id) = rs_tab_id {
-                    id
-                } else {
-                    return Some(rs_tab_id.err().unwrap());
-                };
-                let rs_field_id = conv_field_id(converted_id_part2.0);
-                let field_id = if let Ok(id) = rs_field_id {
-                    id
-                } else {
-                    return Some(rs_field_id.err().unwrap());
-                };
-                expr_entity_vec.push(ExprEntity::FieldWithTab(tab_id, field_id));
+                let record_id = rs1.unwrap();
+                let field_id = rs2.unwrap();
+                expr_entity_vec.push(ExprEntity::FieldWithTab(record_id, field_id));
             } else if id_vec.len() == 1 {
                 let id_part = id_vec.get(0).unwrap();
-                let converted_id_part = fetch_id_part(id_part);
-                if !converted_id_part.1 {
-                    return Some(converted_id_part.0);
+                let rs = fetch_field_id(tab_id, id_part);
+                if rs.is_err() {
+                    return Some(rs.err().unwrap());
                 }
-                let rs_field_id = conv_field_id(converted_id_part.0);
-                let field_id = if let Ok(id) = rs_field_id {
-                    id
-                } else {
-                    return Some(rs_field_id.err().unwrap());
-                };
+                let field_id = rs.unwrap();
                 expr_entity_vec.push(ExprEntity::Field(field_id));
             } else {
                 return Some(String::from("id should be a valid identifier"));
@@ -389,40 +400,38 @@ fn parse_expr(expr: &Expression<'_>, expr_entity_vec: &mut Vec<ExprEntity>) -> O
     None
 }
 
-fn conv_tab_id(id: String) -> Result<u16, String> {
-    conv_id(id, 1)
-}
-
-fn conv_field_id(id: String) -> Result<u16, String> {
-    conv_id(id, 2)
-}
-
-fn conv_id(id: String, idx: usize) -> Result<u16, String> {
-    let v_str = String::from_utf8(id.as_bytes()[idx..].to_vec()).unwrap();
-    let o = v_str.parse::<u16>();
-    if let Ok(v) = o {
-        if v > 0 {
-            Ok(v)
-        } else {
-            Err(String::from("id should be a positive integer"))
+fn fetch_tab_id(tab_id: u16, id_part: &IdentifierPart<'_>) -> Result<u16, String> {
+    match id_part {
+        IdentifierPart::Name(id) => {
+            let name = id.as_str();
+            if let Some(id) = Record::fetch_record_id(name) {
+                let rid = *id;
+                if rid == tab_id {
+                    Ok(rid)
+                } else {
+                    Err(format!(
+                        "record [{}] is not match the target record in sql query",
+                        name
+                    ))
+                }
+            } else {
+                Err(format!("record [{}] is not found", name))
+            }
         }
-    } else {
-        Err(format!("hit error: {}", o.unwrap_err()))
+        IdentifierPart::Star(_) => Err(String::from("star is not supported")),
     }
 }
 
-fn fetch_id_part(id_part: &IdentifierPart<'_>) -> (String, bool) {
+fn fetch_field_id(tab_id: u16, id_part: &IdentifierPart<'_>) -> Result<u16, String> {
     match id_part {
         IdentifierPart::Name(id) => {
-            if !id.starts_with("__") && !id.starts_with('_') {
-                (
-                    String::from("should be a valid identifier, start with `_` or `__`"),
-                    false,
-                )
+            let name = id.as_str();
+            if let Some(id) = Record::fetch_field_id(tab_id, name) {
+                Ok(*id)
             } else {
-                (String::from(id.value), true)
+                Err(format!("field [{}] is not found", name))
             }
         }
-        IdentifierPart::Star(_) => (String::from("star is not supported"), false),
+        IdentifierPart::Star(_) => Err(String::from("star is not supported")),
     }
 }

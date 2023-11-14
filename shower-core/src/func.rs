@@ -27,7 +27,8 @@ pub(crate) fn fetch_val(
     columns: &Vec<Column>,
     idx: u16,
 ) -> Element {
-    let column = columns.as_slice()[(idx - 1) as usize];
+    // TODO: remove unwrap
+    let column = columns.get((idx - 1) as usize).unwrap();
     match column.data_type() {
         ColumnType::Long => {
             let offset = column.offset();

@@ -4,9 +4,9 @@ use std::{env, thread};
 const LOOP_SIZE: usize = 10;
 
 const SQL: &str = r#"
-    SELECT _1.__1, _1.__2, _1.__3, _sub(_add(_1.__4, _1.__4), _1.__5)
-    FROM _1
-    WHERE (_1.__1 = '1' AND _1.__2 = '2') OR (_1.__1 = '3' AND _1.__2 = '4')
+    SELECT demo.a, demo.b, demo.c, _sub(_add(demo.d, demo.d), demo.e)
+    FROM demo
+    WHERE (demo.a = 1 AND demo.b = 2) OR (demo.a = 3 AND demo.b = 4)
     LIMIT 10
     "#;
 
