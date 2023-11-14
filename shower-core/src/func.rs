@@ -24,7 +24,7 @@ impl Executor {
 pub(crate) fn fetch_val(
     slice: &'static [u8],
     _id: u16,
-    columns: &Vec<Column>,
+    columns: &[Column],
     idx: u16,
 ) -> Element {
     // TODO: remove unwrap

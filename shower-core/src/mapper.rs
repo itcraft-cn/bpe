@@ -272,39 +272,39 @@ fn and(slice: &'static [u8], id: u16, columns: &Vec<Column>, v1: &Filter, v2: &F
 }
 
 #[inline]
-fn op_eq(slice: &'static [u8], id: u16, columns: &Vec<Column>, v1: &Filter, v2: &Filter) -> bool {
+fn op_eq(slice: &'static [u8], id: u16, columns: &[Column], v1: &Filter, v2: &Filter) -> bool {
     compare_slice_val(slice, id, columns, v1, v2, eq)
 }
 #[inline]
 fn op_gt_eq(
     slice: &'static [u8],
     id: u16,
-    columns: &Vec<Column>,
+    columns: &[Column],
     v1: &Filter,
     v2: &Filter,
 ) -> bool {
     compare_slice_val(slice, id, columns, v1, v2, gt_eq)
 }
 #[inline]
-fn op_gt(slice: &'static [u8], id: u16, columns: &Vec<Column>, v1: &Filter, v2: &Filter) -> bool {
+fn op_gt(slice: &'static [u8], id: u16, columns: &[Column], v1: &Filter, v2: &Filter) -> bool {
     compare_slice_val(slice, id, columns, v1, v2, gt)
 }
 #[inline]
 fn op_lt_eq(
     slice: &'static [u8],
     id: u16,
-    columns: &Vec<Column>,
+    columns: &[Column],
     v1: &Filter,
     v2: &Filter,
 ) -> bool {
     compare_slice_val(slice, id, columns, v1, v2, lt_eq)
 }
 #[inline]
-fn op_lt(slice: &'static [u8], id: u16, columns: &Vec<Column>, v1: &Filter, v2: &Filter) -> bool {
+fn op_lt(slice: &'static [u8], id: u16, columns: &[Column], v1: &Filter, v2: &Filter) -> bool {
     compare_slice_val(slice, id, columns, v1, v2, lt)
 }
 #[inline]
-fn op_neq(slice: &'static [u8], id: u16, columns: &Vec<Column>, v1: &Filter, v2: &Filter) -> bool {
+fn op_neq(slice: &'static [u8], id: u16, columns: &[Column], v1: &Filter, v2: &Filter) -> bool {
     compare_slice_val(slice, id, columns, v1, v2, neq)
 }
 
@@ -312,7 +312,7 @@ fn op_neq(slice: &'static [u8], id: u16, columns: &Vec<Column>, v1: &Filter, v2:
 fn compare_slice_val<F>(
     slice: &'static [u8],
     id: u16,
-    columns: &Vec<Column>,
+    columns: &[Column],
     v1: &Filter,
     v2: &Filter,
     f: F,
@@ -344,7 +344,7 @@ where
 fn compare_with_op<F>(
     slice: &'static [u8],
     id: u16,
-    columns: &Vec<Column>,
+    columns: &[Column],
     idx: u16,
     v_type: &ValType,
     f: F,

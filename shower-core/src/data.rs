@@ -121,7 +121,7 @@ impl Column {
         self.offset = offset;
     }
 
-    fn copy_from_columns(columns: &Vec<Column>) -> Vec<Column> {
+    fn copy_from_columns(columns: &[Column]) -> Vec<Column> {
         let mut target = vec![];
         let mut offset = 0usize;
         for col_with_id in columns.iter().enumerate() {

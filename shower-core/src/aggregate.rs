@@ -22,7 +22,7 @@ pub(crate) fn search_aggregate<'a>(id: u16) -> Option<&'a WrappedAggregate> {
     map.get(id)
 }
 
-pub(crate) fn call_aggregate<'a>(_id: u16, _wrapped: &WrappedAggregate, _data: Vec<[u8; 512]>) {
+pub(crate) fn call_aggregate(_id: u16, _wrapped: &WrappedAggregate, _data: Vec<[u8; 512]>) {
     match &_wrapped._fn_holder {
         FnHolder::Func(f) => f(_data),
         FnHolder::FfiFunc(f) => f.callback(_data),
