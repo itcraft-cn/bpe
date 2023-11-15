@@ -21,12 +21,7 @@ impl Executor {
 }
 
 #[inline]
-pub(crate) fn fetch_val(
-    slice: &'static [u8],
-    _id: u16,
-    columns: &[Column],
-    idx: u16,
-) -> Element {
+pub(crate) fn fetch_val(slice: &'static [u8], _id: u16, columns: &[Column], idx: u16) -> Element {
     // TODO: remove unwrap
     let column = columns.get((idx - 1) as usize).unwrap();
     match column.data_type() {
@@ -83,6 +78,7 @@ pub(crate) fn compute_func(
         Func::Mul => mul(slice, id, columns, executors),
         Func::Div => div(slice, id, columns, executors),
         Func::Mod => mod_(slice, id, columns, executors),
+        _ => Element::Long(0),
     }
 }
 
@@ -163,6 +159,23 @@ pub(crate) enum Func {
     Div,
     #[strum(ascii_case_insensitive)]
     Mod,
+    // aggregate func
+    #[strum(ascii_case_insensitive)]
+    MinL,
+    #[strum(ascii_case_insensitive)]
+    MaxL,
+    #[strum(ascii_case_insensitive)]
+    SumL,
+    #[strum(ascii_case_insensitive)]
+    Count,
+    #[strum(ascii_case_insensitive)]
+    MinD,
+    #[strum(ascii_case_insensitive)]
+    MaxD,
+    #[strum(ascii_case_insensitive)]
+    SumD,
+    #[strum(ascii_case_insensitive)]
+    Avg,
 }
 
 pub(crate) enum FnHolder {

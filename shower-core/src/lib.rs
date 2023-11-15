@@ -9,6 +9,7 @@ pub(crate) mod core;
 pub(crate) mod data;
 pub(crate) mod element;
 pub(crate) mod error;
+pub(crate) mod exec;
 pub(crate) mod ffi;
 pub(crate) mod func;
 pub(crate) mod id;

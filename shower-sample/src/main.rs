@@ -18,7 +18,7 @@ const FILTER_SQL: &str = r#"
 const AGGREGATE_SQL: &str = r#"
     select _maxl(stream.a), _minl(stream.a), _suml(stream.a),
            _maxd(stream.a), _mind(stream.a), _sumd(stream.a),
-           _avgd(stream.a), _countl(stream.a)
+           _avg(stream.a), _count(stream.a)
     from stream
     "#;
 
