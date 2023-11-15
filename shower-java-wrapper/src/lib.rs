@@ -67,7 +67,7 @@ pub extern "system" fn Java_com_erayt_shower4j_Shower_defMapper<'local>(
             let rs = env.new_global_ref(j_callback);
             if let Ok(callback) = rs {
                 if let Some(id) = def_java_callback(sql, callback, vm) {
-                    return id as jint;
+                    id as jint
                 } else {
                     -1
                 }

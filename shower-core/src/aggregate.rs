@@ -52,10 +52,8 @@ pub(crate) fn call_aggregate(wrapped: &WrappedAggregate, data: Vec<[u8; 512]>) {
             return;
         }
     }
-    let mut data_idx = 0_usize;
-    for sub_data in &data {
+    for (data_idx, sub_data) in data.iter().enumerate() {
         loop_compute(&mut aggregate_data, sub_data, data_idx, wrapped);
-        data_idx += 1;
     }
     match &wrapped.fn_holder {
         FnHolder::Func(f) => f(vec![aggregate_data]),
