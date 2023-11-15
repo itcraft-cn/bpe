@@ -44,57 +44,64 @@ pub(crate) fn define_aggregate(sql: &str, func_holder: FnHolder) -> Option<u16> 
 #[inline]
 pub(crate) fn call_aggregate(wrapped: &WrappedAggregate, data: Vec<[u8; 512]>) {
     let mut aggregate_data = [0_u8; 512];
-    for (idx, executor) in wrapped._aggregate()._executors().iter().enumerate() {
+    for (idx, executor) in wrapped.aggregate().executors().iter().enumerate() {
         let rs = setup_init_val(&mut aggregate_data, idx, executor);
         if rs.is_err() {
             log::warn!("hit error: {:?}", rs.err());
             return;
         }
     }
-    for array in &data {
-        loop_compute(&mut aggregate_data, array, wrapped);
+    let mut data_idx = 0_usize;
+    for sub_data in &data {
+        loop_compute(&mut aggregate_data, sub_data, data_idx, wrapped);
+        data_idx += 1;
     }
-    match &wrapped._fn_holder {
+    match &wrapped.fn_holder {
         FnHolder::Func(f) => f(vec![aggregate_data]),
         FnHolder::FfiFunc(f) => f.callback(vec![aggregate_data]),
         FnHolder::Lambda(f) => f(vec![aggregate_data]),
     }
 }
 
-fn setup_init_val(data: &mut [u8; 512], idx: usize, executor: &Executor) -> Result<(), String> {
+#[inline]
+fn setup_init_val(
+    aggregate_data: &mut [u8; 512],
+    idx: usize,
+    executor: &Executor,
+) -> Result<(), String> {
     let offset = idx * 8;
     match executor {
         Executor::Compute(func, _) => match func {
             Func::MaxL => {
-                fill_i64(&mut data[offset..offset + 8], i64::MIN);
+                fill_i64(&mut aggregate_data[offset..offset + 8], i64::MIN);
                 Ok(())
             }
             Func::MinL => {
-                fill_i64(&mut data[offset..offset + 8], i64::MAX);
+                fill_i64(&mut aggregate_data[offset..offset + 8], i64::MAX);
                 Ok(())
             }
             Func::SumL => {
-                fill_i64(&mut data[offset..offset + 8], 0);
+                fill_i64(&mut aggregate_data[offset..offset + 8], 0);
                 Ok(())
             }
             Func::Count => {
-                fill_i64(&mut data[offset..offset + 8], 0);
+                fill_i64(&mut aggregate_data[offset..offset + 8], 0);
                 Ok(())
             }
             Func::MaxD => {
-                fill_f64(&mut data[offset..offset + 8], f64::MIN);
+                fill_f64(&mut aggregate_data[offset..offset + 8], f64::MIN);
                 Ok(())
             }
             Func::MinD => {
-                fill_f64(&mut data[offset..offset + 8], f64::MIN);
+                fill_f64(&mut aggregate_data[offset..offset + 8], f64::MIN);
                 Ok(())
             }
             Func::SumD => {
-                fill_f64(&mut data[offset..offset + 8], 0_f64);
+                fill_f64(&mut aggregate_data[offset..offset + 8], 0_f64);
                 Ok(())
             }
             Func::Avg => {
-                fill_f64(&mut data[offset..offset + 8], 0_f64);
+                fill_f64(&mut aggregate_data[offset..offset + 8], 0_f64);
                 Ok(())
             }
             _ => {
@@ -112,13 +119,26 @@ fn setup_init_val(data: &mut [u8; 512], idx: usize, executor: &Executor) -> Resu
     }
 }
 
-fn loop_compute(data: &mut [u8; 512], _array: &[u8; 512], wrapped: &WrappedAggregate) {
-    for (idx, executor) in wrapped._aggregate()._executors().iter().enumerate() {
-        compute(idx, executor, data);
+#[inline]
+fn loop_compute(
+    aggregate_data: &mut [u8; 512],
+    sub_data: &[u8; 512],
+    data_idx: usize,
+    wrapped: &WrappedAggregate,
+) {
+    for (idx, executor) in wrapped.aggregate().executors().iter().enumerate() {
+        compute(idx, executor, aggregate_data, sub_data, data_idx);
     }
 }
 
-fn compute(idx: usize, executor: &Executor, data: &mut [u8; 512]) {
+#[inline]
+fn compute(
+    idx: usize,
+    executor: &Executor,
+    data: &mut [u8; 512],
+    _sub_data: &[u8; 512],
+    data_idx: usize,
+) {
     let offset = idx * 8;
     match executor {
         Executor::Compute(func, _executors) => {
@@ -154,8 +174,11 @@ fn compute(idx: usize, executor: &Executor, data: &mut [u8; 512]) {
                 }
                 Func::Avg => {
                     let mut avg = fetch_f64(&data[offset..offset + 8]);
-                    avg = avg * idx as f64 + 77_f64;
-                    fill_f64(&mut data[offset..offset + 8], avg * idx as f64 + 77_f64);
+                    avg = avg * data_idx as f64 + 77_f64;
+                    fill_f64(
+                        &mut data[offset..offset + 8],
+                        (avg * data_idx as f64 + 77_f64) / ((data_idx + 1) as f64),
+                    );
                 }
                 _ => {
                     log::warn!("unsupported function: {:?}", func);
@@ -220,23 +243,23 @@ impl Aggregate {
     fn id(&self) -> u16 {
         self._id
     }
-    fn _executors(&self) -> &Vec<Executor> {
+    fn executors(&self) -> &Vec<Executor> {
         &self._executors
     }
 }
 
 pub(crate) struct WrappedAggregate {
     _aggregate: Aggregate,
-    _fn_holder: FnHolder,
+    fn_holder: FnHolder,
 }
 impl WrappedAggregate {
     fn new(_aggregate: Aggregate, _fn_holder: FnHolder) -> Self {
         WrappedAggregate {
             _aggregate,
-            _fn_holder,
+            fn_holder: _fn_holder,
         }
     }
-    fn _aggregate(&self) -> &Aggregate {
+    fn aggregate(&self) -> &Aggregate {
         &self._aggregate
     }
 }
