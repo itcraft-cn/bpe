@@ -1,9 +1,11 @@
 use crate::{
     aux::{fetch_f64, fetch_i64, fill_f64, fill_i64, SimpleU16Map},
     data::get_record,
+    error::ParseSqlError,
     func::FnHolder,
+    id::next_aggregate_id,
     sql::{
-        base::{parse_options, ExprEntity},
+        base::{parse_options, ExprEntity, ParsedSql},
         select::parse_select,
     },
 };
@@ -20,43 +22,23 @@ pub(crate) fn init_aggregate_store() {
 }
 
 pub(crate) fn define_aggregate(sql: &str, func_holder: FnHolder) -> Option<u16> {
-    let opt_parsed_sql = parse_select(sql, unsafe { PARSE_OPTIONS.as_ref().unwrap() });
-    if let Some(parsed_sql) = opt_parsed_sql {
-        if !parsed_sql.filters().is_empty() {
-            log::warn!("filter in aggregate is not supported");
-            return None;
+    if let Some(parsed_sql) = parse_select(sql, unsafe { PARSE_OPTIONS.as_ref().unwrap() }) {
+        let rs = gen_aggregate(&parsed_sql);
+        if let Ok(aggregate) = rs {
+            // TODO: need to replace 1 with real id
+            let map = unsafe { AGGREGATE_MAP.as_mut().unwrap() };
+            map.insert(1, WrappedAggregate::new(aggregate, func_holder));
+            Some(1)
+        } else {
+            log::warn!("{:?}", rs.err());
+            None
         }
-        let fields = parsed_sql.fields();
-        if fields.is_empty() {
-            log::warn!("no field in aggregate");
-            return None;
-        }
-        if parsed_sql.tables().len() != 1 {
-            log::warn!("only support one table in aggregate");
-            return None;
-        }
-        let stream = get_record(parsed_sql.tables()[0]);
-        if stream.is_none() {
-            log::warn!("stream {} not found", parsed_sql.tables()[0]);
-            return None;
-        }
-        // TODO: need to replace 1 with real id
-        let map = unsafe { AGGREGATE_MAP.as_mut().unwrap() };
-        map.insert(
-            1,
-            WrappedAggregate::new(Aggregate { _fields: fields }, func_holder),
-        );
-        Some(1)
     } else {
         None
     }
 }
 
-pub(crate) fn search_aggregate<'a>(id: u16) -> Option<&'a WrappedAggregate> {
-    let map = unsafe { AGGREGATE_MAP.as_ref().unwrap() };
-    map.get(id)
-}
-
+#[inline]
 pub(crate) fn call_aggregate(wrapped: &WrappedAggregate, data: Vec<[u8; 512]>) {
     let mut aggregate_data = [0_u8; 512];
     for (idx, field) in wrapped._aggregate()._fields().iter().enumerate() {
@@ -183,7 +165,42 @@ fn compute(data: &mut [u8; 512], _array: &[u8; 512], wrapped: &WrappedAggregate)
     }
 }
 
+pub(crate) fn search_aggregate<'a>(id: u16) -> Option<&'a WrappedAggregate> {
+    let map = unsafe { AGGREGATE_MAP.as_ref().unwrap() };
+    map.get(id)
+}
+
+fn gen_aggregate(parsed_sql: &ParsedSql) -> Result<Aggregate, ParseSqlError> {
+    if !parsed_sql.filters().is_empty() {
+        return Err(ParseSqlError::new(String::from(
+            "filter in aggregate is not supported",
+        )));
+    }
+    let fields = parsed_sql.fields();
+    if fields.is_empty() {
+        return Err(ParseSqlError::new(String::from("no field in aggregate")));
+    }
+    if parsed_sql.records().len() != 1 {
+        return Err(ParseSqlError::new(String::from(
+            "only support one record in aggregate",
+        )));
+    }
+    let stream = get_record(parsed_sql.records()[0]);
+    if stream.is_none() {
+        return Err(ParseSqlError::new(format!(
+            "stream {} not found",
+            parsed_sql.records()[0]
+        )));
+    }
+    let id = next_aggregate_id();
+    Ok(Aggregate {
+        _id: id,
+        _fields: fields,
+    })
+}
+
 pub(crate) struct Aggregate {
+    _id: u16,
     _fields: Vec<ExprEntity>,
 }
 impl Aggregate {

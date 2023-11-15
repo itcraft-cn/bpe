@@ -14,7 +14,7 @@ impl Element {
             Element::_Str(slice, _len) => target.copy_from_slice(slice),
         };
     }
-    pub(crate) fn _is_computable(&self) -> bool {
+    pub(crate) fn _is_computed(&self) -> bool {
         match self {
             Element::Long(_) => true,
             Element::Double(_) => true,

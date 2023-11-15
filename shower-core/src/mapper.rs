@@ -2,13 +2,14 @@ use crate::{
     aux::{SimpleU16Entry, SimpleU16Map},
     data::{get_record, Column, U8Bytes},
     element::Element,
-    error::MapperError,
+    error::ParseSqlError,
     func::{eq, fetch_val, gt, gt_eq, lt, lt_eq, neq, Executor, FnHolder, Func},
+    id::next_mapper_id,
     sql::{
         base::{parse_options, ExprEntity, OpType, ParsedSql, ValType},
         select::parse_select,
     },
-    store::{self, DataIterator},
+    store::{create_iterator, DataIterator},
 };
 use sql_parse::ParseOptions;
 use std::str::FromStr;
@@ -24,8 +25,7 @@ pub(crate) fn init_mapper_store() {
 }
 
 pub(crate) fn define_mapper(sql: &str, func_holder: FnHolder) -> Option<u16> {
-    let opt_parsed_sql = parse_select(sql, unsafe { PARSE_OPTIONS.as_ref().unwrap() });
-    if let Some(parsed_sql) = opt_parsed_sql {
+    if let Some(parsed_sql) = parse_select(sql, unsafe { PARSE_OPTIONS.as_ref().unwrap() }) {
         let rs = gen_mapper(&parsed_sql);
         if let Ok(mapper) = rs {
             let id = mapper.id();
@@ -73,26 +73,26 @@ fn search_mapper<'a>(id: u16) -> Option<&'a WrappedMapper<'a>> {
     map.get(id)
 }
 
-fn gen_mapper<'a>(parsed_sql: &ParsedSql) -> Result<Mapper<'a>, MapperError> {
-    let record_id_array = &parsed_sql.tables();
+fn gen_mapper<'a>(parsed_sql: &ParsedSql) -> Result<Mapper<'a>, ParseSqlError> {
+    let record_id_array = &parsed_sql.records();
     if record_id_array.len() != 1 {
-        return Err(MapperError::new(format!(
-            "only support one table, but {} tables",
+        return Err(ParseSqlError::new(format!(
+            "only support one record, but {} records",
             record_id_array.len()
         )));
     }
-    let id = *record_id_array.first().unwrap();
+    let id = next_mapper_id();
     let iterator = create_iterator(id);
     let rs_filter = create_filter(&parsed_sql.filters());
     if rs_filter.is_err() {
-        return Err(MapperError::new(format!(
+        return Err(ParseSqlError::new(format!(
             "failed to parse filter: {}",
             rs_filter.err().unwrap()
         )));
     }
     let rs_executors = create_executor(record_id_array, &parsed_sql.fields());
     if rs_executors.is_err() {
-        return Err(MapperError::new(format!(
+        return Err(ParseSqlError::new(format!(
             "failed to parse executors: {}",
             rs_executors.err().unwrap()
         )));
@@ -106,11 +106,7 @@ fn gen_mapper<'a>(parsed_sql: &ParsedSql) -> Result<Mapper<'a>, MapperError> {
     })
 }
 
-fn create_iterator<'a>(id: u16) -> DataIterator<'a> {
-    store::create_iterator(id)
-}
-
-fn create_filter(entities: &[ExprEntity]) -> Result<Filter, MapperError> {
+fn create_filter(entities: &[ExprEntity]) -> Result<Filter, ParseSqlError> {
     if entities.is_empty() {
         return Ok(Filter::Empty);
     }
@@ -141,7 +137,7 @@ fn create_filter(entities: &[ExprEntity]) -> Result<Filter, MapperError> {
     if tmp.len() == 1 {
         Ok(tmp.first().unwrap().clone())
     } else {
-        Err(MapperError::new(
+        Err(ParseSqlError::new(
             "the last element is not found.".to_owned(),
         ))
     }
@@ -150,7 +146,7 @@ fn create_filter(entities: &[ExprEntity]) -> Result<Filter, MapperError> {
 fn create_executor(
     record_id_array: &Vec<u16>,
     entities: &Vec<ExprEntity>,
-) -> Result<Vec<Executor>, MapperError> {
+) -> Result<Vec<Executor>, ParseSqlError> {
     let mut executors = vec![];
     for entity in entities {
         let rs = conv_as_executor(entity, record_id_array);
@@ -163,9 +159,14 @@ fn create_executor(
     Ok(executors)
 }
 
-fn conv_as_executor(entity: &ExprEntity, record_id_array: &Vec<u16>) -> Result<Executor, MapperError> {
+fn conv_as_executor(
+    entity: &ExprEntity,
+    record_id_array: &Vec<u16>,
+) -> Result<Executor, ParseSqlError> {
     let fetcher = match entity {
-        ExprEntity::Field(field_id) => Executor::Fetch(*record_id_array.first().unwrap(), *field_id),
+        ExprEntity::Field(field_id) => {
+            Executor::Fetch(*record_id_array.first().unwrap(), *field_id)
+        }
         ExprEntity::FieldWithTab(record_id, field_id) => Executor::Fetch(*record_id, *field_id),
         ExprEntity::Function(func_name, args) => {
             if func_name.starts_with('_') {
@@ -180,14 +181,14 @@ fn conv_as_executor(entity: &ExprEntity, record_id_array: &Vec<u16>) -> Result<E
                         return Err(rs.err().unwrap());
                     }
                 } else {
-                    return Err(MapperError::new(format!("unknown func: {:?}", func_name)));
+                    return Err(ParseSqlError::new(format!("unknown func: {:?}", func_name)));
                 }
             } else {
-                return Err(MapperError::new(format!("unknown func: {:?}", func_name)));
+                return Err(ParseSqlError::new(format!("unknown func: {:?}", func_name)));
             }
         }
         _ => {
-            return Err(MapperError::new(format!(
+            return Err(ParseSqlError::new(format!(
                 "cannot hit this case: {:?}",
                 entity
             )));
@@ -199,7 +200,7 @@ fn conv_as_executor(entity: &ExprEntity, record_id_array: &Vec<u16>) -> Result<E
 fn parse_args_fetchers(
     args: &Vec<ExprEntity>,
     record_id_array: &Vec<u16>,
-) -> Result<Vec<Executor>, MapperError> {
+) -> Result<Vec<Executor>, ParseSqlError> {
     let mut args_fetchers = vec![];
     let mut hit_error = false;
     args.iter()
@@ -212,7 +213,7 @@ fn parse_args_fetchers(
             }
         });
     if hit_error {
-        Err(MapperError::new(format!(
+        Err(ParseSqlError::new(format!(
             "failed to parse args: {:?}",
             args
         )))

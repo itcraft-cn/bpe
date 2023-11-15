@@ -33,10 +33,13 @@ fn gen_new_data() {
     let core_ids = core_affinity::get_core_ids().unwrap();
     core_affinity::set_for_current(core_ids[core_ids.len() - 1]);
     log::info!("thread:{} started", thread::current().name().unwrap());
-    if let Some((id1, _id2)) = define_tables() {
+    if let Some((id1, _id2)) = define_records() {
         if let Some(aggregate_id) = def_aggregate(AGGREGATE_SQL, |_data| {}) {
+            log::info!("define aggregate: {}", aggregate_id);
             let opt = def_mapper_bind_aggregate(FILTER_SQL, aggregate_id);
-            if opt.is_none() {
+            if let Some(mapper_id) = opt {
+                log::info!("define mapper: {}", mapper_id);
+            } else {
                 log::warn!("def_mapper_bind_aggregate failed");
                 return;
             }
@@ -56,7 +59,7 @@ fn gen_new_data() {
     }
 }
 
-fn define_tables() -> Option<(u16, u16)> {
+fn define_records() -> Option<(u16, u16)> {
     let id1;
     let id2;
     if let Some(id) = def_incoming(
@@ -76,7 +79,7 @@ fn define_tables() -> Option<(u16, u16)> {
         id1 = id;
         log::info!("defined incoming: {}", id1);
     } else {
-        log::warn!("failed to define incoming table");
+        log::warn!("failed to define incoming record");
         return None;
     }
     if let Some(id) = def_stream(
@@ -96,7 +99,7 @@ fn define_tables() -> Option<(u16, u16)> {
         id2 = id;
         log::info!("defined stream: {}", id2);
     } else {
-        log::warn!("failed to define stream table");
+        log::warn!("failed to define stream record");
         return None;
     }
     Some((id1, id2))

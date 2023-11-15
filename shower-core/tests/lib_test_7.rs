@@ -23,7 +23,7 @@ const AGGREGATE_SQL: &str = r#"
 fn test_new_proc() {
     env::set_var("SHOWER_HOME", "/home/helly/code/rust/shower");
     start();
-    if let Some((id1, _id2)) = define_tables() {
+    if let Some((id1, _id2)) = define_records() {
         if let Some(aggregate_id) = def_aggregate(AGGREGATE_SQL, |data| {
             let len = data.len();
             log::info!("data len: [{}]", data.len());
@@ -45,7 +45,7 @@ fn test_new_proc() {
     stop();
 }
 
-fn define_tables() -> Option<(u16, u16)> {
+fn define_records() -> Option<(u16, u16)> {
     let id1;
     let id2;
     if let Some(id) = def_incoming(
@@ -61,14 +61,14 @@ fn define_tables() -> Option<(u16, u16)> {
         id1 = id;
         log::info!("defined incoming: {}", id1);
     } else {
-        log::warn!("failed to define incoming table");
+        log::warn!("failed to define incoming record");
         return None;
     }
     if let Some(id) = def_stream("stream", vec![Column::new_long("a")]) {
         id2 = id;
         log::info!("defined stream: {}", id2);
     } else {
-        log::warn!("failed to define stream table");
+        log::warn!("failed to define stream record");
         return None;
     }
     Some((id1, id2))

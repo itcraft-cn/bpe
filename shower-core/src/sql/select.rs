@@ -21,19 +21,19 @@ fn parse_select_statement(select_stat: Select<'_>) -> Option<ParsedSql> {
     check_forbidden_statement(&select_stat, &mut issues);
     if issues.is_empty() {
         // 识别表名
-        let tables = parse_select_target(&select_stat.table_references, &mut issues);
-        if check_table_invalid(&tables) {
+        let records = parse_select_target(&select_stat.table_references, &mut issues);
+        if check_record_invalid(&records) {
             return None;
         }
-        let table = tables[0];
+        let record = records[0];
         // 辨识过滤条件
-        let filters = parse_select_condition(&select_stat.where_, table, &mut issues);
+        let filters = parse_select_condition(&select_stat.where_, record, &mut issues);
         // 限制数据范围
         let limit_range = parse_select_limitor(&select_stat.limit, &mut issues);
         // 辨识字段
-        let fields = parse_select_fields(&select_stat.select_exprs, table, &mut issues);
+        let fields = parse_select_fields(&select_stat.select_exprs, record, &mut issues);
         if issues.is_empty() {
-            Some(ParsedSql::new(tables, filters, limit_range, fields))
+            Some(ParsedSql::new(records, filters, limit_range, fields))
         } else {
             for issue in issues {
                 log::warn!("hit issue: [{}]", issue);
@@ -45,14 +45,14 @@ fn parse_select_statement(select_stat: Select<'_>) -> Option<ParsedSql> {
     }
 }
 
-fn check_table_invalid(tables: &Vec<u16>) -> bool {
-    if tables.is_empty() {
-        log::warn!("no tables found in sql query");
+fn check_record_invalid(records: &Vec<u16>) -> bool {
+    if records.is_empty() {
+        log::warn!("no records found in sql query");
         true
-    } else if tables.len() != 1 {
-        log::warn!("not support multi table select, skipping");
-        for table in tables {
-            log::warn!("table id in sql:{}", table);
+    } else if records.len() != 1 {
+        log::warn!("not support multi record select, skipping");
+        for record in records {
+            log::warn!("record id in sql:{}", record);
         }
         true
     } else {
@@ -75,10 +75,10 @@ fn check_forbidden_statement(select_stat: &Select<'_>, issues: &mut Vec<String>)
 }
 
 fn parse_select_target(
-    table_references: &Option<Vec<TableReference<'_>>>,
+    record_references: &Option<Vec<TableReference<'_>>>,
     issues: &mut Vec<String>,
 ) -> Vec<u16> {
-    if let Some(tab_vec) = table_references {
+    if let Some(tab_vec) = record_references {
         let mut tab_ref_vec = vec![];
         for tab in tab_vec {
             if let Some(value) = parse_tab_ref(tab, &mut tab_ref_vec) {
@@ -88,7 +88,7 @@ fn parse_select_target(
         }
         tab_ref_vec
     } else {
-        issues.push(String::from("need a table name"));
+        issues.push(String::from("need a record name"));
         vec![]
     }
 }

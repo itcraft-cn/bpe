@@ -1,11 +1,7 @@
-use crate::{aux::SimpleU16Map, consts::U8_DATA_MAX_SIZE};
+use crate::{aux::SimpleU16Map, consts::U8_DATA_MAX_SIZE, id::next_record_id};
 use hashbrown::HashMap;
-use std::{
-    cmp::Ordering as CmpOrdering,
-    sync::atomic::{AtomicU16, Ordering},
-};
+use std::cmp::Ordering as CmpOrdering;
 
-static mut WALKER: Option<AtomicU16> = None;
 static mut RECORD_MAP: Option<SimpleU16Map<Record>> = None;
 static mut NAME_MAP: Option<HashMap<String, u16>> = None;
 
@@ -193,7 +189,6 @@ impl Record {
 
 pub(crate) fn init_record_store() {
     unsafe {
-        WALKER = Some(AtomicU16::new(1));
         RECORD_MAP = Some(SimpleU16Map::new());
         NAME_MAP = Some(HashMap::new());
     }
@@ -206,7 +201,7 @@ pub(crate) fn insert_record(
 ) -> Option<u16> {
     unsafe {
         let record_map = RECORD_MAP.as_mut().unwrap();
-        let id = WALKER.as_ref().unwrap().fetch_add(1, Ordering::SeqCst);
+        let id = next_record_id();
         record_map.insert(
             id,
             Record::new(name, id, record_type, Column::copy_from_columns(&columns)),

@@ -5,6 +5,7 @@ use crate::{
     data::{check_id, init_record_store, insert_record, Column, RecordType, U8Bytes},
     ffi::FfiFunc,
     func::FnHolder,
+    id::init_walker,
     logger::init_logger,
     mapper::{call_mapper, define_mapper, init_mapper_store},
     store::insert,
@@ -35,6 +36,7 @@ fn actual_start() -> bool {
 
     unsafe {
         DEBUG = cfg.fetch_cfg_bool(KEY_DEV_MODE);
+        init_walker();
         init_mapper_store();
         init_aggregate_store();
         init_record_store();
