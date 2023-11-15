@@ -26,7 +26,7 @@ impl U8Bytes {
         }
     }
     pub fn new_from_vec(id: u16, data_len: usize, vec: Vec<u8>) -> U8Bytes {
-        let mut bytes = [0u8; U8_DATA_MAX_SIZE];
+        let mut bytes = [0_u8; U8_DATA_MAX_SIZE];
         let slice = vec.as_slice();
         match slice.len().cmp(&U8_DATA_MAX_SIZE) {
             CmpOrdering::Less => copy(slice.len(), &mut bytes, slice),
@@ -39,7 +39,7 @@ impl U8Bytes {
         }
     }
     pub fn new_from_slice(id: u16, data_len: usize, slice: &[u8]) -> U8Bytes {
-        let mut bytes = [0u8; U8_DATA_MAX_SIZE];
+        let mut bytes = [0_u8; U8_DATA_MAX_SIZE];
         match slice.len().cmp(&U8_DATA_MAX_SIZE) {
             CmpOrdering::Less => copy(slice.len(), &mut bytes, slice),
             CmpOrdering::Equal | CmpOrdering::Greater => copy(U8_DATA_MAX_SIZE, &mut bytes, slice),
@@ -123,7 +123,7 @@ impl Column {
 
     fn copy_from_columns(columns: &[Column]) -> Vec<Column> {
         let mut target = vec![];
-        let mut offset = 0usize;
+        let mut offset = 0_usize;
         for col_with_id in columns.iter().enumerate() {
             let mut column = col_with_id.1.clone();
             column.idx = col_with_id.0 as u16 + 1;

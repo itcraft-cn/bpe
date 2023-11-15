@@ -2,7 +2,7 @@ const TINY_SMALL_F64: f64 = 0.00000001;
 
 #[derive(Debug, Clone)]
 pub(crate) enum Element {
-    Long(u64),
+    Long(i64),
     Double(f64),
     _Str(&'static [u8], usize),
 }

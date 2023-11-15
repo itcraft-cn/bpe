@@ -111,24 +111,3 @@ impl SimpleU16Entry {
         }
     }
 }
-
-#[cfg(test)]
-mod tests {
-    use super::{fetch_f64, fetch_i64, fill_f64, fill_i64};
-    use crate::utest::base::test_init;
-
-    #[test]
-    fn test() {
-        test_init();
-        let mut array = [0_u8; 8];
-        let slice = array.as_mut_slice();
-        let i64v = 1234;
-        fill_i64(slice, i64v);
-        let fetched = fetch_i64(slice);
-        log::info!("{},{}", i64v, fetched);
-        let f64v = 1234.5678;
-        fill_f64(slice, f64v);
-        let fetched = fetch_f64(slice);
-        log::info!("{},{}", f64v, fetched);
-    }
-}

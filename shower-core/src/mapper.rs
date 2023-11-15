@@ -276,13 +276,7 @@ fn op_eq(slice: &'static [u8], id: u16, columns: &[Column], v1: &Filter, v2: &Fi
     compare_slice_val(slice, id, columns, v1, v2, eq)
 }
 #[inline]
-fn op_gt_eq(
-    slice: &'static [u8],
-    id: u16,
-    columns: &[Column],
-    v1: &Filter,
-    v2: &Filter,
-) -> bool {
+fn op_gt_eq(slice: &'static [u8], id: u16, columns: &[Column], v1: &Filter, v2: &Filter) -> bool {
     compare_slice_val(slice, id, columns, v1, v2, gt_eq)
 }
 #[inline]
@@ -290,13 +284,7 @@ fn op_gt(slice: &'static [u8], id: u16, columns: &[Column], v1: &Filter, v2: &Fi
     compare_slice_val(slice, id, columns, v1, v2, gt)
 }
 #[inline]
-fn op_lt_eq(
-    slice: &'static [u8],
-    id: u16,
-    columns: &[Column],
-    v1: &Filter,
-    v2: &Filter,
-) -> bool {
+fn op_lt_eq(slice: &'static [u8], id: u16, columns: &[Column], v1: &Filter, v2: &Filter) -> bool {
     compare_slice_val(slice, id, columns, v1, v2, lt_eq)
 }
 #[inline]
@@ -364,7 +352,7 @@ where
 #[inline]
 fn fetch_expacted(v_type: &ValType) -> Option<Element> {
     match v_type {
-        ValType::Int(val) => Some(Element::Long(*val as u64)),
+        ValType::Int(val) => Some(Element::Long(*val)),
         ValType::Float(val) => Some(Element::Double(*val)),
         _ => {
             log::warn!(
@@ -398,10 +386,10 @@ impl<'a> Mapper<'a> {
     }
 
     fn fetch(&self, id: u16, columns: &Vec<Column>, slice: &'static [u8]) -> [u8; 512] {
-        let mut result = [0u8; 512];
+        let mut result = [0_u8; 512];
         let target = result.as_mut_slice();
         let mut val;
-        let mut offset = 0usize;
+        let mut offset = 0_usize;
         let len = self.executors.len();
         for i in 0..len {
             val = self.executors[i].fetch(id, columns, slice);

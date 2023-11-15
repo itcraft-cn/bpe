@@ -24,7 +24,7 @@ pub use crate::core::def_aggregate_ffi;
 pub use crate::core::def_incoming;
 pub use crate::core::def_mapper;
 pub use crate::core::def_mapper_ffi;
-pub use crate::core::def_mapper_with_aggregate;
+pub use crate::core::def_mapper_bind_aggregate;
 pub use crate::core::def_stream;
 pub use crate::core::new_data;
 pub use crate::core::start;

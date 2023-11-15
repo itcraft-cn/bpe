@@ -65,7 +65,7 @@ fn call_py_func(py: Python, callback: &PyObject, data: Vec<[u8; 512]>) {
 
 fn conv_array(data: Vec<[u8; 512]>) -> Vec<u8> {
     let len = data.len();
-    let mut vec = vec![0u8; len * 512];
+    let mut vec = vec![0_u8; len * 512];
     for i in 0..len {
         vec[i * 512..(i + 1) * 512].copy_from_slice(&data[i]);
     }

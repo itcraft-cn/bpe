@@ -1,5 +1,5 @@
 use crate::{
-    aux::{fetch_f64, fetch_u64},
+    aux::{fetch_f64, fetch_i64},
     data::{Column, ColumnType},
     element::Element,
     ffi::FfiFunc,
@@ -32,7 +32,7 @@ pub(crate) fn fetch_val(
     match column.data_type() {
         ColumnType::Long => {
             let offset = column.offset();
-            Element::Long(fetch_u64(&slice[offset..offset + 8]))
+            Element::Long(fetch_i64(&slice[offset..offset + 8]))
         }
         ColumnType::Double => {
             let offset = column.offset();

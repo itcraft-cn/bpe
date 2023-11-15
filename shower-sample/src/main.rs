@@ -1,4 +1,7 @@
-use shower::{def_incoming, def_mapper, new_data, start, stop, Column, U8Bytes};
+use shower::{
+    def_aggregate, def_incoming, def_mapper_bind_aggregate, def_stream, new_data, start, stop,
+    Column, U8Bytes,
+};
 use std::{
     env, ptr, thread,
     time::{Duration, SystemTime},
@@ -6,11 +9,17 @@ use std::{
 
 const LOOP_SIZE: usize = 100000;
 
-const SQL: &str = r#"
+const FILTER_SQL: &str = r#"
     SELECT demo.a, demo.b, demo.c, _sub(_add(demo.d, demo.d), demo.e)
     FROM demo
     WHERE (demo.a = 1 AND demo.b = 2) OR (demo.a = 3 AND demo.b = 4)
     LIMIT 10
+    "#;
+const AGGREGATE_SQL: &str = r#"
+    select _maxl(stream.a), _minl(stream.a), _suml(stream.a),
+           _maxd(stream.a), _mind(stream.a), _sumd(stream.a),
+           _avgd(stream.a), _countl(stream.a)
+    from stream
     "#;
 
 pub fn main() {
@@ -24,6 +33,24 @@ fn gen_new_data() {
     let core_ids = core_affinity::get_core_ids().unwrap();
     core_affinity::set_for_current(core_ids[core_ids.len() - 1]);
     log::info!("thread:{} started", thread::current().name().unwrap());
+    if let Some((id1, _id2)) = define_tables() {
+        def_aggregate(AGGREGATE_SQL, |_data| {});
+        def_mapper_bind_aggregate(FILTER_SQL, 1);
+        let u8data = gen_u8_bytes(id1);
+        for _ in 1..=LOOP_SIZE {
+            let ret = new_data(&u8data);
+            if ret {
+                log::debug!("send success");
+            } else {
+                log::warn!("send failed");
+            }
+        }
+    }
+}
+
+fn define_tables() -> Option<(u16, u16)> {
+    let id1;
+    let id2;
     if let Some(id) = def_incoming(
         "demo",
         vec![
@@ -38,22 +65,37 @@ fn gen_new_data() {
             Column::new_string("i", 448),
         ],
     ) {
-        log::info!("assigned id:{}", id);
-        let u8data = gen_u8_bytes(id);
-        def_mapper(SQL, |_vec| {});
-        for _ in 1..=LOOP_SIZE {
-            let ret = new_data(&u8data);
-            if ret {
-                log::debug!("send success");
-            } else {
-                log::warn!("send failed");
-            }
-        }
+        id1 = id;
+        log::info!("defined incoming: {}", id1);
+    } else {
+        log::warn!("failed to define incoming table");
+        return None;
     }
+    if let Some(id) = def_stream(
+        "stream",
+        vec![
+            Column::new_long("a"),
+            Column::new_long("b"),
+            Column::new_long("c"),
+            Column::new_long("d"),
+            Column::new_long("e"),
+            Column::new_long("f"),
+            Column::new_long("g"),
+            Column::new_long("h"),
+            Column::new_long("i"),
+        ],
+    ) {
+        id2 = id;
+        log::info!("defined stream: {}", id2);
+    } else {
+        log::warn!("failed to define stream table");
+        return None;
+    }
+    Some((id1, id2))
 }
 
 fn gen_u8_bytes(id: u16) -> U8Bytes {
-    let mut u8array = [0u8; 512];
+    let mut u8array = [0_u8; 512];
     let slice = u8array.as_mut_slice();
     fill_u64(&mut slice[0..8], 1);
     fill_u64(&mut slice[8..16], 2);
@@ -77,7 +119,7 @@ where
         "cost time: {:?}ms / {:?}ns, use {:?}ns per operation",
         duration.as_millis(),
         duration.as_nanos(),
-        1f64 * (duration.as_nanos() as f64) / (LOOP_SIZE as f64)
+        1_f64 * (duration.as_nanos() as f64) / (LOOP_SIZE as f64)
     );
 }
 

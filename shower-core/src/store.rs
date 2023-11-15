@@ -93,7 +93,7 @@ struct WrappedArray {
 impl WrappedArray {
     fn new(size: usize) -> Self {
         WrappedArray {
-            data: vec![0u8; size],
+            data: vec![0_u8; size],
             size,
             mask: size - 1,
             walker: 0,
@@ -153,7 +153,7 @@ mod tests {
     fn test2() {
         test_init();
         for _ in 0..100 {
-            insert(&U8Bytes::new_from_vec(16, 288, vec![0u8; 288]));
+            insert(&U8Bytes::new_from_vec(16, 288, vec![0_u8; 288]));
         }
     }
 
@@ -161,7 +161,7 @@ mod tests {
     fn test3() {
         test_init();
         for _ in 0..100 {
-            insert(&U8Bytes::new_from_vec(32, 288, vec![0u8; 288]));
+            insert(&U8Bytes::new_from_vec(32, 288, vec![0_u8; 288]));
         }
         let iterator = create_iterator(32);
         iterator.for_each(|slice| log::info!("p[{:?}]->[u8; {}]", slice.as_ptr(), slice.len()));

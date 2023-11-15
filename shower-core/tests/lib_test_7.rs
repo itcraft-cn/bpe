@@ -1,14 +1,45 @@
-use shower::{
-    def_aggregate, def_incoming, def_mapper_with_aggregate, new_data, start, stop, Column, U8Bytes,
-};
-use std::{env, ptr, thread};
+mod test_aux;
 
-const LOOP_SIZE: usize = 10;
+use shower::{
+    def_aggregate, def_incoming, def_mapper_bind_aggregate, def_stream, new_data, start, stop,
+    Column, U8Bytes,
+};
+use std::{env, thread};
+use test_aux::fill_i64;
+
+const LOOP_SIZE: usize = 3;
+
+const FILTER_SQL: &str = r#"
+    select demo.a from demo limit 10
+    "#;
+const AGGREGATE_SQL: &str = r#"
+    select _maxl(stream.a), _minl(stream.a), _suml(stream.a),
+           _maxd(stream.a), _mind(stream.a), _sumd(stream.a),
+           _avgd(stream.a), _countl(stream.a)
+    from stream
+    "#;
 
 #[test]
 fn test_new_proc() {
     env::set_var("SHOWER_HOME", "/home/helly/code/rust/shower");
     start();
+    if let Some((id1, _id2)) = define_tables() {
+        def_aggregate(AGGREGATE_SQL, |data| {
+            let len = data.len();
+            log::info!("data len: [{}]", data.len());
+            if len == 1 {
+                log::info!("data: {:?}", &data[0].as_slice()[0..64]);
+            }
+        });
+        def_mapper_bind_aggregate(FILTER_SQL, 1);
+        gen_new_data(id1);
+    }
+    stop();
+}
+
+fn define_tables() -> Option<(u16, u16)> {
+    let id1;
+    let id2;
     if let Some(id) = def_incoming(
         "demo",
         vec![
@@ -19,14 +50,20 @@ fn test_new_proc() {
             Column::new_string("e", 240),
         ],
     ) {
-        log::info!("defined record: {:?}", id);
-        def_aggregate("select 1 from 1", |data| {
-            log::info!("data len: [{}]", data.len());
-        });
-        def_mapper_with_aggregate("select demo.a from demo limit 1", 1);
-        gen_new_data(id);
+        id1 = id;
+        log::info!("defined incoming: {}", id1);
+    } else {
+        log::warn!("failed to define incoming table");
+        return None;
     }
-    stop();
+    if let Some(id) = def_stream("stream", vec![Column::new_long("a")]) {
+        id2 = id;
+        log::info!("defined stream: {}", id2);
+    } else {
+        log::warn!("failed to define stream table");
+        return None;
+    }
+    Some((id1, id2))
 }
 
 fn gen_new_data(id: u16) {
@@ -45,18 +82,11 @@ fn gen_new_data(id: u16) {
 }
 
 fn gen_u8_bytes(id: u16) -> U8Bytes {
-    let mut u8array = [0u8; 512];
+    let mut u8array = [0_u8; 512];
     let slice = u8array.as_mut_slice();
-    fill_u64(&mut slice[0..8], 1);
-    fill_u64(&mut slice[8..16], 2);
-    fill_u64(&mut slice[16..24], 3);
-    fill_u64(&mut slice[24..32], 4);
+    fill_i64(&mut slice[0..8], 1);
+    fill_i64(&mut slice[8..16], 2);
+    fill_i64(&mut slice[16..24], 3);
+    fill_i64(&mut slice[24..32], 4);
     U8Bytes::new_from_vec(id, 512, Vec::from(u8array))
-}
-
-#[inline]
-pub(crate) fn fill_u64(slice: &mut [u8], data: u64) {
-    let p_val = ptr::addr_of!(*slice);
-    let p_u64 = p_val as *mut u64;
-    unsafe { *p_u64 = data };
 }

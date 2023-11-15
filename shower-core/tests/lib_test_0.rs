@@ -25,7 +25,7 @@ fn gen_new_data() {
             Column::new_string("e", 240),
         ],
     ) {
-        let u8data = U8Bytes::new_from_vec(id, 288, vec![0u8; 288]);
+        let u8data = U8Bytes::new_from_vec(id, 288, vec![0_u8; 288]);
         for _ in 1..=LOOP_SIZE {
             let ret = new_data(&u8data);
             if ret {

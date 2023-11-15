@@ -10,7 +10,7 @@ fn test_new_proc() {
     env::set_var("SHOWER_HOME", "/home/helly/code/rust/shower");
     start();
     def_mapper(SQL, |_vec| {});
-    let u8data = U8Bytes::new_from_vec(1, 64, vec![0u8; 64]);
+    let u8data = U8Bytes::new_from_vec(1, 64, vec![0_u8; 64]);
     new_data(&u8data);
     stop();
 }

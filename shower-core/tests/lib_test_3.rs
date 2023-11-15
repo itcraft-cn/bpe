@@ -23,7 +23,7 @@ fn gen_new_data() {
     let core_ids = core_affinity::get_core_ids().unwrap();
     core_affinity::set_for_current(core_ids[core_ids.len() - 1]);
     log::info!("thread:{} started", thread::current().name().unwrap());
-    let u8data = U8Bytes::new_from_vec(1, 288, vec![0u8; 288]);
+    let u8data = U8Bytes::new_from_vec(1, 288, vec![0_u8; 288]);
     for _ in 1..=LOOP_SIZE {
         let ret = new_data(&u8data);
         if ret {

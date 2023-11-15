@@ -83,10 +83,10 @@ where
     define_mapper(sql, FnHolder::Func(Box::new(func)))
 }
 
-pub fn def_mapper_with_aggregate(sql: &str, aggregate_id: u16) -> bool {
+pub fn def_mapper_bind_aggregate(sql: &str, aggregate_id: u16) -> bool {
     let opt_aggregate = search_aggregate(aggregate_id);
     if let Some(_wrapped) = opt_aggregate {
-        let f = move |_data| call_aggregate(aggregate_id, _wrapped, _data);
+        let f = move |_data| call_aggregate(_wrapped, _data);
         define_mapper(sql, FnHolder::Lambda(Box::new(f)))
     } else {
         false

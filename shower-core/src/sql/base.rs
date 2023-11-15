@@ -13,8 +13,13 @@ where
 {
     let ast_opt = parse_sql_statement(sql, options);
     if let Some(ast) = ast_opt {
-        f(ast)
+        let opt = f(ast);
+        if opt.is_none() {
+            log::warn!("failed to parse sql [{}]", sql);
+        }
+        opt
     } else {
+        log::warn!("failed to parse sql [{}]", sql);
         None
     }
 }
