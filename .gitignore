@@ -8,3 +8,5 @@ pyvenv.cfg
 
 perf.data*
 flamegraph*
+*.log
+

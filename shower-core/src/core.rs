@@ -30,7 +30,7 @@ pub fn start() -> bool {
 
 fn actual_start() -> bool {
     load_config();
-    init_logger(get_config());
+    init_logger();
 
     let cfg = get_config();
 

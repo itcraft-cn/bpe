@@ -1,7 +1,7 @@
 use crate::{
     aux::SimpleU16Map,
     cfg::get_config,
-    consts::{KEY_VEC_SIZE, U8_DATA_MAX_SIZE},
+    consts::{DEFAULT_VEC_SIZE, KEY_VEC_SIZE, U8_DATA_MAX_SIZE},
     data::U8Bytes,
 };
 use std::sync::Once;
@@ -18,7 +18,9 @@ pub(crate) fn insert(data: &U8Bytes) {
 fn initial() {
     unsafe {
         MAP.get_or_insert(SimpleU16Map::new());
-        VEC_SIZE = get_config().fetch_cfg_usize(KEY_VEC_SIZE);
+        VEC_SIZE = get_config()
+            .fetch_cfg_usize(KEY_VEC_SIZE)
+            .unwrap_or(DEFAULT_VEC_SIZE);
     }
 }
 

@@ -1,12 +1,5 @@
 # dev mode
 dev_mode = true
 
-# log
-log_dev_config_file = "cfg/log4rs.dev.yaml"
-log_prod_config_file = "cfg/log4rs.yaml"
-
-# settings
-queue_capacity = 8388608
-once_fetch_range = 16384
-
 vec_size = 1048576
+log_dir = "/tmp"

@@ -4,5 +4,5 @@ use std::env;
 pub(crate) fn test_init() {
     env::set_var(SHOWER_ENV_HOME_KEY, "/home/helly/code/rust/shower");
     cfg::load_config();
-    logger::init_logger(cfg::get_config());
+    logger::init_logger();
 }

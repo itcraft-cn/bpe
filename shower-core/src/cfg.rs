@@ -11,32 +11,47 @@ pub(crate) struct ShowerConfig {
 }
 
 impl ShowerConfig {
-    pub(crate) fn fetch_cfg_str(&self, key: &str) -> String {
-        self.map.get(key).unwrap().to_owned()
+    pub(crate) fn fetch_cfg_str(&self, key: &str) -> Option<&String> {
+        self.map.get(key)
     }
 
     pub(crate) fn fetch_cfg_bool(&self, key: &str) -> bool {
-        "true".eq_ignore_ascii_case(self.fetch_cfg_str(key).as_str())
+        if let Some(val) = self.fetch_cfg_str(key) {
+            "true".eq_ignore_ascii_case(val.as_str())
+        } else {
+            false
+        }
     }
 
-    pub(crate) fn fetch_cfg_usize(&self, key: &str) -> usize {
-        self.fetch_cfg_str(key).as_str().parse::<usize>().unwrap()
+    pub(crate) fn fetch_cfg_usize(&self, key: &str) -> Option<usize> {
+        if let Some(val) = self.fetch_cfg_str(key) {
+            if let Ok(v) = val.as_str().parse::<usize>() {
+                Some(v)
+            } else {
+                None
+            }
+        } else {
+            None
+        }
     }
 }
 
 pub(crate) fn load_config() {
     static INIT: Once = Once::new();
     INIT.call_once(|| {
+        let mut map = HashMap::new();
         let cfg_file = compose_file_name_with_base_dir(SHOWER_FILENAME_CONFIG_TOML);
-        let cfg_map = Config::builder()
+        if let Ok(config) = Config::builder()
             .add_source(File::with_name(cfg_file.as_str()))
             .build()
-            .unwrap()
-            .try_deserialize::<std::collections::HashMap<String, String>>()
-            .unwrap();
-        let mut map = HashMap::new();
-        for iter in cfg_map.iter() {
-            map.insert(iter.0.clone(), iter.1.clone());
+        {
+            if let Ok(cfg_map) =
+                config.try_deserialize::<std::collections::HashMap<String, String>>()
+            {
+                for iter in cfg_map.iter() {
+                    map.insert(iter.0.clone(), iter.1.clone());
+                }
+            }
         }
         CONFIG_STORE.set(ShowerConfig { map });
     });
