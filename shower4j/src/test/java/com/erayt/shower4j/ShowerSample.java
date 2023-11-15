@@ -10,6 +10,7 @@ import java.util.Scanner;
  * <p>
  * Created on 10/25/23 2:10 PM
  */
+// TODO: need to fix it
 public class ShowerSample {
     private static final Logger LOGGER = LoggerFactory.getLogger(ShowerSample.class);
 
@@ -30,10 +31,10 @@ public class ShowerSample {
 
     public static void main(String[] args) {
         Shower.start();
-        if (Shower.defActionWithCallback(SQL, ShowerSample::listenData)) {
-            waitCmd();
-        } else {
+        if (Shower.defMapper(SQL, ShowerSample::listenData) == -1) {
             LOGGER.warn("failed to def action");
+        } else {
+            waitCmd();
         }
         Shower.stop();
     }

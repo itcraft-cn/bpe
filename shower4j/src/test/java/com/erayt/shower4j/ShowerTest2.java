@@ -9,9 +9,10 @@ import org.slf4j.LoggerFactory;
  * <p>
  * Created on 10/25/23 2:10 PM
  */
-public class ShowerTest {
-    private static final Logger LOGGER = LoggerFactory.getLogger(ShowerTest.class);
+public class ShowerTest2 {
+    private static final Logger LOGGER = LoggerFactory.getLogger(ShowerTest2.class);
     private static final String SQL = "select demo.a from demo limit 10";
+    private static final String SQL2 = "select _suml(stream.a) from stream";
 
     @Test
     public void test() {
@@ -21,7 +22,13 @@ public class ShowerTest {
             LOGGER.warn("failed to def record");
             return;
         }
-        int mapperId = Shower.defMapper(SQL, (data, size) -> LOGGER.info("{}, {}", data, size));
+        int recordId2 = Shower.defStream("stream", new String[]{"a"}, new int[]{0}, new int[]{0});
+        if (recordId2 == -1) {
+            LOGGER.warn("failed to def record");
+            return;
+        }
+        int aggregateId = Shower.defAggregate(SQL2, (data, size) -> LOGGER.info("{}, {}", data, size));
+        int mapperId = Shower.defMapperBindAggregate(SQL, aggregateId);
         if (mapperId == -1) {
             LOGGER.warn("failed to def mapper");
             return;

@@ -12,9 +12,15 @@ public class Shower {
 
     public native static void stop();
 
+    public native static int defIncoming(String name, String[] names, int[] types, int[] lengths);
+
+    public native static int defStream(String name, String[] names, int[] types, int[] lengths);
+
     public native static boolean newData(int id, byte[] data);
 
-    public native static boolean defAction(String sql);
+    public native static int defMapper(String sql, ShowerCallback callback);
 
-    public native static boolean defActionWithCallback(String sql, ShowerCallback callback);
+    public native static int defMapperBindAggregate(String sql, int aggregateId);
+
+    public native static int defAggregate(String sql, ShowerCallback callback);
 }

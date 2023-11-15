@@ -26,6 +26,7 @@ import java.util.concurrent.atomic.AtomicLong;
 @Warmup(iterations = 10, time = 1)
 @Measurement(iterations = 20, time = 1)
 @OutputTimeUnit(TimeUnit.MICROSECONDS)
+// TODO: need to fix it
 public class ShowerBenchmark {
     private static final String SQL = "select _1.__1 from _1 limit 1";
     private static final byte[] DATA = {
@@ -43,7 +44,7 @@ public class ShowerBenchmark {
     public static void setUp() {
         AtomicLong val = new AtomicLong(0);
         Shower.start();
-        if (!Shower.defActionWithCallback(SQL, (data, size) -> val.getAndAdd(size))) {
+        if (Shower.defMapper(SQL, (data, size) -> val.getAndAdd(size)) == -1) {
             System.exit(1);
         }
     }
