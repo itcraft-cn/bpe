@@ -19,35 +19,36 @@ pub(crate) fn init_aggregate_store() {
     }
 }
 
-pub(crate) fn define_aggregate(sql: &str, func_holder: FnHolder) -> bool {
+pub(crate) fn define_aggregate(sql: &str, func_holder: FnHolder) -> Option<u16> {
     let opt_parsed_sql = parse_select(sql, unsafe { PARSE_OPTIONS.as_ref().unwrap() });
     if let Some(parsed_sql) = opt_parsed_sql {
         if !parsed_sql.filters().is_empty() {
             log::warn!("filter in aggregate is not supported");
-            return false;
+            return None;
         }
         let fields = parsed_sql.fields();
         if fields.is_empty() {
             log::warn!("no field in aggregate");
-            return false;
+            return None;
         }
         if parsed_sql.tables().len() != 1 {
             log::warn!("only support one table in aggregate");
-            return false;
+            return None;
         }
         let stream = get_record(parsed_sql.tables()[0]);
         if stream.is_none() {
             log::warn!("stream {} not found", parsed_sql.tables()[0]);
-            return false;
+            return None;
         }
+        // TODO: need to replace 1 with real id
         let map = unsafe { AGGREGATE_MAP.as_mut().unwrap() };
         map.insert(
             1,
             WrappedAggregate::new(Aggregate { _fields: fields }, func_holder),
         );
-        true
+        Some(1)
     } else {
-        false
+        None
     }
 }
 

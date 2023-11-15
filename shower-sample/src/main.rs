@@ -34,8 +34,16 @@ fn gen_new_data() {
     core_affinity::set_for_current(core_ids[core_ids.len() - 1]);
     log::info!("thread:{} started", thread::current().name().unwrap());
     if let Some((id1, _id2)) = define_tables() {
-        def_aggregate(AGGREGATE_SQL, |_data| {});
-        def_mapper_bind_aggregate(FILTER_SQL, 1);
+        if let Some(aggregate_id) = def_aggregate(AGGREGATE_SQL, |_data| {}) {
+            let opt = def_mapper_bind_aggregate(FILTER_SQL, aggregate_id);
+            if opt.is_none() {
+                log::warn!("def_mapper_bind_aggregate failed");
+                return;
+            }
+        } else {
+            log::warn!("def_aggregate failed");
+            return;
+        }
         let u8data = gen_u8_bytes(id1);
         for _ in 1..=LOOP_SIZE {
             let ret = new_data(&u8data);

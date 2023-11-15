@@ -59,32 +59,36 @@ pub extern "system" fn Java_com_erayt_shower4j_Shower_defMapper<'local>(
     _class: JClass<'local>,
     j_sql: JString<'local>,
     j_callback: JObject<'local>,
-) -> jboolean {
+) -> jint {
     let rs = conv(&env, j_sql);
     if let Ok(sql) = rs {
         let rs = env.get_java_vm();
         if let Ok(vm) = rs {
             let rs = env.new_global_ref(j_callback);
             if let Ok(callback) = rs {
-                def_java_callback(sql, callback, vm) as jboolean
+                if let Some(id) = def_java_callback(sql, callback, vm) {
+                    return id as jint;
+                } else {
+                    -1
+                }
             } else {
                 log::warn!(
                     "failed to create global reference to callback object: {:?}",
                     rs.err().unwrap()
                 );
-                false as jboolean
+                -1
             }
         } else {
             log::warn!("failed to get java vm: {:?}", rs.err().unwrap());
-            false as jboolean
+            -1
         }
     } else {
         log::warn!("def_mapper_with_callback failed: {:?}", rs.err().unwrap());
-        false as jboolean
+        -1
     }
 }
 
-fn def_java_callback(sql: String, callback: GlobalRef, vm: JavaVM) -> bool {
+fn def_java_callback(sql: String, callback: GlobalRef, vm: JavaVM) -> Option<u16> {
     def_mapper_ffi(sql.as_str(), Box::new(JavaFfiFunc { vm, callback }))
 }
 

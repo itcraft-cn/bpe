@@ -24,14 +24,22 @@ fn test_new_proc() {
     env::set_var("SHOWER_HOME", "/home/helly/code/rust/shower");
     start();
     if let Some((id1, _id2)) = define_tables() {
-        def_aggregate(AGGREGATE_SQL, |data| {
+        if let Some(aggregate_id) = def_aggregate(AGGREGATE_SQL, |data| {
             let len = data.len();
             log::info!("data len: [{}]", data.len());
             if len == 1 {
                 log::info!("data: {:?}", &data[0].as_slice()[0..64]);
             }
-        });
-        def_mapper_bind_aggregate(FILTER_SQL, 1);
+        }){
+            let opt = def_mapper_bind_aggregate(FILTER_SQL, aggregate_id);
+            if opt.is_none() {
+                log::warn!("def_mapper_bind_aggregate failed");
+                return;
+            }
+        } else {
+            log::warn!("def_aggregate failed");
+            return;
+        }
         gen_new_data(id1);
     }
     stop();

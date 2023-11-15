@@ -23,7 +23,7 @@ pub(crate) fn init_mapper_store() {
     }
 }
 
-pub(crate) fn define_mapper(sql: &str, func_holder: FnHolder) -> bool {
+pub(crate) fn define_mapper(sql: &str, func_holder: FnHolder) -> Option<u16> {
     let opt_parsed_sql = parse_select(sql, unsafe { PARSE_OPTIONS.as_ref().unwrap() });
     if let Some(parsed_sql) = opt_parsed_sql {
         let rs = gen_mapper(&parsed_sql);
@@ -34,11 +34,11 @@ pub(crate) fn define_mapper(sql: &str, func_holder: FnHolder) -> bool {
             match entry {
                 SimpleU16Entry::Exist(_) => {
                     log::warn!("id {} already exists, sql[{}] is skipped", id, sql);
-                    false
+                    None
                 }
                 SimpleU16Entry::NotExist(_) => {
                     map.insert(id, WrappedMapper::new(mapper, func_holder));
-                    true
+                    Some(id)
                 }
             }
         } else {
@@ -47,11 +47,11 @@ pub(crate) fn define_mapper(sql: &str, func_holder: FnHolder) -> bool {
                 sql,
                 rs.err().unwrap()
             );
-            false
+            None
         }
     } else {
         log::warn!("not supported sql statement: [{}]", sql);
-        false
+        None
     }
 }
 

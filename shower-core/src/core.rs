@@ -76,34 +76,34 @@ fn process_data(data: &U8Bytes) {
     call_mapper(data);
 }
 
-pub fn def_mapper<F>(sql: &str, func: F) -> bool
+pub fn def_mapper<F>(sql: &str, func: F) -> Option<u16>
 where
     F: Fn(Vec<[u8; 512]>) + Send + 'static,
 {
     define_mapper(sql, FnHolder::Func(Box::new(func)))
 }
 
-pub fn def_mapper_bind_aggregate(sql: &str, aggregate_id: u16) -> bool {
+pub fn def_mapper_bind_aggregate(sql: &str, aggregate_id: u16) -> Option<u16> {
     let opt_aggregate = search_aggregate(aggregate_id);
-    if let Some(_wrapped) = opt_aggregate {
-        let f = move |_data| call_aggregate(_wrapped, _data);
+    if let Some(wrapped) = opt_aggregate {
+        let f = move |data| call_aggregate(wrapped, data);
         define_mapper(sql, FnHolder::Lambda(Box::new(f)))
     } else {
-        false
+        None
     }
 }
 
-pub fn def_mapper_ffi(sql: &str, ffi: Box<dyn FfiFunc>) -> bool {
+pub fn def_mapper_ffi(sql: &str, ffi: Box<dyn FfiFunc>) -> Option<u16> {
     define_mapper(sql, FnHolder::FfiFunc(ffi))
 }
 
-pub fn def_aggregate<F>(sql: &str, func: F) -> bool
+pub fn def_aggregate<F>(sql: &str, func: F) -> Option<u16>
 where
     F: Fn(Vec<[u8; 512]>) + Send + 'static,
 {
     define_aggregate(sql, FnHolder::Func(Box::new(func)))
 }
 
-pub fn def_aggregate_ffi(sql: &str, ffi: Box<dyn FfiFunc>) -> bool {
+pub fn def_aggregate_ffi(sql: &str, ffi: Box<dyn FfiFunc>) -> Option<u16> {
     define_aggregate(sql, FnHolder::FfiFunc(ffi))
 }

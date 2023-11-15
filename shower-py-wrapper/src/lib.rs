@@ -23,11 +23,12 @@ fn new_data(id: u16, bdata: &[u8]) -> PyResult<bool> {
 
 #[pyfunction]
 #[allow(dead_code)]
-fn def_mapper(sql: &str, callback: PyObject) -> PyResult<bool> {
-    Ok(shower::def_mapper_ffi(
-        sql,
-        Box::new(PythonFfiFunc { callback }),
-    ))
+fn def_mapper(sql: &str, callback: PyObject) -> PyResult<i32> {
+    if let Some(id) = shower::def_mapper_ffi(sql, Box::new(PythonFfiFunc { callback })) {
+        Ok(id as i32)
+    } else {
+        Ok(-1)
+    }
 }
 
 /// A Python module implemented in Rust.
