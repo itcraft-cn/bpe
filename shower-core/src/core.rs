@@ -2,7 +2,7 @@ use crate::{
     aggregate::{call_aggregate, define_aggregate, init_aggregate_store, search_aggregate},
     cfg::{get_config, load_config},
     consts::KEY_DEV_MODE,
-    data::{check_id, init_record_store, insert_record, Column, RecordType, U8Bytes},
+    data::{check_id, init_record_store, Column, Record, RecordType, U8Bytes},
     ffi::FfiFunc,
     func::FnHolder,
     id::init_walker,
@@ -54,11 +54,11 @@ fn actual_stop() {
 }
 
 pub fn def_incoming(name: &str, columns: Vec<Column>) -> Option<u16> {
-    insert_record(name, RecordType::Incoming, columns)
+    Record::insert_record(name, RecordType::Incoming, columns)
 }
 
 pub fn def_stream(name: &str, columns: Vec<Column>) -> Option<u16> {
-    insert_record(name, RecordType::Stream, columns)
+    Record::insert_record(name, RecordType::Stream, columns)
 }
 
 pub fn new_data(data: &U8Bytes) -> bool {

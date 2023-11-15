@@ -163,6 +163,36 @@ impl Record {
             columns_map: map,
         }
     }
+
+    pub(crate) fn insert_record(
+        name: &str,
+        record_type: RecordType,
+        columns: Vec<Column>,
+    ) -> Option<u16> {
+        unsafe {
+            let record_map = RECORD_MAP.as_mut().unwrap();
+            let id = next_record_id();
+            record_map.insert(
+                id,
+                Record::new(name, id, record_type, Column::copy_from_columns(&columns)),
+            );
+            let name_map = NAME_MAP.as_mut().unwrap();
+            let key = String::from(name);
+            if name_map.contains_key(&key) {
+                log::warn!("Record name {} already exists", name);
+                None
+            } else {
+                name_map.insert(key, id);
+                let (idx, bit) = fetch_idx_bit(id);
+                ID_STORE[idx as usize] |= 1 << bit;
+                Some(id)
+            }
+        }
+    }
+    pub(crate) fn get_record<'a>(id: u16) -> Option<&'a Record> {
+        let map = unsafe { RECORD_MAP.as_ref().unwrap() };
+        map.get(id)
+    }
     pub(crate) fn fetch_record_id(name: &str) -> Option<&u16> {
         unsafe {
             let name_map = NAME_MAP.as_ref().unwrap();
@@ -170,8 +200,15 @@ impl Record {
         }
     }
     pub(crate) fn fetch_field_id(record_id: u16, column_name: &str) -> Option<&u16> {
-        if let Some(record) = get_record(record_id) {
+        if let Some(record) = Record::get_record(record_id) {
             record.column_id(column_name)
+        } else {
+            None
+        }
+    }
+    pub(crate) fn get_column(record_id: u16, column_id: u16) -> Option<&'static Column> {
+        if let Some(record) = Record::get_record(record_id) {
+            record.columns().get((column_id - 1) as usize)
         } else {
             None
         }
@@ -192,37 +229,6 @@ pub(crate) fn init_record_store() {
         RECORD_MAP = Some(SimpleU16Map::new());
         NAME_MAP = Some(HashMap::new());
     }
-}
-
-pub(crate) fn insert_record(
-    name: &str,
-    record_type: RecordType,
-    columns: Vec<Column>,
-) -> Option<u16> {
-    unsafe {
-        let record_map = RECORD_MAP.as_mut().unwrap();
-        let id = next_record_id();
-        record_map.insert(
-            id,
-            Record::new(name, id, record_type, Column::copy_from_columns(&columns)),
-        );
-        let name_map = NAME_MAP.as_mut().unwrap();
-        let key = String::from(name);
-        if name_map.contains_key(&key) {
-            log::warn!("Record name {} already exists", name);
-            None
-        } else {
-            name_map.insert(key, id);
-            let (idx, bit) = fetch_idx_bit(id);
-            ID_STORE[idx as usize] |= 1 << bit;
-            Some(id)
-        }
-    }
-}
-
-pub(crate) fn get_record<'a>(id: u16) -> Option<&'a Record> {
-    let map = unsafe { RECORD_MAP.as_ref().unwrap() };
-    map.get(id)
 }
 
 pub(crate) fn check_id(id: u16) -> bool {

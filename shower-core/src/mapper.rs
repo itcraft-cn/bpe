@@ -1,6 +1,6 @@
 use crate::{
     aux::{SimpleU16Entry, SimpleU16Map},
-    data::{get_record, Column, U8Bytes},
+    data::{Column, Record, U8Bytes},
     element::Element,
     error::ParseSqlError,
     exec::create_executor,
@@ -59,7 +59,7 @@ pub(crate) fn define_mapper(sql: &str, func_holder: FnHolder) -> Option<u16> {
 pub(crate) fn call_mapper(data: &U8Bytes) {
     let id = data.id();
     let opt_mappers = search_mapper(id);
-    let opt_record = get_record(id);
+    let opt_record = Record::get_record(id);
     if opt_mappers.is_none() || opt_record.is_none() {
         return;
     }

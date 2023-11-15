@@ -5,7 +5,7 @@ use shower::{
     Column, U8Bytes,
 };
 use std::{env, thread};
-use test_aux::fill_i64;
+use test_aux::{fetch_f64, fetch_i64, fill_i64};
 
 const LOOP_SIZE: usize = 3;
 
@@ -28,7 +28,19 @@ fn test_new_proc() {
             let len = data.len();
             log::info!("data len: [{}]", data.len());
             if len == 1 {
-                log::info!("data: {:?}", &data[0].as_slice()[0..64]);
+                let slice = data[0].as_slice();
+                log::info!("data: {:?}", &slice[0..64]);
+                log::info!(
+                    "maxl:{}|minl:{}|suml:{}|maxd:{}|mind:{}|sumd:{}|avg:{}|count:{}",
+                    fetch_i64(&slice[0..8]),
+                    fetch_i64(&slice[8..16]),
+                    fetch_i64(&slice[16..24]),
+                    fetch_f64(&slice[24..32]),
+                    fetch_f64(&slice[32..40]),
+                    fetch_f64(&slice[40..48]),
+                    fetch_f64(&slice[48..56]),
+                    fetch_i64(&slice[56..64]),
+                );
             }
         }) {
             let opt = def_mapper_bind_aggregate(FILTER_SQL, aggregate_id);

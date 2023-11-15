@@ -1,6 +1,7 @@
 use crate::{
     aux::{fetch_f64, fetch_i64, fill_f64, fill_i64, SimpleU16Map},
-    data::get_record,
+    data::{ColumnType, Record},
+    element::Element,
     error::ParseSqlError,
     exec::create_executor,
     func::{Executor, FnHolder, Func},
@@ -93,7 +94,7 @@ fn setup_init_val(
                 Ok(())
             }
             Func::MinD => {
-                fill_f64(&mut aggregate_data[offset..offset + 8], f64::MIN);
+                fill_f64(&mut aggregate_data[offset..offset + 8], f64::MAX);
                 Ok(())
             }
             Func::SumD => {
@@ -135,53 +136,79 @@ fn loop_compute(
 fn compute(
     idx: usize,
     executor: &Executor,
-    data: &mut [u8; 512],
-    _sub_data: &[u8; 512],
+    aggregate_data: &mut [u8; 512],
+    sub_data: &[u8; 512],
     data_idx: usize,
 ) {
     let offset = idx * 8;
     match executor {
-        Executor::Compute(func, _executors) => {
-            // TODO: 77_i64 and 77_f64 are the fake val, need to fetch real val
-            match func {
-                Func::MaxL => {
-                    let max = fetch_i64(&data[offset..offset + 8]);
-                    fill_i64(&mut data[offset..offset + 8], max.max(77_i64));
+        Executor::Compute(func, executors) => {
+            if executors.len() != 1 {
+                log::warn!(
+                    "aggregate func just support one argument, here is {:?} executors",
+                    executors.len()
+                );
+                return;
+            }
+            let sub_executor = executors.first().unwrap();
+            let element = fetch_arg_val(sub_data, sub_executor);
+            match (func, &element) {
+                (Func::MaxL, Element::Long(v)) => {
+                    let max = fetch_i64(&aggregate_data[offset..offset + 8]);
+                    fill_i64(&mut aggregate_data[offset..offset + 8], max.max(*v));
                 }
-                Func::MinL => {
-                    let min = fetch_i64(&data[offset..offset + 8]);
-                    fill_i64(&mut data[offset..offset + 8], min.min(77_i64));
+                (Func::MinL, Element::Long(v)) => {
+                    let min = fetch_i64(&aggregate_data[offset..offset + 8]);
+                    fill_i64(&mut aggregate_data[offset..offset + 8], min.min(*v));
                 }
-                Func::SumL => {
-                    let sum = fetch_i64(&data[offset..offset + 8]);
-                    fill_i64(&mut data[offset..offset + 8], sum + 77_i64);
+                (Func::SumL, Element::Long(v)) => {
+                    let sum = fetch_i64(&aggregate_data[offset..offset + 8]);
+                    fill_i64(&mut aggregate_data[offset..offset + 8], sum + *v);
                 }
-                Func::Count => {
-                    let count = fetch_i64(&data[offset..offset + 8]);
-                    fill_i64(&mut data[offset..offset + 8], count + 1);
+                (Func::Count, Element::Long(_)) => {
+                    let count = fetch_i64(&aggregate_data[offset..offset + 8]);
+                    fill_i64(&mut aggregate_data[offset..offset + 8], count + 1);
                 }
-                Func::MaxD => {
-                    let max = fetch_f64(&data[offset..offset + 8]);
-                    fill_f64(&mut data[offset..offset + 8], max.max(77_f64));
+                (Func::MaxD, Element::Long(v)) => {
+                    let max = fetch_f64(&aggregate_data[offset..offset + 8]);
+                    fill_f64(&mut aggregate_data[offset..offset + 8], max.max(*v as f64));
                 }
-                Func::MinD => {
-                    let min = fetch_f64(&data[offset..offset + 8]);
-                    fill_f64(&mut data[offset..offset + 8], min.min(77_f64));
+                (Func::MinD, Element::Long(v)) => {
+                    let min = fetch_f64(&aggregate_data[offset..offset + 8]);
+                    fill_f64(&mut aggregate_data[offset..offset + 8], min.min(*v as f64));
                 }
-                Func::SumD => {
-                    let sum = fetch_f64(&data[offset..offset + 8]);
-                    fill_f64(&mut data[offset..offset + 8], sum + 77_f64);
+                (Func::SumD, Element::Long(v)) => {
+                    let sum = fetch_f64(&aggregate_data[offset..offset + 8]);
+                    fill_f64(&mut aggregate_data[offset..offset + 8], sum + *v as f64);
                 }
-                Func::Avg => {
-                    let mut avg = fetch_f64(&data[offset..offset + 8]);
-                    avg = avg * data_idx as f64 + 77_f64;
+                (Func::Avg, Element::Long(v)) => {
+                    let avg = fetch_f64(&aggregate_data[offset..offset + 8]);
                     fill_f64(
-                        &mut data[offset..offset + 8],
-                        (avg * data_idx as f64 + 77_f64) / ((data_idx + 1) as f64),
+                        &mut aggregate_data[offset..offset + 8],
+                        (avg * (data_idx as f64) + (*v as f64)) / ((data_idx + 1) as f64),
+                    );
+                }
+                (Func::MaxD, Element::Double(v)) => {
+                    let max = fetch_f64(&aggregate_data[offset..offset + 8]);
+                    fill_f64(&mut aggregate_data[offset..offset + 8], max.max(*v));
+                }
+                (Func::MinD, Element::Double(v)) => {
+                    let min = fetch_f64(&aggregate_data[offset..offset + 8]);
+                    fill_f64(&mut aggregate_data[offset..offset + 8], min.min(*v));
+                }
+                (Func::SumD, Element::Double(v)) => {
+                    let sum = fetch_f64(&aggregate_data[offset..offset + 8]);
+                    fill_f64(&mut aggregate_data[offset..offset + 8], sum + *v);
+                }
+                (Func::Avg, Element::Double(v)) => {
+                    let avg = fetch_f64(&aggregate_data[offset..offset + 8]);
+                    fill_f64(
+                        &mut aggregate_data[offset..offset + 8],
+                        (avg * (data_idx as f64) + *v) / ((data_idx + 1) as f64),
                     );
                 }
                 _ => {
-                    log::warn!("unsupported function: {:?}", func);
+                    log::warn!("unsupported function: {:?}-{:?}", func, &element);
                 }
             }
         }
@@ -190,6 +217,34 @@ fn compute(
                 "expr in top level just support aggregate func, this is not aggregate func:{:?}",
                 executor
             );
+        }
+    }
+}
+
+fn fetch_arg_val(sub_data: &[u8; 512], executor: &Executor) -> Element {
+    match executor {
+        Executor::Fetch(record_id, field_id) => {
+            if let Some(column) = Record::get_column(*record_id, *field_id) {
+                let column_type = column.data_type();
+                let offset = column.offset();
+                let slice = sub_data.as_slice();
+                match column_type {
+                    ColumnType::Long => Element::Long(fetch_i64(&slice[offset..offset + 8])),
+                    ColumnType::Double => Element::Double(fetch_f64(&slice[offset..offset + 8])),
+                    ColumnType::Str(_) => Element::Long(0),
+                }
+            } else {
+                log::warn!(
+                    "fail to fetch record and column: [{}-{}]",
+                    *record_id,
+                    *field_id
+                );
+                Element::Long(0)
+            }
+        }
+        _ => {
+            log::warn!("just support fetch, here is {:?} executor", executor);
+            Element::Long(0)
         }
     }
 }
@@ -214,7 +269,7 @@ fn gen_aggregate(parsed_sql: &ParsedSql) -> Result<Aggregate, ParseSqlError> {
             "only support one record in aggregate",
         )));
     }
-    let stream = get_record(parsed_sql.records()[0]);
+    let stream = Record::get_record(parsed_sql.records()[0]);
     if stream.is_none() {
         return Err(ParseSqlError::new(format!(
             "stream {} not found",
@@ -224,10 +279,7 @@ fn gen_aggregate(parsed_sql: &ParsedSql) -> Result<Aggregate, ParseSqlError> {
     let rs = create_executor(&parsed_sql.records(), &fields);
     if let Ok(executors) = rs {
         let id = next_aggregate_id();
-        Ok(Aggregate {
-            _id: id,
-            _executors: executors,
-        })
+        Ok(Aggregate { id, executors })
     } else {
         Err(ParseSqlError::new(String::from(
             "fail to create executors for aggregate",
@@ -236,15 +288,15 @@ fn gen_aggregate(parsed_sql: &ParsedSql) -> Result<Aggregate, ParseSqlError> {
 }
 
 pub(crate) struct Aggregate {
-    _id: u16,
-    _executors: Vec<Executor>,
+    id: u16,
+    executors: Vec<Executor>,
 }
 impl Aggregate {
     fn id(&self) -> u16 {
-        self._id
+        self.id
     }
     fn executors(&self) -> &Vec<Executor> {
-        &self._executors
+        &self.executors
     }
 }
 
