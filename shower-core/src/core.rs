@@ -49,16 +49,16 @@ pub fn stop() {
     STOP.call_once(actual_stop);
 }
 
+fn actual_stop() {
+    log::info!("mark as deactived");
+}
+
 pub fn def_incoming(name: &str, columns: Vec<Column>) -> Option<u16> {
     insert_record(name, RecordType::Incoming, columns)
 }
 
 pub fn def_stream(name: &str, columns: Vec<Column>) -> Option<u16> {
     insert_record(name, RecordType::Stream, columns)
-}
-
-fn actual_stop() {
-    log::info!("mark as deactived");
 }
 
 pub fn new_data(data: &U8Bytes) -> bool {
