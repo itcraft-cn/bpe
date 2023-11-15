@@ -1,5 +1,7 @@
+mod test_log;
+
 use shower::{def_mapper, new_data, start, stop, U8Bytes};
-use std::{env, thread};
+use std::thread;
 
 const LOOP_SIZE: usize = 10;
 
@@ -12,7 +14,7 @@ const SQL: &str = r#"
 
 #[test]
 fn test_new_proc() {
-    env::set_var("SHOWER_HOME", "/home/helly/code/rust/shower");
+    test_log::setup_shower_home();
     start();
     def_mapper(SQL, |_vec| {});
     gen_new_data();

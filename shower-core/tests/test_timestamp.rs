@@ -1,3 +1,5 @@
+#![allow(dead_code)]
+
 use chrono::NaiveDate;
 
 pub fn special_timestamp(year: i32, month: u32, day: u32, hour: u32, min: u32, sec: u32) -> u64 {

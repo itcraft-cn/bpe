@@ -1,5 +1,6 @@
+mod test_log;
+
 use shower::{def_mapper, start, stop};
-use std::env;
 
 #[test]
 fn test_new_proc() {
@@ -11,7 +12,7 @@ fn test_new_proc() {
         r#"SELECT _div(demo.a, demo.b) FROM demo LIMIT 1"#,
         r#"SELECT _mod(demo.a, demo.b) FROM demo LIMIT 1"#,
     ];
-    env::set_var("SHOWER_HOME", "/home/helly/code/rust/shower");
+    test_log::setup_shower_home();
     start();
     for sql in test_sql_vec {
         def_mapper(sql, |_vec| {});

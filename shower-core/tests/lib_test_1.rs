@@ -1,5 +1,6 @@
+mod test_log;
+
 use shower::{def_mapper, start, stop};
-use std::env;
 
 const SQL: &str = r#"
     SELECT demo.a, demo.b, demo.c, _sub(_add(demo.d, demo.d), demo.e)
@@ -10,7 +11,7 @@ const SQL: &str = r#"
 
 #[test]
 fn test_sql_parse() {
-    env::set_var("SHOWER_HOME", "/home/helly/code/rust/shower");
+    test_log::setup_shower_home();
     start();
     def_mapper(SQL, |_vec| {});
     stop();

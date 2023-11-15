@@ -1,9 +1,10 @@
+mod test_log;
+
 use shower::{def_incoming, start, stop, Column};
-use std::env;
 
 #[test]
 fn test_new_proc() {
-    env::set_var("SHOWER_HOME", "/home/helly/code/rust/shower");
+    test_log::setup_shower_home();
     start();
     if let Some(id) = def_incoming(
         "demo",

@@ -1,11 +1,13 @@
+mod test_log;
+
 use shower::{def_incoming, new_data, start, stop, Column, U8Bytes};
-use std::{env, thread};
+use std::thread;
 
 const LOOP_SIZE: usize = 100;
 
 #[test]
 fn test_new_proc() {
-    env::set_var("SHOWER_HOME", "/home/helly/code/rust/shower");
+    test_log::setup_shower_home();
     start();
     gen_new_data();
     stop();

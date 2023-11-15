@@ -65,9 +65,10 @@ pub(crate) fn compose_file_name_with_base_dir(filename: &str) -> String {
 }
 
 fn fetch_base_dir() -> String {
-    let rs = env::var(SHOWER_ENV_HOME_KEY);
-    if let Ok(path) = rs {
+    if let Ok(path) = env::var(SHOWER_ENV_HOME_KEY) {
         path
+    } else if let Ok(dir) = env::current_dir() {
+        format!("{:?}", dir)
     } else {
         String::from(".")
     }

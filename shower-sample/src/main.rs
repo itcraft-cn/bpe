@@ -23,7 +23,7 @@ const AGGREGATE_SQL: &str = r#"
     "#;
 
 pub fn main() {
-    env::set_var("SHOWER_HOME", "/home/helly/code/rust/shower");
+    env::set_var("SHOWER_HOME", env::current_dir().unwrap());
     start();
     exec_with_time_it(gen_new_data);
     stop();

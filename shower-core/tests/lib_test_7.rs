@@ -1,10 +1,11 @@
 mod test_aux;
+mod test_log;
 
 use shower::{
     def_aggregate, def_incoming, def_mapper_bind_aggregate, def_stream, new_data, start, stop,
     Column, U8Bytes,
 };
-use std::{env, thread};
+use std::thread;
 use test_aux::{fetch_f64, fetch_i64, fill_i64};
 
 const LOOP_SIZE: usize = 3;
@@ -21,7 +22,7 @@ const AGGREGATE_SQL: &str = r#"
 
 #[test]
 fn test_new_proc() {
-    env::set_var("SHOWER_HOME", "/home/helly/code/rust/shower");
+    test_log::setup_shower_home();
     start();
     if let Some((id1, _id2)) = define_records() {
         if let Some(aggregate_id) = def_aggregate(AGGREGATE_SQL, |data| {
