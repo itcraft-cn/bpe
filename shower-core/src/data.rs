@@ -67,6 +67,16 @@ pub enum ColumnType {
     Double,
     Str(usize),
 }
+impl ColumnType {
+    fn by_idx(type_idx: u16, size: usize) -> ColumnType {
+        match type_idx {
+            0 => ColumnType::Long,
+            1 => ColumnType::Double,
+            2 => ColumnType::Str(size),
+            _ => ColumnType::Long,
+        }
+    }
+}
 
 #[derive(Clone, Debug)]
 pub struct Column {
@@ -96,6 +106,14 @@ impl Column {
         Column {
             name: String::from(name),
             data_type: ColumnType::Str(len),
+            idx: 0,
+            offset: 0,
+        }
+    }
+    pub fn new(name: &str, type_idx: u16, size: usize) -> Column {
+        Column {
+            name: String::from(name),
+            data_type: ColumnType::by_idx(type_idx, size),
             idx: 0,
             offset: 0,
         }

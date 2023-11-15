@@ -1,5 +1,5 @@
 use pyo3::prelude::*;
-use shower::{FfiFunc, U8Bytes};
+use shower::{Column, FfiFunc, U8Bytes};
 
 #[pyfunction]
 #[allow(dead_code)]
@@ -12,6 +12,56 @@ fn start() -> PyResult<bool> {
 fn stop() -> PyResult<bool> {
     shower::stop();
     Ok(true)
+}
+
+#[pyfunction]
+#[allow(dead_code)]
+fn def_incoming(
+    name: &str,
+    field_names: Vec<&str>,
+    field_types: Vec<u16>,
+    field_sizes: Vec<usize>,
+) -> PyResult<i32> {
+    let names_len = field_names.len();
+    let types_len = field_types.len();
+    let sizes_len = field_sizes.len();
+    if names_len != types_len || names_len != sizes_len {
+        return Ok(-1);
+    }
+    let mut columns = vec![];
+    for i in 0..names_len {
+        columns.push(Column::new(field_names[i], field_types[i], field_sizes[i]));
+    }
+    if let Some(id) = shower::def_incoming(name, columns) {
+        Ok(id as i32)
+    } else {
+        Ok(-1)
+    }
+}
+
+#[pyfunction]
+#[allow(dead_code)]
+fn def_stream(
+    name: &str,
+    field_names: Vec<&str>,
+    field_types: Vec<u16>,
+    field_sizes: Vec<usize>,
+) -> PyResult<i32> {
+    let names_len = field_names.len();
+    let types_len = field_types.len();
+    let sizes_len = field_sizes.len();
+    if names_len != types_len || names_len != sizes_len {
+        return Ok(-1);
+    }
+    let mut columns = vec![];
+    for i in 0..names_len {
+        columns.push(Column::new(field_names[i], field_types[i], field_sizes[i]));
+    }
+    if let Some(id) = shower::def_incoming(name, columns) {
+        Ok(id as i32)
+    } else {
+        Ok(-1)
+    }
 }
 
 #[pyfunction]
@@ -31,14 +81,38 @@ fn def_mapper(sql: &str, callback: PyObject) -> PyResult<i32> {
     }
 }
 
+#[pyfunction]
+#[allow(dead_code)]
+fn def_mapper_bind_aggregate(sql: &str, aggregate_id: u16) -> PyResult<i32> {
+    if let Some(id) = shower::def_mapper_bind_aggregate(sql, aggregate_id) {
+        Ok(id as i32)
+    } else {
+        Ok(-1)
+    }
+}
+
+#[pyfunction]
+#[allow(dead_code)]
+fn def_aggregate(sql: &str, callback: PyObject) -> PyResult<i32> {
+    if let Some(id) = shower::def_aggregate_ffi(sql, Box::new(PythonFfiFunc { callback })) {
+        Ok(id as i32)
+    } else {
+        Ok(-1)
+    }
+}
+
 /// A Python module implemented in Rust.
 #[pymodule]
 #[allow(dead_code)]
 fn shower4py(_py: Python, m: &PyModule) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(start, m)?)?;
     m.add_function(wrap_pyfunction!(stop, m)?)?;
+    m.add_function(wrap_pyfunction!(def_incoming, m)?)?;
+    m.add_function(wrap_pyfunction!(def_stream, m)?)?;
     m.add_function(wrap_pyfunction!(new_data, m)?)?;
     m.add_function(wrap_pyfunction!(def_mapper, m)?)?;
+    m.add_function(wrap_pyfunction!(def_mapper_bind_aggregate, m)?)?;
+    m.add_function(wrap_pyfunction!(def_aggregate, m)?)?;
     Ok(())
 }
 
