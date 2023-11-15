@@ -88,12 +88,11 @@ fn define_records() -> Option<(u16, u16)> {
             Column::new_long("a"),
             Column::new_long("b"),
             Column::new_long("c"),
-            Column::new_long("d"),
-            Column::new_long("e"),
-            Column::new_long("f"),
-            Column::new_long("g"),
+            Column::new_double("d"),
+            Column::new_double("e"),
+            Column::new_double("f"),
+            Column::new_double("g"),
             Column::new_long("h"),
-            Column::new_long("i"),
         ],
     ) {
         id2 = id;

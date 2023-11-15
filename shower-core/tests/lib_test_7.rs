@@ -30,7 +30,7 @@ fn test_new_proc() {
             if len == 1 {
                 log::info!("data: {:?}", &data[0].as_slice()[0..64]);
             }
-        }){
+        }) {
             let opt = def_mapper_bind_aggregate(FILTER_SQL, aggregate_id);
             if opt.is_none() {
                 log::warn!("def_mapper_bind_aggregate failed");
@@ -64,7 +64,19 @@ fn define_records() -> Option<(u16, u16)> {
         log::warn!("failed to define incoming record");
         return None;
     }
-    if let Some(id) = def_stream("stream", vec![Column::new_long("a")]) {
+    if let Some(id) = def_stream(
+        "stream",
+        vec![
+            Column::new_long("a"),
+            Column::new_long("b"),
+            Column::new_long("c"),
+            Column::new_double("d"),
+            Column::new_double("e"),
+            Column::new_double("f"),
+            Column::new_double("g"),
+            Column::new_long("h"),
+        ],
+    ) {
         id2 = id;
         log::info!("defined stream: {}", id2);
     } else {
