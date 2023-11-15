@@ -74,14 +74,14 @@ fn search_mapper<'a>(id: u16) -> Option<&'a WrappedMapper<'a>> {
 }
 
 fn gen_mapper<'a>(parsed_sql: &ParsedSql) -> Result<Mapper<'a>, MapperError> {
-    let tab_id_array = &parsed_sql.tables();
-    if tab_id_array.len() != 1 {
+    let record_id_array = &parsed_sql.tables();
+    if record_id_array.len() != 1 {
         return Err(MapperError::new(format!(
             "only support one table, but {} tables",
-            tab_id_array.len()
+            record_id_array.len()
         )));
     }
-    let id = *tab_id_array.first().unwrap();
+    let id = *record_id_array.first().unwrap();
     let iterator = create_iterator(id);
     let rs_filter = create_filter(&parsed_sql.filters());
     if rs_filter.is_err() {
@@ -90,7 +90,7 @@ fn gen_mapper<'a>(parsed_sql: &ParsedSql) -> Result<Mapper<'a>, MapperError> {
             rs_filter.err().unwrap()
         )));
     }
-    let rs_executors = create_executor(tab_id_array, &parsed_sql.fields());
+    let rs_executors = create_executor(record_id_array, &parsed_sql.fields());
     if rs_executors.is_err() {
         return Err(MapperError::new(format!(
             "failed to parse executors: {}",
@@ -148,12 +148,12 @@ fn create_filter(entities: &[ExprEntity]) -> Result<Filter, MapperError> {
 }
 
 fn create_executor(
-    tab_id_array: &Vec<u16>,
+    record_id_array: &Vec<u16>,
     entities: &Vec<ExprEntity>,
 ) -> Result<Vec<Executor>, MapperError> {
     let mut executors = vec![];
     for entity in entities {
-        let rs = conv_as_executor(entity, tab_id_array);
+        let rs = conv_as_executor(entity, record_id_array);
         if let Ok(executor) = rs {
             executors.push(executor);
         } else {
@@ -163,17 +163,17 @@ fn create_executor(
     Ok(executors)
 }
 
-fn conv_as_executor(entity: &ExprEntity, tab_id_array: &Vec<u16>) -> Result<Executor, MapperError> {
+fn conv_as_executor(entity: &ExprEntity, record_id_array: &Vec<u16>) -> Result<Executor, MapperError> {
     let fetcher = match entity {
-        ExprEntity::Field(field_id) => Executor::Fetch(*tab_id_array.first().unwrap(), *field_id),
-        ExprEntity::FieldWithTab(tab_id, field_id) => Executor::Fetch(*tab_id, *field_id),
+        ExprEntity::Field(field_id) => Executor::Fetch(*record_id_array.first().unwrap(), *field_id),
+        ExprEntity::FieldWithTab(record_id, field_id) => Executor::Fetch(*record_id, *field_id),
         ExprEntity::Function(func_name, args) => {
             if func_name.starts_with('_') {
                 let mut real_func_name = func_name.clone();
                 real_func_name.remove(0);
                 let opt_func = Func::from_str(real_func_name.as_str());
                 if let Ok(func) = opt_func {
-                    let rs = parse_args_fetchers(args, tab_id_array);
+                    let rs = parse_args_fetchers(args, record_id_array);
                     if let Ok(args_fetchers) = rs {
                         Executor::Compute(func, args_fetchers)
                     } else {
@@ -198,12 +198,12 @@ fn conv_as_executor(entity: &ExprEntity, tab_id_array: &Vec<u16>) -> Result<Exec
 
 fn parse_args_fetchers(
     args: &Vec<ExprEntity>,
-    tab_id_array: &Vec<u16>,
+    record_id_array: &Vec<u16>,
 ) -> Result<Vec<Executor>, MapperError> {
     let mut args_fetchers = vec![];
     let mut hit_error = false;
     args.iter()
-        .map(|arg| conv_as_executor(arg, tab_id_array))
+        .map(|arg| conv_as_executor(arg, record_id_array))
         .for_each(|e| {
             if let Ok(fetcher) = e {
                 args_fetchers.push(fetcher);

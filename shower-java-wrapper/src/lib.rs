@@ -41,12 +41,12 @@ pub extern "system" fn Java_com_erayt_shower4j_Shower_newData<'local>(
     // but still must be present to match the expected signature of a static
     // native method.
     _class: JClass<'local>,
-    j_tab_id: jint,
+    j_record_id: jint,
     j_bdata: JByteArray<'local>,
 ) -> jboolean {
-    let tab_id = j_tab_id as u16;
+    let record_id = j_record_id as u16;
     let bytes_vec = env.convert_byte_array(j_bdata).unwrap();
-    let data = U8Bytes::new_from_vec(tab_id, bytes_vec.len(), bytes_vec);
+    let data = U8Bytes::new_from_vec(record_id, bytes_vec.len(), bytes_vec);
     new_data(&data) as jboolean
 }
 

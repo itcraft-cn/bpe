@@ -105,8 +105,8 @@ fn parse_tab_ref(tab: &TableReference<'_>, tab_ref_vec: &mut Vec<u16>) -> Option
             }
             for id in identifier {
                 let name = id.as_str();
-                if let Some(tab_id) = Record::fetch_record_id(name) {
-                    tab_ref_vec.push(*tab_id);
+                if let Some(record_id) = Record::fetch_record_id(name) {
+                    tab_ref_vec.push(*record_id);
                 } else {
                     return Some(format!("record define: [{}] is not found", name));
                 }
@@ -133,12 +133,12 @@ fn parse_tab_ref(tab: &TableReference<'_>, tab_ref_vec: &mut Vec<u16>) -> Option
 
 fn parse_select_condition(
     where_: &Option<(Expression<'_>, Range<usize>)>,
-    tab_id: u16,
+    record_id: u16,
     issues: &mut Vec<String>,
 ) -> Vec<ExprEntity> {
     if let Some(where_part) = where_ {
         let mut expr_entity_vec = vec![];
-        if let Some(issue) = parse_condition(&where_part.0, tab_id, &mut expr_entity_vec) {
+        if let Some(issue) = parse_condition(&where_part.0, record_id, &mut expr_entity_vec) {
             issues.push(issue);
             vec![]
         } else {
@@ -169,7 +169,7 @@ fn parse_select_limitor(
 
 fn parse_select_fields(
     select_exprs: &[SelectExpr<'_>],
-    tab_id: u16,
+    record_id: u16,
     issues: &mut Vec<String>,
 ) -> Vec<ExprEntity> {
     let mut expr_vec = vec![];
@@ -182,7 +182,7 @@ fn parse_select_fields(
             issues.push(value);
             return vec![];
         }
-        if let Some(value) = parse_expr(&select_expr.expr, tab_id, &mut expr_vec) {
+        if let Some(value) = parse_expr(&select_expr.expr, record_id, &mut expr_vec) {
             issues.push(value);
             return vec![];
         }
@@ -192,7 +192,7 @@ fn parse_select_fields(
 
 fn parse_condition(
     expr: &Expression<'_>,
-    tab_id: u16,
+    record_id: u16,
     expr_entity_vec: &mut Vec<ExprEntity>,
 ) -> Option<String> {
     match expr {
@@ -208,12 +208,12 @@ fn parse_condition(
                 return Some(format!("op[{:?}] is not supported", op));
             }
             let mut left_vec = vec![];
-            if let Some(issue) = parse_condition(lhs.as_ref(), tab_id, &mut left_vec) {
+            if let Some(issue) = parse_condition(lhs.as_ref(), record_id, &mut left_vec) {
                 return Some(issue);
             }
             expr_entity_vec.append(&mut left_vec);
             let mut right_vec = vec![];
-            if let Some(issue) = parse_condition(rhs.as_ref(), tab_id, &mut right_vec) {
+            if let Some(issue) = parse_condition(rhs.as_ref(), record_id, &mut right_vec) {
                 return Some(issue);
             }
             expr_entity_vec.append(&mut right_vec);
@@ -222,7 +222,7 @@ fn parse_condition(
             if let Some(issue) = check_not_allow_expr(expr) {
                 return Some(issue);
             }
-            if let Some(issue) = parse_expr(expr, tab_id, expr_entity_vec) {
+            if let Some(issue) = parse_expr(expr, record_id, expr_entity_vec) {
                 return Some(issue);
             }
         }
@@ -337,7 +337,7 @@ fn check_not_allow_expr(expr: &Expression<'_>) -> Option<String> {
 
 fn parse_expr(
     expr: &Expression<'_>,
-    tab_id: u16,
+    record_id: u16,
     expr_entity_vec: &mut Vec<ExprEntity>,
 ) -> Option<String> {
     match expr {
@@ -360,7 +360,7 @@ fn parse_expr(
             };
             let mut expr_sub_entity_vec = vec![];
             for expr in expr_vec {
-                parse_expr(expr, tab_id, &mut expr_sub_entity_vec);
+                parse_expr(expr, record_id, &mut expr_sub_entity_vec);
             }
             if fn_tuple.1 {
                 expr_entity_vec.push(ExprEntity::Function(fn_tuple.0, expr_sub_entity_vec));
@@ -372,11 +372,11 @@ fn parse_expr(
             if id_vec.len() == 2 {
                 let id_part1 = id_vec.get(0).unwrap();
                 let id_part2 = id_vec.get(1).unwrap();
-                let rs1 = fetch_tab_id(tab_id, id_part1);
+                let rs1 = fetch_record_id(record_id, id_part1);
                 if rs1.is_err() {
                     return Some(rs1.err().unwrap());
                 }
-                let rs2 = fetch_field_id(tab_id, id_part2);
+                let rs2 = fetch_field_id(record_id, id_part2);
                 if rs2.is_err() {
                     return Some(rs2.err().unwrap());
                 }
@@ -385,7 +385,7 @@ fn parse_expr(
                 expr_entity_vec.push(ExprEntity::FieldWithTab(record_id, field_id));
             } else if id_vec.len() == 1 {
                 let id_part = id_vec.get(0).unwrap();
-                let rs = fetch_field_id(tab_id, id_part);
+                let rs = fetch_field_id(record_id, id_part);
                 if rs.is_err() {
                     return Some(rs.err().unwrap());
                 }
@@ -400,13 +400,13 @@ fn parse_expr(
     None
 }
 
-fn fetch_tab_id(tab_id: u16, id_part: &IdentifierPart<'_>) -> Result<u16, String> {
+fn fetch_record_id(record_id: u16, id_part: &IdentifierPart<'_>) -> Result<u16, String> {
     match id_part {
         IdentifierPart::Name(id) => {
             let name = id.as_str();
             if let Some(id) = Record::fetch_record_id(name) {
                 let rid = *id;
-                if rid == tab_id {
+                if rid == record_id {
                     Ok(rid)
                 } else {
                     Err(format!(
@@ -422,11 +422,11 @@ fn fetch_tab_id(tab_id: u16, id_part: &IdentifierPart<'_>) -> Result<u16, String
     }
 }
 
-fn fetch_field_id(tab_id: u16, id_part: &IdentifierPart<'_>) -> Result<u16, String> {
+fn fetch_field_id(record_id: u16, id_part: &IdentifierPart<'_>) -> Result<u16, String> {
     match id_part {
         IdentifierPart::Name(id) => {
             let name = id.as_str();
-            if let Some(id) = Record::fetch_field_id(tab_id, name) {
+            if let Some(id) = Record::fetch_field_id(record_id, name) {
                 Ok(*id)
             } else {
                 Err(format!("field [{}] is not found", name))
