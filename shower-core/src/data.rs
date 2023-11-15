@@ -110,9 +110,9 @@ impl Column {
             offset: 0,
         }
     }
-    pub fn new(name: &str, type_idx: u16, size: usize) -> Column {
+    pub fn new(name: String, type_idx: u16, size: usize) -> Column {
         Column {
-            name: String::from(name),
+            name,
             data_type: ColumnType::by_idx(type_idx, size),
             idx: 0,
             offset: 0,

@@ -22,21 +22,13 @@ fn def_incoming(
     field_types: Vec<u16>,
     field_sizes: Vec<usize>,
 ) -> PyResult<i32> {
-    let names_len = field_names.len();
-    let types_len = field_types.len();
-    let sizes_len = field_sizes.len();
-    if names_len != types_len || names_len != sizes_len {
-        return Ok(-1);
-    }
-    let mut columns = vec![];
-    for i in 0..names_len {
-        columns.push(Column::new(field_names[i], field_types[i], field_sizes[i]));
-    }
-    if let Some(id) = shower::def_incoming(name, columns) {
-        Ok(id as i32)
-    } else {
-        Ok(-1)
-    }
+    def_record(
+        name,
+        field_names,
+        field_types,
+        field_sizes,
+        shower::def_incoming,
+    )
 }
 
 #[pyfunction]
@@ -47,6 +39,25 @@ fn def_stream(
     field_types: Vec<u16>,
     field_sizes: Vec<usize>,
 ) -> PyResult<i32> {
+    def_record(
+        name,
+        field_names,
+        field_types,
+        field_sizes,
+        shower::def_stream,
+    )
+}
+
+fn def_record<F>(
+    name: &str,
+    field_names: Vec<&str>,
+    field_types: Vec<u16>,
+    field_sizes: Vec<usize>,
+    f: F,
+) -> PyResult<i32>
+where
+    F: Fn(&str, Vec<Column>) -> Option<u16>,
+{
     let names_len = field_names.len();
     let types_len = field_types.len();
     let sizes_len = field_sizes.len();
@@ -55,9 +66,13 @@ fn def_stream(
     }
     let mut columns = vec![];
     for i in 0..names_len {
-        columns.push(Column::new(field_names[i], field_types[i], field_sizes[i]));
+        columns.push(Column::new(
+            String::from(field_names[i]),
+            field_types[i],
+            field_sizes[i],
+        ));
     }
-    if let Some(id) = shower::def_incoming(name, columns) {
+    if let Some(id) = f(name, columns) {
         Ok(id as i32)
     } else {
         Ok(-1)
@@ -74,11 +89,7 @@ fn new_data(id: u16, bdata: &[u8]) -> PyResult<bool> {
 #[pyfunction]
 #[allow(dead_code)]
 fn def_mapper(sql: &str, callback: PyObject) -> PyResult<i32> {
-    if let Some(id) = shower::def_mapper_ffi(sql, Box::new(PythonFfiFunc { callback })) {
-        Ok(id as i32)
-    } else {
-        Ok(-1)
-    }
+    def_action(sql, callback, shower::def_mapper_ffi)
 }
 
 #[pyfunction]
@@ -94,7 +105,14 @@ fn def_mapper_bind_aggregate(sql: &str, aggregate_id: u16) -> PyResult<i32> {
 #[pyfunction]
 #[allow(dead_code)]
 fn def_aggregate(sql: &str, callback: PyObject) -> PyResult<i32> {
-    if let Some(id) = shower::def_aggregate_ffi(sql, Box::new(PythonFfiFunc { callback })) {
+    def_action(sql, callback, shower::def_aggregate_ffi)
+}
+
+fn def_action<F>(sql: &str, callback: PyObject, f: F) -> PyResult<i32>
+where
+    F: Fn(&str, Box<dyn FfiFunc>) -> Option<u16>,
+{
+    if let Some(id) = f(sql, Box::new(PythonFfiFunc { callback })) {
         Ok(id as i32)
     } else {
         Ok(-1)
