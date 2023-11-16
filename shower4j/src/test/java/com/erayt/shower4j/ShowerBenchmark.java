@@ -43,20 +43,20 @@ public class ShowerBenchmark {
     @Setup
     public static void setUp() {
         AtomicLong val = new AtomicLong(0);
-        Shower.start();
-        if (Shower.defMapper(SQL, (data, size) -> val.getAndAdd(size)) == -1) {
+        JavaShower.start();
+        if (JavaShower.defMapper(SQL, (data, size) -> val.getAndAdd(size)) == -1) {
             System.exit(1);
         }
     }
 
     @TearDown
     public static void tearDown() {
-        Shower.stop();
+        JavaShower.stop();
     }
 
     @Benchmark
     public void test() {
-        Shower.newData(1, DATA);
+        JavaShower.newData(1, DATA);
     }
 }
 

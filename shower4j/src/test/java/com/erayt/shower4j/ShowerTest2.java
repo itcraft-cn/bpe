@@ -4,6 +4,9 @@ import org.junit.Test;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import java.util.ArrayList;
+import java.util.List;
+
 /**
  * @author Helly Guo
  * <p>
@@ -11,42 +14,55 @@ import org.slf4j.LoggerFactory;
  */
 public class ShowerTest2 {
     private static final Logger LOGGER = LoggerFactory.getLogger(ShowerTest2.class);
-    private static final String SQL = "select demo.a from demo limit 10";
+
+    private static final String SQL = "select demo.a, demo.b, demo.c, demo.d from demo limit 10";
     private static final String SQL2 = "select _suml(stream.a) from stream";
 
     @Test
     public void test() {
-        Shower.start();
-        int recordId = Shower.defIncoming("demo", new String[]{"a"}, new int[]{0}, new int[]{0});
+        SimpleDataConverter converter = new SimpleDataConverter();
+        JavaShower.start();
+        List<ColumnDefine> list = new ArrayList<>();
+        list.add(ColumnDefine.createLong("a"));
+        list.add(ColumnDefine.createLong("b"));
+        list.add(ColumnDefine.createDouble("c"));
+        list.add(ColumnDefine.createString("d", 16));
+        List<ColumnDefine> list2 = new ArrayList<>();
+        list2.add(ColumnDefine.createLong("a"));
+        list2.add(ColumnDefine.createLong("b"));
+        list2.add(ColumnDefine.createDouble("c"));
+        list2.add(ColumnDefine.createString("d", 16));
+        int recordId = JavaShower.defIncoming("demo", list);
         if (recordId == -1) {
             LOGGER.warn("failed to def record");
             return;
         }
-        int recordId2 = Shower.defStream("stream", new String[]{"a"}, new int[]{0}, new int[]{0});
+        int recordId2 = JavaShower.defStream("stream", list2);
         if (recordId2 == -1) {
             LOGGER.warn("failed to def record");
             return;
         }
-        int aggregateId = Shower.defAggregate(SQL2, (data, size) -> LOGGER.info("{}, {}", data, size));
-        int mapperId = Shower.defMapperBindAggregate(SQL, aggregateId);
+        int aggregateId = JavaShower.defAggregate(SQL2, (data, size) -> {
+            for (int i = 0; i < size; i++) {
+                SimpleData simpleData = converter.convert(data, i * 512);
+                LOGGER.info("{}", simpleData);
+            }
+            LOGGER.info("size={}", size);
+        });
+        if (aggregateId == -1) {
+            LOGGER.warn("failed to def aggregate");
+            return;
+        }
+        int mapperId = JavaShower.defMapperBindAggregate(SQL, aggregateId);
         if (mapperId == -1) {
             LOGGER.warn("failed to def mapper");
             return;
         }
+        JavaShower.regConvert(recordId, converter);
         for (int i = 0; i < 100; i++) {
-            byte b = (byte) (i % 256);
-            Shower.newData(1,
-                    new byte[]{
-                            b, 0, 0, 0, 0, 0, 0, 0,
-                            0, 0, 0, 0, 0, 0, 0, 0,
-                            0, 0, 0, 0, 0, 0, 0, 0,
-                            0, 0, 0, 0, 0, 0, 0, 0,
-                            0, 0, 0, 0, 0, 0, 0, 0,
-                            0, 0, 0, 0, 0, 0, 0, 0,
-                            0, 0, 0, 0, 0, 0, 0, 0,
-                            0, 0, 0, 0, 0, 0, 0, 0,
-                    });
+            JavaShower.newData(recordId, new SimpleData(i, i + 1, i + 0.2D, Integer.toHexString(i)));
         }
-        Shower.stop();
+        JavaShower.stop();
     }
+
 }

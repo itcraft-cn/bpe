@@ -30,13 +30,13 @@ public class ShowerSample {
     private static final int LOOP_SIZE = 10000000;
 
     public static void main(String[] args) {
-        Shower.start();
-        if (Shower.defMapper(SQL, ShowerSample::listenData) == -1) {
+        JavaShower.start();
+        if (JavaShower.defMapper(SQL, ShowerSample::listenData) == -1) {
             LOGGER.warn("failed to def action");
         } else {
             waitCmd();
         }
-        Shower.stop();
+        JavaShower.stop();
     }
 
     private static void listenData(byte[] data, int size) {
@@ -61,7 +61,7 @@ public class ShowerSample {
         long start = System.nanoTime();
         boolean success;
         for (int i = 0; i < LOOP_SIZE; i++) {
-            success = Shower.newData(1, DATA);
+            success = JavaShower.newData(1, DATA);
             if (!success) {
                 LOGGER.warn("failed to send data");
                 break;

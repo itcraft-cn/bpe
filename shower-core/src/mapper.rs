@@ -315,7 +315,7 @@ impl<'a> Mapper<'a> {
         let len = self.executors.len();
         for i in 0..len {
             val = self.executors[i].fetch(id, columns, slice);
-            val.copy_to_target(&mut target[offset..offset + 8]);
+            val.copy_to_target(&mut target[offset..offset + val.len()]);
             offset += 8;
         }
         result

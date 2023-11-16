@@ -143,7 +143,8 @@ fn compute(
         Executor::Compute(func, executors) => {
             if executors.len() != 1 {
                 log::warn!(
-                    "aggregate func just support one argument, here is {:?} executors",
+                    "aggregate func[{:?}] just support one argument, here is {:?} executors",
+                    func,
                     executors.len()
                 );
                 return;

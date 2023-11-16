@@ -7,6 +7,13 @@ pub(crate) enum Element {
     _Str(&'static [u8], usize),
 }
 impl Element {
+    pub(crate) fn len(&self) -> usize {
+        match self {
+            Element::Long(_) => 8,
+            Element::Double(_) => 8,
+            Element::_Str(_, len) => *len,
+        }
+    }
     pub(crate) fn copy_to_target(&self, target: &mut [u8]) {
         match self {
             Element::Long(val) => target.copy_from_slice(val.to_ne_bytes().as_slice()),
