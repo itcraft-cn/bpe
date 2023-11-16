@@ -13,3 +13,6 @@ classifiers = [
 
 [tool.maturin]
 features = ["pyo3/extension-module"]
+python-source = "python"
+module-name = "shower4py.shower4py"
+bindings = "pyo3"
