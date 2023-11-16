@@ -8,6 +8,7 @@ import java.io.InputStream;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
+import java.nio.file.StandardCopyOption;
 
 /**
  * learn from <a href="https://www.cnblogs.com/FlyingPuPu/p/7598098.html">load from jar</a><br/>
@@ -29,7 +30,7 @@ public class NativeLoader {
     private static final String EXT = (OS_NAME.toLowerCase().contains("win")) ? ".dll" : ".so";
 
     private static final String SHOWER_LIB_PREFIX = "libshower4j";
-    private static final String SHOWER_LIB_JAR_NAME = SHOWER_LIB_PREFIX + "." + EXT;
+    private static final String SHOWER_LIB_IN_JAR_PATH = "resources/" + SHOWER_LIB_PREFIX + EXT;
 
     private static final String SHOWER_LIB_DEF = "ENV_LIB_PARAM_NOT_EXIST";
     private static final String SHOWER_LIB = System.getProperty("showerLib", SHOWER_LIB_DEF);
@@ -44,13 +45,15 @@ public class NativeLoader {
     }
 
     private static void loadFromJar() {
-        try (InputStream is = NativeLoader.class.getResourceAsStream(SHOWER_LIB_JAR_NAME)) {
+        try (InputStream is = Thread.currentThread()
+                .getContextClassLoader().getResourceAsStream(SHOWER_LIB_IN_JAR_PATH)) {
             if (is == null) {
-                throw new RuntimeException(SHOWER_LIB_JAR_NAME + "is not found in classpath");
+                throw new RuntimeException(SHOWER_LIB_IN_JAR_PATH + " is not found in classpath");
             }
             Path tmpDir = Paths.get(TMP_DIR);
             Path tmpLib = Files.createTempFile(tmpDir, SHOWER_LIB_PREFIX, EXT);
-            Files.copy(is, tmpLib);
+            tmpLib.toFile().deleteOnExit();
+            Files.copy(is, tmpLib, StandardCopyOption.REPLACE_EXISTING);
             System.load(tmpLib.toAbsolutePath().toString());
         } catch (IOException e) {
             throw new RuntimeException(e);
