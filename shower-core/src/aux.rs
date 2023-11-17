@@ -52,36 +52,49 @@ pub(crate) fn timestamp() -> u64 {
     duration.as_millis() as u64
 }
 
-pub(crate) struct SimpleU16Map<T> {
-    vec: Vec<Option<T>>,
+pub(crate) struct SimpleU16Map {
+    ptr_array: [u64; U16_FULL_VAL as usize],
 }
-impl<T> SimpleU16Map<T> {
+impl SimpleU16Map {
     pub(crate) fn new() -> Self {
-        let mut vec = vec![];
-        for _ in 0..U16_FULL_VAL {
-            vec.push(None);
+        SimpleU16Map {
+            ptr_array: [0_u64; U16_FULL_VAL as usize],
         }
-        SimpleU16Map { vec }
     }
     #[inline]
-    pub(crate) fn insert(&mut self, key: u16, value: T) {
-        self.vec[key as usize] = Some(value);
+    pub(crate) fn insert<T>(&mut self, key: u16, value: T) {
+        let val = Box::new(value);
+        let p_val = Box::leak(val);
+        self.ptr_array[key as usize] = ptr::addr_of_mut!(*p_val) as u64;
     }
     #[inline]
     pub(crate) fn entry(&mut self, id: u16) -> SimpleU16Entry {
-        let opt = self.vec[id as usize].as_mut();
-        match opt {
-            Some(_) => SimpleU16Entry::Exist(id),
-            None => SimpleU16Entry::NotExist(id),
+        let ptr = self.ptr_array[id as usize];
+        if ptr == 0 {
+            SimpleU16Entry::NotExist(id)
+        } else {
+            SimpleU16Entry::Exist(id)
         }
     }
     #[inline]
-    pub(crate) fn get_mut(&mut self, id: u16) -> &mut T {
-        self.vec[id as usize].as_mut().unwrap()
+    pub(crate) fn get_mut<'a, T>(&'a mut self, id: u16) -> Option<&'a mut T> {
+        let u64v = self.ptr_array[id as usize];
+        if u64v == 0 {
+            None
+        } else {
+            let p_val = u64v as *mut T;
+            unsafe { Some(&mut *p_val) }
+        }
     }
     #[inline]
-    pub(crate) fn get(&self, id: u16) -> Option<&T> {
-        self.vec[id as usize].as_ref()
+    pub(crate) fn get<T>(&self, id: u16) -> Option<&T> {
+        let u64v = self.ptr_array[id as usize];
+        if u64v == 0 {
+            None
+        } else {
+            let p_val = u64v as *mut T;
+            unsafe { Some(&*p_val) }
+        }
     }
 }
 
@@ -91,22 +104,22 @@ pub(crate) enum SimpleU16Entry {
 }
 impl SimpleU16Entry {
     #[inline]
-    pub(crate) fn or_insert_with<T, F>(&mut self, map: &mut SimpleU16Map<T>, f: F)
+    pub(crate) fn or_insert_with<T, F>(&mut self, map: &mut SimpleU16Map, f: F)
     where
         F: FnOnce() -> T,
     {
         match *self {
             SimpleU16Entry::Exist(_) => (),
             SimpleU16Entry::NotExist(id) => {
-                map.vec[id as usize] = Some(f());
+                map.insert(id, f());
             }
         }
     }
 
     #[inline]
-    pub(crate) fn _fetch_as_mut<'a, T>(&self, map: &'a mut SimpleU16Map<T>) -> Option<&'a mut T> {
+    pub(crate) fn _fetch_as_mut<'a, T>(&self, map: &'a mut SimpleU16Map) -> Option<&'a mut T> {
         match *self {
-            SimpleU16Entry::Exist(id) => Some(map.get_mut(id)),
+            SimpleU16Entry::Exist(id) => map.get_mut(id),
             _ => None,
         }
     }

@@ -7,7 +7,7 @@ use crate::{
 use std::sync::Once;
 
 static MAP_INIT: Once = Once::new();
-static mut MAP: Option<SimpleU16Map<WrappedArray>> = None;
+static mut MAP: Option<SimpleU16Map> = None;
 static mut VEC_SIZE: usize = 0;
 
 pub(crate) fn insert(data: &U8Bytes) {
@@ -40,7 +40,7 @@ fn find_or_insert_array<'a>(id: u16) -> &'a mut WrappedArray {
     let map = unsafe { MAP.as_mut().unwrap() };
     map.entry(id)
         .or_insert_with(map, || WrappedArray::new(unsafe { VEC_SIZE }));
-    map.get_mut(id)
+    map.get_mut(id).unwrap()
 }
 
 pub(crate) fn create_iterator<'a>(id: u16) -> DataIterator<'a> {
@@ -144,11 +144,12 @@ mod tests {
     #[test]
     fn test() {
         test_init();
-        let mut map: SimpleU16Map<WrappedArray> = SimpleU16Map::new();
+        let mut map = SimpleU16Map::new();
         map.entry(1)
             .or_insert_with(&mut map, || WrappedArray::new(1));
-        let x = map.get_mut(1);
-        log::info!("{:?}", x.walker());
+        if let Some(x) = map.get_mut::<WrappedArray>(1) {
+            log::info!("{:?}", x.walker());
+        }
     }
 
     #[test]

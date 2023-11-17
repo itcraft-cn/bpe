@@ -14,7 +14,7 @@ use crate::{
 };
 use sql_parse::ParseOptions;
 
-static mut MAPPER_MAP: Option<SimpleU16Map<WrappedMapper>> = None;
+static mut MAPPER_MAP: Option<SimpleU16Map> = None;
 static mut PARSE_OPTIONS: Option<ParseOptions> = None;
 
 pub(crate) fn init_mapper_store() {

@@ -2,7 +2,7 @@ use crate::{aux::SimpleU16Map, consts::U8_DATA_MAX_SIZE, id::next_record_id};
 use hashbrown::HashMap;
 use std::cmp::Ordering as CmpOrdering;
 
-static mut RECORD_MAP: Option<SimpleU16Map<Record>> = None;
+static mut RECORD_MAP: Option<SimpleU16Map> = None;
 static mut NAME_MAP: Option<HashMap<String, u16>> = None;
 
 static mut ID_STORE: [u8; 8192] = [0; 8192];

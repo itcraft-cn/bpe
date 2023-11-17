@@ -13,7 +13,7 @@ use crate::{
 };
 use sql_parse::ParseOptions;
 
-static mut AGGREGATE_MAP: Option<SimpleU16Map<WrappedAggregate>> = None;
+static mut AGGREGATE_MAP: Option<SimpleU16Map> = None;
 static mut PARSE_OPTIONS: Option<ParseOptions> = None;
 
 pub(crate) fn init_aggregate_store() {
