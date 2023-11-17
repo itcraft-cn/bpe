@@ -38,6 +38,7 @@ public class NativeLoader {
     private static final String SHOWER_LIB = System.getProperty("showerLib", SHOWER_LIB_DEF);
 
     public static void load() {
+        LOGGER.info("try load native library[{}] from sys lib path", SHOWER_LIB_NAME);
         try {
             System.loadLibrary(SHOWER_LIB_SHORT_NAME);
             return;
@@ -45,10 +46,11 @@ public class NativeLoader {
             LOGGER.warn("try load lib from sys lib path failed: {}", e.getMessage());
         }
         if (SHOWER_LIB_DEF.equals(SHOWER_LIB)) {
+            LOGGER.info("try load native library[{}] from classpath", SHOWER_LIB_IN_JAR_PATH);
             loadFromJar();
         } else {
-            LOGGER.info("load native library[{}] from {}", SHOWER_LIB_NAME, SHOWER_LIB);
-            System.load(SHOWER_LIB);
+            LOGGER.info("try load native library[{}] from {}", SHOWER_LIB_NAME, SHOWER_LIB);
+            loadFromSysProperties();
         }
     }
 
@@ -64,7 +66,16 @@ public class NativeLoader {
             Files.copy(is, tmpLib, StandardCopyOption.REPLACE_EXISTING);
             System.load(tmpLib.toAbsolutePath().toString());
         } catch (IOException e) {
-            LOGGER.warn("failed to load native library[{}] from jar: {}", SHOWER_LIB_IN_JAR_PATH, e.getMessage());
+            LOGGER.warn("failed to load native library[{}] from classpath: {}", SHOWER_LIB_IN_JAR_PATH, e.getMessage());
+            throw new RuntimeException(e);
+        }
+    }
+
+    private static void loadFromSysProperties() {
+        try {
+            System.load(SHOWER_LIB);
+        } catch (Exception e) {
+            LOGGER.info("failed to load native library[{}] from {}: {}", SHOWER_LIB_NAME, SHOWER_LIB, e.getMessage());
             throw new RuntimeException(e);
         }
     }
