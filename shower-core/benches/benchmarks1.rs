@@ -1,13 +1,9 @@
-use shower::{
-    def_aggregate, def_incoming, def_mapper_bind_aggregate, def_stream, new_data, start, stop,
-    Column, U8Bytes,
-};
-use std::{
-    env, ptr, thread,
-    time::{Duration, SystemTime},
-};
+mod bench_aux;
+mod bench_log;
 
-const LOOP_SIZE: usize = 100000;
+use criterion::{criterion_group, criterion_main, Bencher, Criterion};
+use shower::{Column, U8Bytes};
+use std::{ptr, thread, time::Duration};
 
 const FILTER_SQL: &str = r#"
     SELECT demo.a, demo.b, demo.c, _sub(_add(demo.d, demo.d), demo.e)
@@ -15,53 +11,64 @@ const FILTER_SQL: &str = r#"
     WHERE (demo.a = 1 AND demo.b = 2) OR (demo.a = 3 AND demo.b = 4)
     LIMIT 10
     "#;
-const AGGREGATE_SQL: &str = r#"
-    select _maxl(stream.a), _minl(stream.a), _suml(stream.a),
-           _maxd(stream.a), _mind(stream.a), _sumd(stream.a),
-           _avg(stream.a), _count(stream.a)
-    from stream
-    "#;
 
-pub fn main() {
-    env::set_var("SHOWER_HOME", env::current_dir().unwrap());
-    start();
-    exec_with_time_it(gen_new_data);
-    stop();
+fn alternate_measurement() -> Criterion {
+    Criterion::default()
+        .sample_size(100)
+        .measurement_time(Duration::from_secs(5))
 }
 
-fn gen_new_data() {
+pub fn criterion_benchmark(c: &mut Criterion) {
+    bench_log::setup_shower_home();
+    bench_log::init_logger();
+    shower::start();
+    test_shower(c);
+    shower::stop();
+}
+
+fn test<F>(c: &mut Criterion, test_case: &str, f: F)
+where
+    F: FnMut(&mut Bencher),
+{
+    call_test_case(c, test_case, f);
+}
+
+fn call_test_case<F>(c: &mut Criterion, test_case: &str, f: F)
+where
+    F: FnMut(&mut Bencher),
+{
+    c.bench_function(test_case, f);
+}
+
+criterion_group!(
+    name = benches;
+    config = alternate_measurement();
+    targets = criterion_benchmark
+);
+criterion_main!(benches);
+
+fn test_shower(c: &mut Criterion) {
     let core_ids = core_affinity::get_core_ids().unwrap();
     core_affinity::set_for_current(core_ids[core_ids.len() - 1]);
     log::info!("thread:{} started", thread::current().name().unwrap());
     if let Some((id1, _id2)) = define_records() {
-        if let Some(aggregate_id) = def_aggregate(AGGREGATE_SQL, |_data| {}) {
-            log::info!("define aggregate: {}", aggregate_id);
-            if let Some(mapper_id) = def_mapper_bind_aggregate(FILTER_SQL, aggregate_id) {
-                log::info!("define mapper: {}", mapper_id);
-            } else {
-                log::warn!("def_mapper_bind_aggregate failed");
-                return;
-            }
+        if let Some(mapper_id) = shower::def_mapper(FILTER_SQL, |_data| {}) {
+            log::info!("define mapper: {}", mapper_id);
         } else {
-            log::warn!("def_aggregate failed");
+            log::warn!("def_mapper failed");
             return;
         }
         let u8data = gen_u8_bytes(id1);
-        for _ in 1..=LOOP_SIZE {
-            let ret = new_data(&u8data);
-            if ret {
-                log::debug!("send success");
-            } else {
-                log::warn!("send failed");
-            }
-        }
+        test(c, "new_data_and_filter", |b| {
+            b.iter(|| shower::new_data(&u8data))
+        });
     }
 }
 
 fn define_records() -> Option<(u16, u16)> {
     let id1;
     let id2;
-    if let Some(id) = def_incoming(
+    if let Some(id) = shower::def_incoming(
         "demo",
         vec![
             Column::new_long("a"),
@@ -81,7 +88,7 @@ fn define_records() -> Option<(u16, u16)> {
         log::warn!("failed to define incoming record");
         return None;
     }
-    if let Some(id) = def_stream(
+    if let Some(id) = shower::def_stream(
         "stream",
         vec![
             Column::new_long("a"),
@@ -112,24 +119,6 @@ fn gen_u8_bytes(id: u16) -> U8Bytes {
     fill_u64(&mut slice[24..32], 4);
     fill_u64(&mut slice[32..40], 5);
     U8Bytes::new_from_vec(id, 512, Vec::from(u8array))
-}
-
-pub fn exec_with_time_it<F>(f: F)
-where
-    F: Fn(),
-{
-    let start = SystemTime::now();
-    f();
-    let end = SystemTime::now();
-    let duration = end
-        .duration_since(start)
-        .unwrap_or_else(|_e| Duration::new(0, 0));
-    log::info!(
-        "cost time: {:?}ms / {:?}ns, use {:?}ns per operation",
-        duration.as_millis(),
-        duration.as_nanos(),
-        1_f64 * (duration.as_nanos() as f64) / (LOOP_SIZE as f64)
-    );
 }
 
 #[inline]

@@ -15,9 +15,13 @@ keywords = [""]
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
-# [[bench]]
-# name = "benchmarks"
-# harness = false
+[[bench]]
+name = "benchmarks1"
+harness = false
+
+[[bench]]
+name = "benchmarks2"
+harness = false
 
 [dependencies]
 config = "0.13.3"
