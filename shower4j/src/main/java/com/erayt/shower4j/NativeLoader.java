@@ -29,17 +29,25 @@ public class NativeLoader {
     private static final String OS_NAME = System.getProperty("os.name");
     private static final String EXT = (OS_NAME.toLowerCase().contains("win")) ? ".dll" : ".so";
 
-    private static final String SHOWER_LIB_PREFIX = "libshower4j";
-    private static final String SHOWER_LIB_IN_JAR_PATH = "resources/" + SHOWER_LIB_PREFIX + EXT;
+    private static final String SHOWER_LIB_SHORT_NAME = "shower4j";
+    private static final String SHOWER_LIB_PREFIX = "lib" + SHOWER_LIB_SHORT_NAME;
+    private static final String SHOWER_LIB_NAME = SHOWER_LIB_PREFIX + EXT;
+    private static final String SHOWER_LIB_IN_JAR_PATH = "resources/" + SHOWER_LIB_NAME;
 
     private static final String SHOWER_LIB_DEF = "ENV_LIB_PARAM_NOT_EXIST";
     private static final String SHOWER_LIB = System.getProperty("showerLib", SHOWER_LIB_DEF);
 
     public static void load() {
+        try {
+            System.loadLibrary(SHOWER_LIB_SHORT_NAME);
+            return;
+        } catch (Exception e) {
+            LOGGER.warn("try load lib from sys lib path failed: {}", e.getMessage());
+        }
         if (SHOWER_LIB_DEF.equals(SHOWER_LIB)) {
             loadFromJar();
         } else {
-            LOGGER.info("load native library from {}", SHOWER_LIB);
+            LOGGER.info("load native library[{}] from {}", SHOWER_LIB_NAME, SHOWER_LIB);
             System.load(SHOWER_LIB);
         }
     }
@@ -56,6 +64,7 @@ public class NativeLoader {
             Files.copy(is, tmpLib, StandardCopyOption.REPLACE_EXISTING);
             System.load(tmpLib.toAbsolutePath().toString());
         } catch (IOException e) {
+            LOGGER.warn("failed to load native library[{}] from jar: {}", SHOWER_LIB_IN_JAR_PATH, e.getMessage());
             throw new RuntimeException(e);
         }
     }
