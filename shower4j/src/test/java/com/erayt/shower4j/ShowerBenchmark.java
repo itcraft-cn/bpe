@@ -11,8 +11,9 @@ import org.openjdk.jmh.annotations.TearDown;
 import org.openjdk.jmh.annotations.Threads;
 import org.openjdk.jmh.annotations.Warmup;
 
+import java.util.ArrayList;
+import java.util.List;
 import java.util.concurrent.TimeUnit;
-import java.util.concurrent.atomic.AtomicLong;
 
 /**
  * @author Helly Guo
@@ -28,25 +29,47 @@ import java.util.concurrent.atomic.AtomicLong;
 @OutputTimeUnit(TimeUnit.MICROSECONDS)
 // TODO: need to fix it
 public class ShowerBenchmark {
-    private static final String SQL = "select _1.__1 from _1 limit 1";
-    private static final byte[] DATA = {
-            0xf, 0, 0, 0, 0, 0, 0, 0,
-            0, 0, 0, 0, 0, 0, 0, 0,
-            0, 0, 0, 0, 0, 0, 0, 0,
-            0, 0, 0, 0, 0, 0, 0, 0,
-            0, 0, 0, 0, 0, 0, 0, 0,
-            0, 0, 0, 0, 0, 0, 0, 0,
-            0, 0, 0, 0, 0, 0, 0, 0,
-            0, 0, 0, 0, 0, 0, 0, 0,
-    };
+
+    private static final String SQL = "select demo.a, demo.b, demo.c, demo.d from demo limit 10";
+    private static final String SQL2 = "select _suml(stream.a) from stream";
+
+    private static final SimpleData DATA = new SimpleData(1, 2L, 3.45D, "hello");
+
+    private static int targetId;
 
     @Setup
     public static void setUp() {
-        AtomicLong val = new AtomicLong(0);
         JavaShower.start();
-        if (JavaShower.defMapper(SQL, (data, size) -> val.getAndAdd(size)) == -1) {
+        SimpleDataConverter converter = new SimpleDataConverter();
+        List<ColumnDefine> list = new ArrayList<>();
+        list.add(ColumnDefine.createLong("a"));
+        list.add(ColumnDefine.createLong("b"));
+        list.add(ColumnDefine.createDouble("c"));
+        list.add(ColumnDefine.createString("d", 16));
+        List<ColumnDefine> list2 = new ArrayList<>();
+        list2.add(ColumnDefine.createLong("a"));
+        list2.add(ColumnDefine.createLong("b"));
+        list2.add(ColumnDefine.createDouble("c"));
+        list2.add(ColumnDefine.createString("d", 16));
+        int recordId = JavaShower.defIncoming("demo", list);
+        if (recordId == -1) {
             System.exit(1);
         }
+        int recordId2 = JavaShower.defStream("stream", list2);
+        if (recordId2 == -1) {
+            System.exit(1);
+        }
+        int aggregateId = JavaShower.defAggregate(SQL2, (data, size) -> {
+        });
+        if (aggregateId == -1) {
+            System.exit(1);
+        }
+        int mapperId = JavaShower.defMapperBindAggregate(SQL, aggregateId);
+        if (mapperId == -1) {
+            System.exit(1);
+        }
+        JavaShower.regConvert(recordId, converter);
+        targetId = recordId;
     }
 
     @TearDown
@@ -56,7 +79,7 @@ public class ShowerBenchmark {
 
     @Benchmark
     public void test() {
-        JavaShower.newData(1, DATA);
+        JavaShower.newData(targetId, DATA);
     }
 }
 

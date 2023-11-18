@@ -12,7 +12,6 @@ import java.util.Scanner;
  * <p>
  * Created on 10/25/23 2:10 PM
  */
-// TODO: need to fix it
 public class ShowerSample {
     private static final Logger LOGGER = LoggerFactory.getLogger(ShowerSample.class);
 
