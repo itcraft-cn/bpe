@@ -4,7 +4,11 @@ use crate::{
     consts::{DEFAULT_VEC_SIZE, KEY_VEC_SIZE, U8_DATA_MAX_SIZE},
     data::U8Bytes,
 };
-use std::sync::Once;
+use std::{
+    alloc::{self, Layout},
+    slice,
+    sync::Once,
+};
 
 static MAP_INIT: Once = Once::new();
 static mut MAP: Option<SimpleU16Map> = None;
@@ -79,14 +83,19 @@ impl<'a> Iterator for DataIterator<'a> {
         } else {
             let position = (walker - U8_DATA_MAX_SIZE - self.offset * U8_DATA_MAX_SIZE) & mask;
             self.offset += 1;
-            Some(&self.array.data.as_slice()[position..position + U8_DATA_MAX_SIZE])
+            Some(unsafe {
+                &slice::from_raw_parts(
+                    (self.array.data as u64 + position as u64) as *mut u8,
+                    U8_DATA_MAX_SIZE,
+                )
+            })
         }
     }
 }
 
 #[derive(Debug)]
 struct WrappedArray {
-    data: Vec<u8>,
+    data: *mut u8,
     size: usize,
     mask: usize,
     walker: usize,
@@ -94,8 +103,10 @@ struct WrappedArray {
 
 impl WrappedArray {
     fn new(size: usize) -> Self {
+        let layout = Layout::from_size_align(size, 1).unwrap();
+        let ptr = unsafe { alloc::alloc(layout) };
         WrappedArray {
-            data: vec![0_u8; size],
+            data: ptr,
             size,
             mask: size - 1,
             walker: 0,
@@ -123,8 +134,7 @@ impl WrappedArray {
     }
 
     fn data(&mut self) -> &mut [u8] {
-        let slice = self.data.as_mut_slice();
-        slice
+        unsafe { slice::from_raw_parts_mut(self.data, self.size) }
     }
 
     fn walker(&self) -> usize {
