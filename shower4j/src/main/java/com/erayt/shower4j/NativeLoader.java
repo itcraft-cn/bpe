@@ -42,8 +42,8 @@ public class NativeLoader {
         try {
             System.loadLibrary(SHOWER_LIB_SHORT_NAME);
             return;
-        } catch (Exception e) {
-            LOGGER.warn("try load lib from sys lib path failed: {}", e.getMessage());
+        } catch (UnsatisfiedLinkError error) {
+            LOGGER.warn("try load lib from sys lib path failed: {}", error.getMessage());
         }
         if (SHOWER_LIB_DEF.equals(SHOWER_LIB)) {
             LOGGER.info("try load native library[{}] from classpath", SHOWER_LIB_IN_JAR_PATH);
@@ -52,6 +52,7 @@ public class NativeLoader {
             LOGGER.info("try load native library[{}] from {}", SHOWER_LIB_NAME, SHOWER_LIB);
             loadFromSysProperties();
         }
+        LOGGER.info("load native library[{}] success", SHOWER_LIB_NAME);
     }
 
     private static void loadFromJar() {
@@ -65,7 +66,7 @@ public class NativeLoader {
             tmpLib.toFile().deleteOnExit();
             Files.copy(is, tmpLib, StandardCopyOption.REPLACE_EXISTING);
             System.load(tmpLib.toAbsolutePath().toString());
-        } catch (IOException e) {
+        } catch (UnsatisfiedLinkError | IOException e) {
             LOGGER.warn("failed to load native library[{}] from classpath: {}", SHOWER_LIB_IN_JAR_PATH, e.getMessage());
             throw new RuntimeException(e);
         }
@@ -74,7 +75,7 @@ public class NativeLoader {
     private static void loadFromSysProperties() {
         try {
             System.load(SHOWER_LIB);
-        } catch (Exception e) {
+        } catch (UnsatisfiedLinkError e) {
             LOGGER.info("failed to load native library[{}] from {}: {}", SHOWER_LIB_NAME, SHOWER_LIB, e.getMessage());
             throw new RuntimeException(e);
         }
