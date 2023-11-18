@@ -1,5 +1,6 @@
 use crate::{
     aux::{SimpleU16Entry, SimpleU16Map},
+    consts::U8_DATA_MAX_SIZE,
     data::{Column, Record, U8Bytes},
     element::Element,
     error::ParseSqlError,
@@ -10,7 +11,7 @@ use crate::{
         base::{parse_options, ExprEntity, OpType, ParsedSql, ValType},
         select::parse_select,
     },
-    store::{create_iterator, DataIterator},
+    store::find_or_insert_array,
 };
 use sql_parse::ParseOptions;
 
@@ -68,12 +69,12 @@ pub(crate) fn call_mapper(data: &U8Bytes) {
     invoke(id, &wrapped.mapper, record.columns(), &wrapped.fn_holder);
 }
 
-fn search_mapper<'a>(id: u16) -> Option<&'a WrappedMapper<'a>> {
+fn search_mapper<'a>(id: u16) -> Option<&'a WrappedMapper> {
     let map = unsafe { MAPPER_MAP.as_ref().unwrap() };
     map.get(id)
 }
 
-fn gen_mapper<'a>(parsed_sql: &ParsedSql) -> Result<Mapper<'a>, ParseSqlError> {
+fn gen_mapper(parsed_sql: &ParsedSql) -> Result<Mapper, ParseSqlError> {
     let record_id_array = &parsed_sql.records();
     if record_id_array.len() != 1 {
         return Err(ParseSqlError::new(format!(
@@ -82,7 +83,6 @@ fn gen_mapper<'a>(parsed_sql: &ParsedSql) -> Result<Mapper<'a>, ParseSqlError> {
         )));
     }
     let id = next_mapper_id();
-    let iterator = create_iterator(id);
     let rs_filter = create_filter(&parsed_sql.filters());
     if rs_filter.is_err() {
         return Err(ParseSqlError::new(format!(
@@ -99,7 +99,6 @@ fn gen_mapper<'a>(parsed_sql: &ParsedSql) -> Result<Mapper<'a>, ParseSqlError> {
     }
     Ok(Mapper {
         id,
-        iterator,
         filter: rs_filter.unwrap(),
         limit: parsed_sql.limit(),
         executors: rs_executors.unwrap(),
@@ -143,13 +142,29 @@ fn create_filter(entities: &[ExprEntity]) -> Result<Filter, ParseSqlError> {
     }
 }
 
+#[inline]
 fn invoke(id: u16, mapper: &'static Mapper, columns: &Vec<Column>, fn_holder: &FnHolder) {
-    let vec: Vec<[u8; 512]> = mapper
-        .iterator
-        .filter(|slice| mapper.filter.is_match(id, columns, slice))
-        .take(mapper.limit)
-        .map(|slice| mapper.fetch(id, columns, slice))
-        .collect();
+    let mut vec: Vec<[u8; 512]> = vec![];
+    let wrapped = find_or_insert_array(id);
+    let mut count = 0;
+    let walker = wrapped.walker() + wrapped.len();
+    let mask = wrapped.mask();
+    let records = wrapped.records();
+    loop {
+        let position = (walker - U8_DATA_MAX_SIZE - count * U8_DATA_MAX_SIZE) & mask;
+        let sub_vec = wrapped.sub_data(position);
+        if mapper.filter.is_match(id, columns, sub_vec) {
+            vec.push(mapper.fetch(id, columns, sub_vec));
+        }
+        if vec.len() == mapper.limit {
+            break;
+        }
+        if count == records {
+            break;
+        } else {
+            count += 1;
+        }
+    }
     match fn_holder {
         FnHolder::Func(f) => f(vec),
         FnHolder::FfiFunc(ffi) => ffi.callback(vec),
@@ -295,14 +310,13 @@ where
 }
 
 #[derive(Debug)]
-pub(crate) struct Mapper<'a> {
+pub(crate) struct Mapper {
     id: u16,
-    iterator: DataIterator<'a>,
     filter: Filter,
     limit: usize,
     executors: Vec<Executor>,
 }
-impl<'a> Mapper<'a> {
+impl Mapper {
     pub(crate) fn id(&self) -> u16 {
         self.id
     }
@@ -322,12 +336,12 @@ impl<'a> Mapper<'a> {
     }
 }
 
-pub(crate) struct WrappedMapper<'a> {
-    mapper: Mapper<'a>,
+pub(crate) struct WrappedMapper {
+    mapper: Mapper,
     fn_holder: FnHolder,
 }
-impl<'a> WrappedMapper<'a> {
-    fn new(mapper: Mapper<'a>, fn_holder: FnHolder) -> Self {
+impl<'a> WrappedMapper {
+    fn new(mapper: Mapper, fn_holder: FnHolder) -> Self {
         WrappedMapper { mapper, fn_holder }
     }
 }
