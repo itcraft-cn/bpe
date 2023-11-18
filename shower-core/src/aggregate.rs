@@ -79,14 +79,6 @@ fn setup_init_val(
                 fill_i64(&mut aggregate_data[offset..offset + 8], i64::MAX);
                 Ok(())
             }
-            Func::SumL => {
-                fill_i64(&mut aggregate_data[offset..offset + 8], 0);
-                Ok(())
-            }
-            Func::Count => {
-                fill_i64(&mut aggregate_data[offset..offset + 8], 0);
-                Ok(())
-            }
             Func::MaxD => {
                 fill_f64(&mut aggregate_data[offset..offset + 8], f64::MIN);
                 Ok(())
@@ -95,17 +87,8 @@ fn setup_init_val(
                 fill_f64(&mut aggregate_data[offset..offset + 8], f64::MAX);
                 Ok(())
             }
-            Func::SumD => {
-                fill_f64(&mut aggregate_data[offset..offset + 8], 0_f64);
-                Ok(())
-            }
-            Func::Avg => {
-                fill_f64(&mut aggregate_data[offset..offset + 8], 0_f64);
-                Ok(())
-            }
             _ => {
-                log::warn!("unsupported function: {:?}", func);
-                Err(String::from("unsupported function"))
+                Ok(())
             }
         },
         _ => {
