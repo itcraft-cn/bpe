@@ -77,7 +77,7 @@ impl SimpleU16Map {
         }
     }
     #[inline]
-    pub(crate) fn get_mut<'a, T>(&'a mut self, id: u16) -> Option<&'a mut T> {
+    pub(crate) fn get_mut<T>(&mut self, id: u16) -> Option<&mut T> {
         let u64v = self.ptr_array[id as usize];
         if u64v == 0 {
             None

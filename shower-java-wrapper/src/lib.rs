@@ -92,7 +92,7 @@ fn def_record<'local, F>(
 where
     F: Fn(&str, Vec<Column>) -> Option<u16>,
 {
-    let name = if let Ok(nm) = conv(&env, j_name) {
+    let name = if let Ok(nm) = conv(env, j_name) {
         nm
     } else {
         return -1;

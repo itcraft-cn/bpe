@@ -14,9 +14,8 @@ static MAP_INIT: Once = Once::new();
 static mut MAP: Option<SimpleU16Map> = None;
 static mut VEC_SIZE: usize = 0;
 
-pub(crate) fn insert(data: &U8Bytes) {
+pub(crate) fn init_store() {
     MAP_INIT.call_once(initial);
-    insert_into_slice(data);
 }
 
 fn initial() {
@@ -28,11 +27,13 @@ fn initial() {
     }
 }
 
-fn insert_into_slice(data: &U8Bytes) {
-    let id = data.id();
+pub(crate) fn insert(array: &mut WrappedArray, data: &U8Bytes) {
+    insert_into_slice(array, data);
+}
+
+fn insert_into_slice(array: &mut WrappedArray, data: &U8Bytes) {
     let size = data.data_len();
     let data = data.bytes();
-    let array = find_or_insert_array_mut(id);
     let base = array.walker() & array.mask();
     let slice = array.data();
     slice[base..base + size].copy_from_slice(&data[0..size]);
@@ -40,16 +41,11 @@ fn insert_into_slice(data: &U8Bytes) {
 }
 
 #[inline]
-fn find_or_insert_array_mut<'a>(id: u16) -> &'a mut WrappedArray {
+pub(crate) fn find_or_insert_array<'a>(id: u16) -> &'a mut WrappedArray {
     let map = unsafe { MAP.as_mut().unwrap() };
     map.entry(id)
         .or_insert_with(map, || WrappedArray::new(unsafe { VEC_SIZE }));
     map.get_mut(id).unwrap()
-}
-
-#[inline]
-pub(crate) fn find_or_insert_array<'a>(id: u16) -> &'a WrappedArray {
-    find_or_insert_array_mut(id)
 }
 
 #[derive(Debug)]
@@ -84,7 +80,7 @@ impl WrappedArray {
         self.len() / U8_DATA_MAX_SIZE
     }
 
-    fn _size(&self) -> usize {
+    pub(crate) fn size(&self) -> usize {
         self.size
     }
 
@@ -92,13 +88,17 @@ impl WrappedArray {
         self.mask
     }
 
+    pub(crate) fn u64ptr(&self) -> u64 {
+        self.data as u64
+    }
+
     fn data(&mut self) -> &mut [u8] {
         unsafe { slice::from_raw_parts_mut(self.data, self.size) }
     }
 
-    pub(crate) fn sub_data(&self, offset: usize) -> &mut [u8] {
+    pub(crate) fn sub_data(&self, offset: usize) -> &[u8] {
         unsafe {
-            slice::from_raw_parts_mut(
+            slice::from_raw_parts(
                 (self.data as u64 + offset as u64) as *mut u8,
                 U8_DATA_MAX_SIZE,
             )
@@ -125,16 +125,11 @@ mod tests {
         let mut map = SimpleU16Map::new();
         map.entry(1)
             .or_insert_with(&mut map, || WrappedArray::new(1));
-        if let Some(x) = map.get_mut::<WrappedArray>(1) {
-            log::info!("{:?}", x.walker());
-        }
-    }
-
-    #[test]
-    fn test2() {
-        test_init();
-        for _ in 0..100 {
-            insert(&U8Bytes::new_from_vec(16, 288, vec![0_u8; 288]));
+        if let Some(array) = map.get_mut::<WrappedArray>(1) {
+            log::info!("{:?}", array.walker());
+            for _ in 0..100 {
+                insert(array, &U8Bytes::new_from_vec(16, 288, vec![0_u8; 288]));
+            }
         }
     }
 }

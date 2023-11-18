@@ -1,31 +1,37 @@
+use std::slice;
+
 const TINY_SMALL_F64: f64 = 0.00000001;
 
 #[derive(Debug, Clone)]
 pub(crate) enum Element {
     Long(i64),
     Double(f64),
-    _Str(&'static [u8], usize),
+    Str(u64, usize, usize),
 }
 impl Element {
     pub(crate) fn len(&self) -> usize {
         match self {
             Element::Long(_) => 8,
             Element::Double(_) => 8,
-            Element::_Str(_, len) => *len,
+            Element::Str(_, _, len) => *len,
         }
     }
     pub(crate) fn copy_to_target(&self, target: &mut [u8]) {
         match self {
             Element::Long(val) => target.copy_from_slice(val.to_ne_bytes().as_slice()),
             Element::Double(val) => target.copy_from_slice(val.to_ne_bytes().as_slice()),
-            Element::_Str(slice, _len) => target.copy_from_slice(slice),
+            Element::Str(u64ptr, offset, len) => {
+                let ptr_slice = (*u64ptr + *offset as u64) as *const u8;
+                let slice = unsafe { slice::from_raw_parts(ptr_slice, *len) };
+                target.copy_from_slice(slice)
+            }
         };
     }
     pub(crate) fn _is_computed(&self) -> bool {
         match self {
             Element::Long(_) => true,
             Element::Double(_) => true,
-            Element::_Str(_, _) => false,
+            Element::Str(_, _, _) => false,
         }
     }
     pub(crate) fn add(self, other: Element) -> Element {

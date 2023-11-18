@@ -1,18 +1,15 @@
 use crate::{
     aggregate::{call_aggregate, define_aggregate, init_aggregate_store, search_aggregate},
-    cfg::{get_config, load_config},
-    consts::KEY_DEV_MODE,
+    cfg::load_config,
     data::{check_id, init_record_store, Column, Record, RecordType, U8Bytes},
     ffi::FfiFunc,
     func::FnHolder,
     id::init_walker,
     logger::init_logger,
     mapper::{call_mapper, define_mapper, init_mapper_store},
-    store::insert,
+    store::{find_or_insert_array, init_store, insert, WrappedArray},
 };
 use std::sync::Once;
-
-static mut DEBUG: bool = false;
 
 pub fn start() -> bool {
     static START: Once = Once::new();
@@ -31,16 +28,11 @@ pub fn start() -> bool {
 fn actual_start() -> bool {
     load_config();
     init_logger();
-
-    let cfg = get_config();
-
-    unsafe {
-        DEBUG = cfg.fetch_cfg_bool(KEY_DEV_MODE);
-        init_walker();
-        init_mapper_store();
-        init_aggregate_store();
-        init_record_store();
-    }
+    init_walker();
+    init_mapper_store();
+    init_aggregate_store();
+    init_record_store();
+    init_store();
     true
 }
 
@@ -67,15 +59,16 @@ pub fn new_data(data: &U8Bytes) -> bool {
         log::warn!("id [{}] is not defined", id);
         false
     } else {
-        process_data(data);
+        let array = find_or_insert_array(id);
+        process_data(array, data);
         true
     }
 }
 
 #[inline]
-fn process_data(data: &U8Bytes) {
-    insert(data);
-    call_mapper(data);
+fn process_data(array: &mut WrappedArray, data: &U8Bytes) {
+    insert(array, data);
+    call_mapper(array, data);
 }
 
 pub fn def_mapper<F>(sql: &str, func: F) -> Option<u16>

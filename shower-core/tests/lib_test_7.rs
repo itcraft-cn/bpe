@@ -9,7 +9,7 @@ use std::thread;
 use test_aux::{fetch_f64, fetch_i64, fill_i64};
 use test_log::{init_logger, setup_shower_home};
 
-const LOOP_SIZE: usize = 3;
+const LOOP_SIZE: usize = 20;
 
 const FILTER_SQL: &str = r#"
     select demo.a from demo limit 10
