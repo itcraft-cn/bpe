@@ -44,23 +44,45 @@ pub(crate) fn define_aggregate(sql: &str, func_holder: FnHolder) -> Option<u16> 
 
 #[inline]
 pub(crate) fn call_aggregate(wrapped: &WrappedAggregate, data: Vec<[u8; 512]>) {
-    let mut aggregate_data = [0_u8; 512];
+    let id = wrapped.aggregate().stream_id();
+    if let Some(stream) = Record::get_record(id) {
+        let mut aggregate_data = [0_u8; 512];
+        if init_data(&mut aggregate_data, wrapped) {
+            compute_data(&mut aggregate_data, data, wrapped, stream);
+            callback(wrapped, aggregate_data);
+        }
+    } else {
+        log::warn!("failed to find stream by id[{}]", id);
+    }
+}
+
+fn init_data(aggregate_data: &mut [u8; 512], wrapped: &WrappedAggregate) -> bool {
     for (idx, executor) in wrapped.aggregate().executors().iter().enumerate() {
-        let rs = setup_init_val(&mut aggregate_data, idx, executor);
+        let rs = setup_init_val(aggregate_data, idx, executor);
         if rs.is_err() {
             log::warn!("hit error: {:?}", rs.err());
-            return;
+            return false;
         }
     }
-    if let Some(stream) = Record::get_record(wrapped.aggregate().stream_id()) {
-        for (data_idx, sub_data) in data.iter().enumerate() {
-            loop_compute(&mut aggregate_data, sub_data, data_idx, wrapped, stream);
-        }
-        match &wrapped.fn_holder {
-            FnHolder::Func(f) => f(vec![aggregate_data]),
-            FnHolder::FfiFunc(f) => f.callback(vec![aggregate_data]),
-            FnHolder::Lambda(f) => f(vec![aggregate_data]),
-        }
+    true
+}
+
+fn compute_data(
+    aggregate_data: &mut [u8; 512],
+    data: Vec<[u8; 512]>,
+    wrapped: &WrappedAggregate,
+    stream: &Record,
+) {
+    for (data_idx, sub_data) in data.iter().enumerate() {
+        loop_compute(aggregate_data, sub_data, data_idx, wrapped, stream);
+    }
+}
+
+fn callback(wrapped: &WrappedAggregate, aggregate_data: [u8; 512]) {
+    match &wrapped.fn_holder {
+        FnHolder::Func(f) => f(vec![aggregate_data]),
+        FnHolder::FfiFunc(f) => f.callback(vec![aggregate_data]),
+        FnHolder::Lambda(f) => f(vec![aggregate_data]),
     }
 }
 
