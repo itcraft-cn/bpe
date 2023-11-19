@@ -52,13 +52,15 @@ pub(crate) fn call_aggregate(wrapped: &WrappedAggregate, data: Vec<[u8; 512]>) {
             return;
         }
     }
-    for (data_idx, sub_data) in data.iter().enumerate() {
-        loop_compute(&mut aggregate_data, sub_data, data_idx, wrapped);
-    }
-    match &wrapped.fn_holder {
-        FnHolder::Func(f) => f(vec![aggregate_data]),
-        FnHolder::FfiFunc(f) => f.callback(vec![aggregate_data]),
-        FnHolder::Lambda(f) => f(vec![aggregate_data]),
+    if let Some(stream) = Record::get_record(wrapped.aggregate().stream_id()) {
+        for (data_idx, sub_data) in data.iter().enumerate() {
+            loop_compute(&mut aggregate_data, sub_data, data_idx, wrapped, stream);
+        }
+        match &wrapped.fn_holder {
+            FnHolder::Func(f) => f(vec![aggregate_data]),
+            FnHolder::FfiFunc(f) => f.callback(vec![aggregate_data]),
+            FnHolder::Lambda(f) => f(vec![aggregate_data]),
+        }
     }
 }
 
@@ -87,9 +89,7 @@ fn setup_init_val(
                 fill_f64(&mut aggregate_data[offset..offset + 8], f64::MAX);
                 Ok(())
             }
-            _ => {
-                Ok(())
-            }
+            _ => Ok(()),
         },
         _ => {
             log::warn!(
@@ -107,9 +107,10 @@ fn loop_compute(
     sub_data: &[u8; 512],
     data_idx: usize,
     wrapped: &WrappedAggregate,
+    stream: &Record,
 ) {
     for (idx, executor) in wrapped.aggregate().executors().iter().enumerate() {
-        compute(idx, executor, aggregate_data, sub_data, data_idx);
+        compute(idx, executor, aggregate_data, sub_data, data_idx, stream);
     }
 }
 
@@ -120,6 +121,7 @@ fn compute(
     aggregate_data: &mut [u8; 512],
     sub_data: &[u8; 512],
     data_idx: usize,
+    stream: &Record,
 ) {
     let offset = idx * 8;
     match executor {
@@ -133,7 +135,7 @@ fn compute(
                 return;
             }
             let sub_executor = executors.first().unwrap();
-            let element = fetch_arg_val(sub_data, sub_executor);
+            let element = fetch_arg_val(sub_data, sub_executor, stream);
             match (func, &element) {
                 (Func::MaxL, Element::Long(v)) => {
                     let max = fetch_i64(&aggregate_data[offset..offset + 8]);
@@ -203,10 +205,10 @@ fn compute(
     }
 }
 
-fn fetch_arg_val(sub_data: &[u8; 512], executor: &Executor) -> Element {
+fn fetch_arg_val(sub_data: &[u8; 512], executor: &Executor, stream: &Record) -> Element {
     match executor {
         Executor::Fetch(record_id, field_id) => {
-            if let Some(column) = Record::get_column(*record_id, *field_id) {
+            if let Some(column) = stream.column(*field_id) {
                 let column_type = column.data_type();
                 let offset = column.offset();
                 let slice = sub_data.as_slice();
@@ -251,8 +253,8 @@ fn gen_aggregate(parsed_sql: &ParsedSql) -> Result<Aggregate, ParseSqlError> {
             "only support one record in aggregate",
         )));
     }
-    let stream = Record::get_record(parsed_sql.records()[0]);
-    if stream.is_none() {
+    let opt_stream = Record::get_record(parsed_sql.records()[0]);
+    if opt_stream.is_none() {
         return Err(ParseSqlError::new(format!(
             "stream {} not found",
             parsed_sql.records()[0]
@@ -261,7 +263,11 @@ fn gen_aggregate(parsed_sql: &ParsedSql) -> Result<Aggregate, ParseSqlError> {
     let rs = create_executor(&parsed_sql.records(), &fields);
     if let Ok(executors) = rs {
         let id = next_aggregate_id();
-        Ok(Aggregate { id, executors })
+        Ok(Aggregate {
+            id,
+            stream_id: opt_stream.unwrap().id(),
+            executors,
+        })
     } else {
         Err(ParseSqlError::new(String::from(
             "fail to create executors for aggregate",
@@ -271,11 +277,15 @@ fn gen_aggregate(parsed_sql: &ParsedSql) -> Result<Aggregate, ParseSqlError> {
 
 pub(crate) struct Aggregate {
     id: u16,
+    stream_id: u16,
     executors: Vec<Executor>,
 }
 impl Aggregate {
     fn id(&self) -> u16 {
         self.id
+    }
+    fn stream_id(&self) -> u16 {
+        self.stream_id
     }
     fn executors(&self) -> &Vec<Executor> {
         &self.executors
@@ -283,17 +293,17 @@ impl Aggregate {
 }
 
 pub(crate) struct WrappedAggregate {
-    _aggregate: Aggregate,
+    aggregate: Aggregate,
     fn_holder: FnHolder,
 }
 impl WrappedAggregate {
-    fn new(_aggregate: Aggregate, _fn_holder: FnHolder) -> Self {
+    fn new(aggregate: Aggregate, fn_holder: FnHolder) -> Self {
         WrappedAggregate {
-            _aggregate,
-            fn_holder: _fn_holder,
+            aggregate,
+            fn_holder,
         }
     }
     fn aggregate(&self) -> &Aggregate {
-        &self._aggregate
+        &self.aggregate
     }
 }

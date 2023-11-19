@@ -162,7 +162,7 @@ pub(crate) enum RecordType {
 #[derive(Clone, Debug)]
 pub(crate) struct Record {
     _name: String,
-    _id: u16,
+    id: u16,
     _record_type: RecordType,
     columns: Vec<Column>,
     columns_map: HashMap<String, u16>,
@@ -175,7 +175,7 @@ impl Record {
         }
         Record {
             _name: String::from(name),
-            _id: id,
+            id,
             _record_type: record_type,
             columns,
             columns_map: map,
@@ -224,12 +224,15 @@ impl Record {
             None
         }
     }
-    pub(crate) fn get_column(record_id: u16, column_id: u16) -> Option<&'static Column> {
+    pub(crate) fn _get_column(record_id: u16, column_id: u16) -> Option<&'static Column> {
         if let Some(record) = Record::get_record(record_id) {
             record.columns().get((column_id - 1) as usize)
         } else {
             None
         }
+    }
+    pub(crate) fn id(&self) -> u16 {
+        self.id
     }
     pub(crate) fn _record_type(&self) -> &RecordType {
         &self._record_type
@@ -239,6 +242,9 @@ impl Record {
     }
     pub(crate) fn column_id(&self, column_name: &str) -> Option<&u16> {
         self.columns_map.get(&String::from(column_name))
+    }
+    pub(crate) fn column(&self, column_id: u16) -> Option<&Column> {
+        self.columns().get((column_id - 1) as usize)
     }
 }
 
