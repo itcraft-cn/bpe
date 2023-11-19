@@ -14,6 +14,7 @@ use crate::{
     store::WrappedArray,
 };
 use sql_parse::ParseOptions;
+use std::cell::RefCell;
 
 static mut MAPPER_MAP: Option<SimpleU16Map> = None;
 static mut PARSE_OPTIONS: Option<ParseOptions> = None;
@@ -156,7 +157,23 @@ fn invoke(
     columns: &Vec<Column>,
     fn_holder: &FnHolder,
 ) {
-    let mut vec: Vec<[u8; 512]> = vec![];
+    thread_local! {
+        static DATA_REF :RefCell<Vec<[u8;512]>>= RefCell::new(vec![]);
+    };
+    DATA_REF.with_borrow_mut(|vec| {
+        vec.clear();
+        loop_filter(array, mapper, id, columns, vec);
+        callback(fn_holder, vec);
+    })
+}
+
+fn loop_filter(
+    array: &WrappedArray,
+    mapper: &Mapper,
+    id: u16,
+    columns: &Vec<Column>,
+    vec: &mut Vec<[u8; 512]>,
+) {
     let mut idx = 0;
     let walker = array.walker() + array.size();
     let mask = array.mask();
@@ -180,6 +197,9 @@ fn invoke(
             idx += 1;
         }
     }
+}
+
+fn callback(fn_holder: &FnHolder, vec: &mut Vec<[u8; 512]>) {
     match fn_holder {
         FnHolder::Func(f) => f(vec),
         FnHolder::FfiFunc(ffi) => ffi.callback(vec),

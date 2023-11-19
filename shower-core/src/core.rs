@@ -73,7 +73,7 @@ fn process_data(array: &mut WrappedArray, data: &U8Bytes) {
 
 pub fn def_mapper<F>(sql: &str, func: F) -> Option<u16>
 where
-    F: Fn(Vec<[u8; 512]>) + Send + 'static,
+    F: Fn(&Vec<[u8; 512]>) + Send + 'static,
 {
     define_mapper(sql, FnHolder::Func(Box::new(func)))
 }
@@ -81,7 +81,7 @@ where
 pub fn def_mapper_bind_aggregate(sql: &str, aggregate_id: u16) -> Option<u16> {
     let opt_aggregate = search_aggregate(aggregate_id);
     if let Some(wrapped) = opt_aggregate {
-        let f = move |data| call_aggregate(wrapped, data);
+        let f = move |data: &_| call_aggregate(wrapped, data);
         define_mapper(sql, FnHolder::Lambda(Box::new(f)))
     } else {
         None
@@ -94,7 +94,7 @@ pub fn def_mapper_ffi(sql: &str, ffi: Box<dyn FfiFunc>) -> Option<u16> {
 
 pub fn def_aggregate<F>(sql: &str, func: F) -> Option<u16>
 where
-    F: Fn(Vec<[u8; 512]>) + Send + 'static,
+    F: Fn(&Vec<[u8; 512]>) + Send + 'static,
 {
     define_aggregate(sql, FnHolder::Func(Box::new(func)))
 }

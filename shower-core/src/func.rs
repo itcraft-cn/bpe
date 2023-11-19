@@ -234,7 +234,7 @@ pub(crate) enum Func {
 }
 
 pub(crate) enum FnHolder {
-    Func(Box<dyn Fn(Vec<[u8; 512]>) + Send + 'static>),
+    Func(Box<dyn Fn(&Vec<[u8; 512]>) + Send + 'static>),
     FfiFunc(Box<dyn FfiFunc>),
-    Lambda(Box<dyn Fn(Vec<[u8; 512]>)>),
+    Lambda(Box<dyn Fn(&Vec<[u8; 512]>) + 'static>),
 }

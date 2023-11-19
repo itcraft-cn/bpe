@@ -138,14 +138,14 @@ struct PythonFfiFunc {
     callback: PyObject,
 }
 impl FfiFunc for PythonFfiFunc {
-    fn callback(&self, data: Vec<[u8; 512]>) {
+    fn callback(&self, data: &Vec<[u8; 512]>) {
         Python::with_gil(|py| {
             call_py_func(py, &self.callback, data);
         })
     }
 }
 
-fn call_py_func(py: Python, callback: &PyObject, data: Vec<[u8; 512]>) {
+fn call_py_func(py: Python, callback: &PyObject, data: &Vec<[u8; 512]>) {
     if let Ok(func) = callback.getattr(py, "callback") {
         let array = conv_array(data);
         let args = (array,);
@@ -156,7 +156,7 @@ fn call_py_func(py: Python, callback: &PyObject, data: Vec<[u8; 512]>) {
     }
 }
 
-fn conv_array(data: Vec<[u8; 512]>) -> Vec<u8> {
+fn conv_array(data: &Vec<[u8; 512]>) -> Vec<u8> {
     let len = data.len();
     let mut vec = vec![0_u8; len * 512];
     for i in 0..len {
