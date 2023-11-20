@@ -176,7 +176,7 @@ fn compute(
     data_idx: usize,
     stream: &Record,
 ) {
-    let offset = idx * 8;
+    let offset = stream.column((idx + 1) as u16).unwrap().offset();
     match executor {
         Executor::Compute(func, executors) => {
             if executors.len() != 1 {
