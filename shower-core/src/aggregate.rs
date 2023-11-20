@@ -1,5 +1,5 @@
 use crate::{
-    aux::{fetch_f64, fetch_i64, fill_f64, fill_i64, SimpleU16Map},
+    aux::{check_id, fetch_f64, fetch_i64, fill_f64, fill_i64, set_id, SimpleU16Map},
     data::{ColumnType, Record},
     element::Element,
     error::ParseSqlError,
@@ -16,6 +16,9 @@ use std::cell::RefCell;
 
 static mut AGGREGATE_MAP: Option<SimpleU16Map> = None;
 static mut PARSE_OPTIONS: Option<ParseOptions> = None;
+thread_local! {
+    static FIELD_REF :RefCell<[u8;8]>= RefCell::new([0_u8; 8]);
+}
 
 pub(crate) fn init_aggregate_store() {
     unsafe {
@@ -71,6 +74,9 @@ fn call_with_threadlocal(
 }
 
 fn init_data(aggregate_data: &mut [u8; 512], wrapped: &WrappedAggregate) -> bool {
+    FIELD_REF.with_borrow_mut(|field_ref| {
+        field_ref.fill(0_u8);
+    });
     for (idx, executor) in wrapped.aggregate().executors().iter().enumerate() {
         let rs = setup_init_val(aggregate_data, idx, executor);
         if rs.is_err() {
@@ -145,9 +151,19 @@ fn loop_compute(
     wrapped: &WrappedAggregate,
     stream: &Record,
 ) {
-    for (idx, executor) in wrapped.aggregate().executors().iter().enumerate() {
-        compute(idx, executor, aggregate_data, sub_data, data_idx, stream);
-    }
+    FIELD_REF.with_borrow_mut(|field_ref| {
+        for (idx, executor) in wrapped.aggregate().executors().iter().enumerate() {
+            compute(
+                idx,
+                executor,
+                aggregate_data,
+                field_ref,
+                sub_data,
+                data_idx,
+                stream,
+            );
+        }
+    });
 }
 
 #[inline]
@@ -155,6 +171,7 @@ fn compute(
     idx: usize,
     executor: &Executor,
     aggregate_data: &mut [u8; 512],
+    field_ref: &mut [u8; 8],
     sub_data: &[u8; 512],
     data_idx: usize,
     stream: &Record,
@@ -173,6 +190,19 @@ fn compute(
             let sub_executor = executors.first().unwrap();
             let element = fetch_arg_val(sub_data, sub_executor, stream);
             match (func, &element) {
+                (Func::Key, Element::Long(v)) => {
+                    if check_id(field_ref.as_slice(), idx as u16) {
+                        fill_i64(&mut aggregate_data[offset..offset + 8], *v);
+                        set_id(field_ref.as_mut_slice(), idx as u16);
+                    }
+                }
+                (Func::Key, Element::Double(v)) => {
+                    if check_id(field_ref.as_slice(), idx as u16) {
+                        fill_f64(&mut aggregate_data[offset..offset + 8], *v);
+                        set_id(field_ref.as_mut_slice(), idx as u16);
+                    }
+                }
+                (Func::Key, Element::Str(_u64ptr, _offset, _len)) => {}
                 (Func::MaxL, Element::Long(v)) => {
                     let max = fetch_i64(&aggregate_data[offset..offset + 8]);
                     fill_i64(&mut aggregate_data[offset..offset + 8], max.max(*v));

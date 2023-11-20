@@ -1,7 +1,7 @@
 use crate::{
     aggregate::{call_aggregate, define_aggregate, init_aggregate_store, search_aggregate},
     cfg::load_config,
-    data::{check_id, init_record_store, Column, Record, RecordType, U8Bytes},
+    data::{check_id_in_store, init_record_store, Column, Record, RecordType, U8Bytes},
     ffi::FfiFunc,
     func::FnHolder,
     id::init_walker,
@@ -55,7 +55,7 @@ pub fn def_stream(name: &str, columns: Vec<Column>) -> Option<u16> {
 
 pub fn new_data(data: &U8Bytes) -> bool {
     let id = data.id();
-    if check_id(id) {
+    if check_id_in_store(id) {
         log::warn!("id [{}] is not defined", id);
         false
     } else {

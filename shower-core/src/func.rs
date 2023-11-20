@@ -216,6 +216,8 @@ pub(crate) enum Func {
     Mod,
     // aggregate func
     #[strum(ascii_case_insensitive)]
+    Key,
+    #[strum(ascii_case_insensitive)]
     MinL,
     #[strum(ascii_case_insensitive)]
     MaxL,

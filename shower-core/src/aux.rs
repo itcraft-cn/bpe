@@ -45,6 +45,25 @@ pub(crate) fn fetch_f64(slice: &[u8]) -> f64 {
 }
 
 #[inline]
+pub(crate) fn check_id(array: &[u8], id: u16) -> bool {
+    let (idx, bit) = fetch_idx_bit(id);
+    array[idx as usize] & (1 << bit) == 0
+}
+
+#[inline]
+pub(crate) fn set_id(array: &mut [u8], id: u16) {
+    let (idx, bit) = fetch_idx_bit(id);
+    array[idx as usize] |= 1 << bit;
+}
+
+#[inline]
+fn fetch_idx_bit(id: u16) -> (u16, u16) {
+    let idx = id / 8;
+    let bit = id % 8;
+    (idx, bit)
+}
+
+#[inline]
 pub(crate) fn timestamp() -> u64 {
     let duration = SystemTime::now()
         .duration_since(UNIX_EPOCH)

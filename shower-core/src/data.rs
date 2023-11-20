@@ -1,4 +1,8 @@
-use crate::{aux::SimpleU16Map, consts::U8_DATA_MAX_SIZE, id::next_record_id};
+use crate::{
+    aux::{check_id, set_id, SimpleU16Map},
+    consts::U8_DATA_MAX_SIZE,
+    id::next_record_id,
+};
 use hashbrown::HashMap;
 use std::cmp::Ordering as CmpOrdering;
 
@@ -201,8 +205,7 @@ impl Record {
                 None
             } else {
                 name_map.insert(key, id);
-                let (idx, bit) = fetch_idx_bit(id);
-                ID_STORE[idx as usize] |= 1 << bit;
+                set_id(ID_STORE.as_mut_slice(), id);
                 Some(id)
             }
         }
@@ -255,13 +258,6 @@ pub(crate) fn init_record_store() {
     }
 }
 
-pub(crate) fn check_id(id: u16) -> bool {
-    let (idx, bit) = fetch_idx_bit(id);
-    unsafe { ID_STORE[idx as usize] & (1 << bit) == 0 }
-}
-
-fn fetch_idx_bit(id: u16) -> (u16, u16) {
-    let idx = id / 8;
-    let bit = id % 8;
-    (idx, bit)
+pub(crate) fn check_id_in_store(id: u16) -> bool {
+    check_id(unsafe { ID_STORE }.as_slice(), id)
 }
