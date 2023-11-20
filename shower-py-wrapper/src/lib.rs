@@ -3,15 +3,16 @@ use shower::{Column, FfiFunc, U8Bytes};
 
 #[pyfunction]
 #[allow(dead_code)]
-fn start() -> PyResult<bool> {
-    Ok(shower::start())
+fn start() -> PyResult<()> {
+    shower::start();
+    Ok(())
 }
 
 #[pyfunction]
 #[allow(dead_code)]
-fn stop() -> PyResult<bool> {
+fn stop() -> PyResult<()> {
     shower::stop();
-    Ok(true)
+    Ok(())
 }
 
 #[pyfunction]

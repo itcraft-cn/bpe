@@ -18,12 +18,12 @@ pub extern "system" fn Java_com_erayt_shower4j_Shower_start<'local>(
     // but still must be present to match the expected signature of a static
     // native method.
     _class: JClass<'local>,
-) -> jboolean {
+) {
     static START: Once = Once::new();
     START.call_once(|| unsafe {
         OPT_GLOBAL_REF.replace(vec![]);
     });
-    shower::start() as jboolean
+    shower::start();
 }
 
 #[no_mangle]

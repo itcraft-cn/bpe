@@ -11,21 +11,12 @@ use crate::{
 };
 use std::sync::Once;
 
-pub fn start() -> bool {
+pub fn start() {
     static START: Once = Once::new();
-    let mut opt = None;
-    START.call_once(|| {
-        opt.replace(actual_start());
-    });
-    if opt.is_none() {
-        log::debug!("already started, skipping");
-        true
-    } else {
-        opt.unwrap_or(false)
-    }
+    START.call_once(actual_start);
 }
 
-fn actual_start() -> bool {
+fn actual_start() {
     load_config();
     init_logger();
     init_walker();
@@ -33,7 +24,6 @@ fn actual_start() -> bool {
     init_aggregate_store();
     init_record_store();
     init_store();
-    true
 }
 
 pub fn stop() {
