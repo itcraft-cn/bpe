@@ -61,24 +61,26 @@ pub(crate) fn call_aggregate(wrapped: &WrappedAggregate, data: &Vec<[u8; 512]>) 
     }
 }
 
+#[inline]
 fn call_with_threadlocal(
     aggregate_data: &mut [u8; 512],
     wrapped: &WrappedAggregate,
     data: &Vec<[u8; 512]>,
     stream: &Record,
 ) {
-    if init_data(aggregate_data, wrapped) {
+    if init_data(aggregate_data, wrapped, stream) {
         compute_data(aggregate_data, data, wrapped, stream);
         callback(wrapped, aggregate_data);
     }
 }
 
-fn init_data(aggregate_data: &mut [u8; 512], wrapped: &WrappedAggregate) -> bool {
+#[inline]
+fn init_data(aggregate_data: &mut [u8; 512], wrapped: &WrappedAggregate, stream: &Record) -> bool {
     FIELD_REF.with_borrow_mut(|field_ref| {
         field_ref.fill(0_u8);
     });
     for (idx, executor) in wrapped.aggregate().executors().iter().enumerate() {
-        let rs = setup_init_val(aggregate_data, idx, executor);
+        let rs = setup_init_val(aggregate_data, idx, executor, stream);
         if rs.is_err() {
             log::warn!("hit error: {:?}", rs.err());
             return false;
@@ -87,6 +89,7 @@ fn init_data(aggregate_data: &mut [u8; 512], wrapped: &WrappedAggregate) -> bool
     true
 }
 
+#[inline]
 fn compute_data(
     aggregate_data: &mut [u8; 512],
     data: &Vec<[u8; 512]>,
@@ -111,28 +114,14 @@ fn setup_init_val(
     aggregate_data: &mut [u8; 512],
     idx: usize,
     executor: &Executor,
+    stream: &Record,
 ) -> Result<(), String> {
-    let offset = idx * 8;
+    let offset = stream.column((idx + 1) as u16).unwrap().offset();
     match executor {
-        Executor::Compute(func, _) => match func {
-            Func::MaxL => {
-                fill_i64(&mut aggregate_data[offset..offset + 8], i64::MIN);
-                Ok(())
-            }
-            Func::MinL => {
-                fill_i64(&mut aggregate_data[offset..offset + 8], i64::MAX);
-                Ok(())
-            }
-            Func::MaxD => {
-                fill_f64(&mut aggregate_data[offset..offset + 8], f64::MIN);
-                Ok(())
-            }
-            Func::MinD => {
-                fill_f64(&mut aggregate_data[offset..offset + 8], f64::MAX);
-                Ok(())
-            }
-            _ => Ok(()),
-        },
+        Executor::Compute(func, _) => {
+            init_for_some_func(func, aggregate_data, offset);
+            Ok(())
+        }
         _ => {
             log::warn!(
                 "expr in top level just support aggregate func, this is not aggregate func:{:?}",
@@ -140,6 +129,25 @@ fn setup_init_val(
             );
             Err(String::from("not aggregate func"))
         }
+    }
+}
+
+#[inline]
+fn init_for_some_func(func: &Func, aggregate_data: &mut [u8; 512], offset: usize) {
+    match func {
+        Func::MaxL => {
+            fill_i64(&mut aggregate_data[offset..offset + 8], i64::MIN);
+        }
+        Func::MinL => {
+            fill_i64(&mut aggregate_data[offset..offset + 8], i64::MAX);
+        }
+        Func::MaxD => {
+            fill_f64(&mut aggregate_data[offset..offset + 8], f64::MIN);
+        }
+        Func::MinD => {
+            fill_f64(&mut aggregate_data[offset..offset + 8], f64::MAX);
+        }
+        _ => {}
     }
 }
 
@@ -208,6 +216,7 @@ fn compute(
     }
 }
 
+#[inline]
 fn choose_func(
     func: &Func,
     element: Element,
@@ -219,83 +228,172 @@ fn choose_func(
 ) {
     match (func, &element) {
         (Func::Key, Element::Long(v)) => {
-            if check_id(field_ref.as_slice(), idx as u16) {
-                fill_i64(&mut aggregate_data[offset..offset + 8], *v);
-                set_id(field_ref.as_mut_slice(), idx as u16);
-            }
+            func_key_long(idx, aggregate_data, field_ref, offset, v);
         }
         (Func::Key, Element::Double(v)) => {
-            if check_id(field_ref.as_slice(), idx as u16) {
-                fill_f64(&mut aggregate_data[offset..offset + 8], *v);
-                set_id(field_ref.as_mut_slice(), idx as u16);
-            }
+            func_key_double(idx, aggregate_data, field_ref, offset, v);
         }
-        (Func::Key, Element::Str(u64ptr, offset, len)) => {
-            if check_id(field_ref.as_slice(), idx as u16) {
-                let ptr_slice = (*u64ptr + *offset as u64) as *const u8;
-                let slice = unsafe { slice::from_raw_parts(ptr_slice, *len) };
-                aggregate_data[*offset..*offset + *len].copy_from_slice(slice);
-                set_id(field_ref.as_mut_slice(), idx as u16);
-            }
+        (Func::Key, Element::Str(u64ptr, str_offset, len)) => {
+            func_key_str(
+                idx,
+                aggregate_data,
+                field_ref,
+                offset,
+                u64ptr,
+                str_offset,
+                len,
+            );
         }
         (Func::MaxL, Element::Long(v)) => {
-            let max = fetch_i64(&aggregate_data[offset..offset + 8]);
-            fill_i64(&mut aggregate_data[offset..offset + 8], max.max(*v));
+            func_max_long(aggregate_data, offset, v);
         }
         (Func::MinL, Element::Long(v)) => {
-            let min = fetch_i64(&aggregate_data[offset..offset + 8]);
-            fill_i64(&mut aggregate_data[offset..offset + 8], min.min(*v));
+            func_min_long(aggregate_data, offset, v);
         }
         (Func::SumL, Element::Long(v)) => {
-            let sum = fetch_i64(&aggregate_data[offset..offset + 8]);
-            fill_i64(&mut aggregate_data[offset..offset + 8], sum + *v);
+            func_sum_long(aggregate_data, offset, v);
         }
         (Func::Count, Element::Long(_)) => {
-            let count = fetch_i64(&aggregate_data[offset..offset + 8]);
-            fill_i64(&mut aggregate_data[offset..offset + 8], count + 1);
+            func_count_long(aggregate_data, offset);
         }
         (Func::MaxD, Element::Long(v)) => {
-            let max = fetch_f64(&aggregate_data[offset..offset + 8]);
-            fill_f64(&mut aggregate_data[offset..offset + 8], max.max(*v as f64));
+            func_maxd_long(aggregate_data, offset, v);
         }
         (Func::MinD, Element::Long(v)) => {
-            let min = fetch_f64(&aggregate_data[offset..offset + 8]);
-            fill_f64(&mut aggregate_data[offset..offset + 8], min.min(*v as f64));
+            func_mind_long(aggregate_data, offset, v);
         }
         (Func::SumD, Element::Long(v)) => {
-            let sum = fetch_f64(&aggregate_data[offset..offset + 8]);
-            fill_f64(&mut aggregate_data[offset..offset + 8], sum + *v as f64);
+            func_sumd_long(aggregate_data, offset, v);
         }
         (Func::Avg, Element::Long(v)) => {
-            let avg = fetch_f64(&aggregate_data[offset..offset + 8]);
-            fill_f64(
-                &mut aggregate_data[offset..offset + 8],
-                (avg * (data_idx as f64) + (*v as f64)) / ((data_idx + 1) as f64),
-            );
+            func_avg_long(aggregate_data, offset, v, data_idx);
         }
         (Func::MaxD, Element::Double(v)) => {
-            let max = fetch_f64(&aggregate_data[offset..offset + 8]);
-            fill_f64(&mut aggregate_data[offset..offset + 8], max.max(*v));
+            func_maxd_double(aggregate_data, offset, v);
         }
         (Func::MinD, Element::Double(v)) => {
-            let min = fetch_f64(&aggregate_data[offset..offset + 8]);
-            fill_f64(&mut aggregate_data[offset..offset + 8], min.min(*v));
+            func_mind_double(aggregate_data, offset, v);
         }
         (Func::SumD, Element::Double(v)) => {
-            let sum = fetch_f64(&aggregate_data[offset..offset + 8]);
-            fill_f64(&mut aggregate_data[offset..offset + 8], sum + *v);
+            func_sumd_double(aggregate_data, offset, v);
         }
         (Func::Avg, Element::Double(v)) => {
-            let avg = fetch_f64(&aggregate_data[offset..offset + 8]);
-            fill_f64(
-                &mut aggregate_data[offset..offset + 8],
-                (avg * (data_idx as f64) + *v) / ((data_idx + 1) as f64),
-            );
+            func_avg_double(aggregate_data, offset, v, data_idx);
         }
         _ => {
             log::warn!("unsupported function: {:?}-{:?}", func, &element);
         }
+    };
+}
+
+#[inline]
+fn func_key_long(
+    idx: usize,
+    aggregate_data: &mut [u8; 512],
+    field_ref: &mut [u8; 8],
+    offset: usize,
+    v: &i64,
+) {
+    if check_id(field_ref.as_slice(), idx as u16) {
+        fill_i64(&mut aggregate_data[offset..offset + 8], *v);
+        set_id(field_ref.as_mut_slice(), idx as u16);
     }
+}
+#[inline]
+fn func_key_double(
+    idx: usize,
+    aggregate_data: &mut [u8; 512],
+    field_ref: &mut [u8; 8],
+    offset: usize,
+    v: &f64,
+) {
+    if check_id(field_ref.as_slice(), idx as u16) {
+        fill_f64(&mut aggregate_data[offset..offset + 8], *v);
+        set_id(field_ref.as_mut_slice(), idx as u16);
+    }
+}
+#[inline]
+fn func_key_str(
+    idx: usize,
+    aggregate_data: &mut [u8; 512],
+    field_ref: &mut [u8; 8],
+    offset: usize,
+    u64ptr: &u64,
+    str_offset: &usize,
+    len: &usize,
+) {
+    if check_id(field_ref.as_slice(), idx as u16) {
+        let ptr_slice = (*u64ptr + *str_offset as u64) as *const u8;
+        let slice = unsafe { slice::from_raw_parts(ptr_slice, *len) };
+        aggregate_data[offset..offset + *len].copy_from_slice(slice);
+        set_id(field_ref.as_mut_slice(), idx as u16);
+    }
+}
+#[inline]
+fn func_max_long(aggregate_data: &mut [u8; 512], offset: usize, v: &i64) {
+    let max = fetch_i64(&aggregate_data[offset..offset + 8]);
+    fill_i64(&mut aggregate_data[offset..offset + 8], max.max(*v));
+}
+#[inline]
+fn func_min_long(aggregate_data: &mut [u8; 512], offset: usize, v: &i64) {
+    let min = fetch_i64(&aggregate_data[offset..offset + 8]);
+    fill_i64(&mut aggregate_data[offset..offset + 8], min.min(*v));
+}
+#[inline]
+fn func_sum_long(aggregate_data: &mut [u8; 512], offset: usize, v: &i64) {
+    let sum = fetch_i64(&aggregate_data[offset..offset + 8]);
+    fill_i64(&mut aggregate_data[offset..offset + 8], sum + *v);
+}
+#[inline]
+fn func_count_long(aggregate_data: &mut [u8; 512], offset: usize) {
+    let count = fetch_i64(&aggregate_data[offset..offset + 8]);
+    fill_i64(&mut aggregate_data[offset..offset + 8], count + 1);
+}
+#[inline]
+fn func_maxd_long(aggregate_data: &mut [u8; 512], offset: usize, v: &i64) {
+    let max = fetch_f64(&aggregate_data[offset..offset + 8]);
+    fill_f64(&mut aggregate_data[offset..offset + 8], max.max(*v as f64));
+}
+#[inline]
+fn func_mind_long(aggregate_data: &mut [u8; 512], offset: usize, v: &i64) {
+    let min = fetch_f64(&aggregate_data[offset..offset + 8]);
+    fill_f64(&mut aggregate_data[offset..offset + 8], min.min(*v as f64));
+}
+#[inline]
+fn func_sumd_long(aggregate_data: &mut [u8; 512], offset: usize, v: &i64) {
+    let sum = fetch_f64(&aggregate_data[offset..offset + 8]);
+    fill_f64(&mut aggregate_data[offset..offset + 8], sum + *v as f64);
+}
+#[inline]
+fn func_avg_long(aggregate_data: &mut [u8; 512], offset: usize, v: &i64, data_idx: usize) {
+    let avg = fetch_f64(&aggregate_data[offset..offset + 8]);
+    fill_f64(
+        &mut aggregate_data[offset..offset + 8],
+        (avg * (data_idx as f64) + (*v as f64)) / ((data_idx + 1) as f64),
+    );
+}
+#[inline]
+fn func_maxd_double(aggregate_data: &mut [u8; 512], offset: usize, v: &f64) {
+    let max = fetch_f64(&aggregate_data[offset..offset + 8]);
+    fill_f64(&mut aggregate_data[offset..offset + 8], max.max(*v));
+}
+#[inline]
+fn func_mind_double(aggregate_data: &mut [u8; 512], offset: usize, v: &f64) {
+    let min = fetch_f64(&aggregate_data[offset..offset + 8]);
+    fill_f64(&mut aggregate_data[offset..offset + 8], min.min(*v));
+}
+#[inline]
+fn func_sumd_double(aggregate_data: &mut [u8; 512], offset: usize, v: &f64) {
+    let sum = fetch_f64(&aggregate_data[offset..offset + 8]);
+    fill_f64(&mut aggregate_data[offset..offset + 8], sum + *v);
+}
+#[inline]
+fn func_avg_double(aggregate_data: &mut [u8; 512], offset: usize, v: &f64, data_idx: usize) {
+    let avg = fetch_f64(&aggregate_data[offset..offset + 8]);
+    fill_f64(
+        &mut aggregate_data[offset..offset + 8],
+        (avg * (data_idx as f64) + *v) / ((data_idx + 1) as f64),
+    );
 }
 
 fn fetch_arg_val(sub_data: &[u8; 512], executor: &Executor, stream: &Record) -> Element {
