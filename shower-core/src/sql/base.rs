@@ -96,19 +96,19 @@ impl ParsedSql {
         }
     }
 
-    pub(crate) fn records(&self) -> Vec<u16> {
-        self.records.clone()
+    pub(crate) fn records(&self) -> &Vec<u16> {
+        &self.records
     }
 
-    pub(crate) fn filters(&self) -> Vec<ExprEntity> {
-        self.filters.clone()
+    pub(crate) fn filters(&self) -> &Vec<ExprEntity> {
+        &self.filters
     }
 
     pub(crate) fn limit(&self) -> usize {
         self.limit
     }
 
-    pub(crate) fn fields(&self) -> Vec<ExprEntity> {
-        self.fields.clone()
+    pub(crate) fn fields(&self) -> &Vec<ExprEntity> {
+        &self.fields
     }
 }
