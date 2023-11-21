@@ -9,7 +9,7 @@ import java.security.PrivilegedExceptionAction;
 /**
  * Created by Helly on 2017/05/17.
  */
-public class UnsafeUtil {
+class UnsafeUtil {
     private static final Unsafe THE_UNSAFE;
 
     static {

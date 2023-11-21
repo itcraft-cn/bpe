@@ -17,7 +17,7 @@ import java.nio.file.StandardCopyOption;
  * <p>
  * Created on 11/16/23 10:23 PM
  */
-public class NativeLoader {
+class NativeLoader {
 
     private static final Logger LOGGER = LoggerFactory.getLogger(NativeLoader.class);
 
