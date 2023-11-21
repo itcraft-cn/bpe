@@ -23,7 +23,7 @@ class XDemo(ShowerRecordCallback):
         print(data)
 
 
-class TestUniStream:
+class TestShower:
     # 函数级开始
     def setup_method(self):
         os.environ["SHOWER_HOME"] = "/home/helly/code/rust/shower"
@@ -44,7 +44,7 @@ class TestUniStream:
         mapper_id = Shower.def_mapper_bind_aggregate(SQL, aggregate_id)
         print("mapper_id:", mapper_id, "aggregate_id:", aggregate_id)
         for i in range(100):
-            Shower.new_data(1, b"100000000000000000000000")
+            Shower.new_data_sync(1, b"100000000000000000000000")
 
 
 if __name__ == "__main__":

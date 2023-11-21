@@ -9,6 +9,7 @@ sys.path.insert(
 )
 
 from pyshower.shower import Shower, ShowerRecordCallback
+from time import sleep
 import pytest
 
 SQL = "select demo.a from demo limit 10"
@@ -39,8 +40,14 @@ class TestShower:
         global SQL
         mapper_id = Shower.def_mapper(SQL, callback)
         print("mapper_id:", mapper_id)
+        futures = list()
         for i in range(100):
-            Shower.new_data_sync(1, b"100000000000000000000000")
+            futures.append(Shower.new_data_async(1, b"100000000000000000000000"))
+        while True:
+            if all(future.done() for future in futures):
+                break
+            else:
+                sleep(0.1)
 
 
 if __name__ == "__main__":
