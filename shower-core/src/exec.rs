@@ -1,6 +1,6 @@
 use crate::{
     error::ParseSqlError,
-    func::{Executor, Func},
+    func::{Executor, Func, Executors},
     sql::base::ExprEntity,
 };
 use std::str::FromStr;
@@ -38,7 +38,7 @@ fn conv_as_executor(
                 if let Ok(func) = opt_func {
                     let rs = parse_args_fetchers(args, record_id_array);
                     if let Ok(args_fetchers) = rs {
-                        Executor::Compute(func, args_fetchers)
+                        Executor::Compute(func, Executors::new(args_fetchers.as_slice()))
                     } else {
                         return Err(rs.err().unwrap());
                     }

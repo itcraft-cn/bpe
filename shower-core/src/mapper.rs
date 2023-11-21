@@ -5,7 +5,7 @@ use crate::{
     element::Element,
     error::ParseSqlError,
     exec::create_executor,
-    func::{eq, fetch_val, gt, gt_eq, lt, lt_eq, neq, Executor, FnHolder},
+    func::{eq, fetch_val, gt, gt_eq, lt, lt_eq, neq, Executors, FnHolder},
     id::next_mapper_id,
     sql::{
         base::{parse_options, ExprEntity, OpType, ParsedSql, ValType},
@@ -104,11 +104,12 @@ fn gen_mapper(parsed_sql: &ParsedSql) -> Result<Mapper, ParseSqlError> {
             rs_executors.err().unwrap()
         )));
     }
+    let vec_executors = rs_executors.unwrap();
     Ok(Mapper {
         id,
         filter: rs_filter.unwrap(),
         limit: parsed_sql.limit(),
-        executors: rs_executors.unwrap(),
+        executors: Executors::new(vec_executors.as_slice()),
     })
 }
 
@@ -437,7 +438,7 @@ pub(crate) struct Mapper {
     id: u16,
     filter: Filter,
     limit: usize,
-    executors: Vec<Executor>,
+    executors: Executors,
 }
 impl Mapper {
     pub(crate) fn id(&self) -> u16 {
@@ -456,11 +457,14 @@ impl Mapper {
         let target = result.as_mut_slice();
         let mut val;
         let mut offset = 0_usize;
-        let len = self.executors.len();
+        let executors = &self.executors;
+        let len = executors.executor_size();
         for i in 0..len {
-            val = self.executors[i].fetch(id, u64ptr, columns, position, slice);
-            val.copy_to_target(&mut target[offset..offset + val.len()]);
-            offset += 8;
+            let executor = executors.index_of(i);
+            val = executor.fetch(id, u64ptr, columns, position, slice);
+            let val_len = val.len();
+            val.copy_to_target(&mut target[offset..offset + val_len]);
+            offset += val_len;
         }
         result
     }

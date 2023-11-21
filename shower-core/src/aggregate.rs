@@ -187,15 +187,15 @@ fn compute(
     let offset = stream.column((idx + 1) as u16).unwrap().offset();
     match executor {
         Executor::Compute(func, executors) => {
-            if executors.len() != 1 {
+            if executors.executor_size() != 1 {
                 log::warn!(
                     "aggregate func[{:?}] just support one argument, here is {:?} executors",
                     func,
-                    executors.len()
+                    executors.executor_size()
                 );
                 return;
             }
-            let sub_executor = executors.first().unwrap();
+            let sub_executor = executors.index_of(0);
             let element = fetch_arg_val(sub_data, sub_executor, stream);
             choose_func(
                 func,

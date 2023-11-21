@@ -4,12 +4,51 @@ use crate::{
     element::Element,
     ffi::FfiFunc,
 };
+use std::{
+    alloc::{self, Layout},
+    mem::{align_of, size_of},
+    ptr,
+};
 use strum_macros::EnumString;
+
+#[derive(Debug, Clone)]
+pub(crate) struct Executors {
+    raw_ptr: *const Executor,
+    size: usize,
+}
+impl Executors {
+    pub(crate) fn new(executors: &[Executor]) -> Self {
+        let size_of_executor = size_of::<Executor>();
+        let align_of_executor = align_of::<Executor>();
+        let len = executors.len();
+        let layout = Layout::from_size_align(len * size_of_executor, align_of_executor).unwrap();
+        let raw_ptr = unsafe { alloc::alloc(layout) };
+        let executor_ptr = raw_ptr.cast::<Executor>();
+        for i in 0..len {
+            unsafe {
+                let target_ptr = executor_ptr.add(i);
+                ptr::write(target_ptr, executors[i].clone());
+            }
+        }
+        Self {
+            raw_ptr: executor_ptr,
+            size: len,
+        }
+    }
+
+    pub(crate) fn executor_size(&self) -> i32 {
+        self.size as i32
+    }
+
+    pub(crate) fn index_of(&self, idx: i32) -> &Executor {
+        unsafe { &*self.raw_ptr.add(idx as usize) }
+    }
+}
 
 #[derive(Debug, Clone)]
 pub(crate) enum Executor {
     Fetch(u16, u16),
-    Compute(Func, Vec<Executor>),
+    Compute(Func, Executors),
 }
 impl Executor {
     pub(crate) fn fetch(
@@ -90,7 +129,7 @@ pub(crate) fn compute_func(
     columns: &Vec<Column>,
     position: usize,
     f: &Func,
-    executors: &[Executor],
+    executors: &Executors,
 ) -> Element {
     match f {
         Func::Add => add(slice, id, u64ptr, columns, position, executors),
@@ -108,17 +147,17 @@ fn add(
     u64ptr: u64,
     columns: &Vec<Column>,
     position: usize,
-    executors: &[Executor],
+    executors: &Executors,
 ) -> Element {
-    if executors.len() != 2 {
+    if executors.executor_size() != 2 {
         log::warn!(
             "Invalid parameters for add function, should be 2, but was {}",
-            executors.len()
+            executors.executor_size()
         );
         return Element::Long(0);
     }
-    let v1 = executors[0].fetch(id, u64ptr, columns, position, slice);
-    let v2 = executors[1].fetch(id, u64ptr, columns, position, slice);
+    let v1 = executors.index_of(0).fetch(id, u64ptr, columns, position, slice);
+    let v2 = executors.index_of(1).fetch(id, u64ptr, columns, position, slice);
     v1.add(v2)
 }
 
@@ -128,17 +167,17 @@ fn sub(
     u64ptr: u64,
     columns: &Vec<Column>,
     position: usize,
-    executors: &[Executor],
+    executors: &Executors,
 ) -> Element {
-    if executors.len() != 2 {
+    if executors.executor_size() != 2 {
         log::warn!(
             "Invalid parameters for add function, should be 2, but was {}",
-            executors.len()
+            executors.executor_size()
         );
         return Element::Long(0);
     }
-    let v1 = executors[0].fetch(id, u64ptr, columns, position, slice);
-    let v2 = executors[1].fetch(id, u64ptr, columns, position, slice);
+    let v1 = executors.index_of(0).fetch(id, u64ptr, columns, position, slice);
+    let v2 = executors.index_of(1).fetch(id, u64ptr, columns, position, slice);
     v1.sub(v2)
 }
 
@@ -148,17 +187,17 @@ fn mul(
     u64ptr: u64,
     columns: &Vec<Column>,
     position: usize,
-    executors: &[Executor],
+    executors: &Executors,
 ) -> Element {
-    if executors.len() != 2 {
+    if executors.executor_size() != 2 {
         log::warn!(
             "Invalid parameters for add function, should be 2, but was {}",
-            executors.len()
+            executors.executor_size()
         );
         return Element::Long(0);
     }
-    let v1 = executors[0].fetch(id, u64ptr, columns, position, slice);
-    let v2 = executors[1].fetch(id, u64ptr, columns, position, slice);
+    let v1 = executors.index_of(0).fetch(id, u64ptr, columns, position, slice);
+    let v2 = executors.index_of(1).fetch(id, u64ptr, columns, position, slice);
     v1.mul(v2)
 }
 
@@ -168,17 +207,17 @@ fn div(
     u64ptr: u64,
     columns: &Vec<Column>,
     position: usize,
-    executors: &[Executor],
+    executors: &Executors,
 ) -> Element {
-    if executors.len() != 2 {
+    if executors.executor_size() != 2 {
         log::warn!(
             "Invalid parameters for add function, should be 2, but was {}",
-            executors.len()
+            executors.executor_size()
         );
         return Element::Long(0);
     }
-    let v1 = executors[0].fetch(id, u64ptr, columns, position, slice);
-    let v2 = executors[1].fetch(id, u64ptr, columns, position, slice);
+    let v1 = executors.index_of(0).fetch(id, u64ptr, columns, position, slice);
+    let v2 = executors.index_of(1).fetch(id, u64ptr, columns, position, slice);
     v1.div(v2)
 }
 
@@ -188,17 +227,17 @@ fn mod_(
     u64ptr: u64,
     columns: &Vec<Column>,
     position: usize,
-    executors: &[Executor],
+    executors: &Executors,
 ) -> Element {
-    if executors.len() != 2 {
+    if executors.executor_size() != 2 {
         log::warn!(
             "Invalid parameters for add function, should be 2, but was {}",
-            executors.len()
+            executors.executor_size()
         );
         return Element::Long(0);
     }
-    let v1 = executors[0].fetch(id, u64ptr, columns, position, slice);
-    let v2 = executors[1].fetch(id, u64ptr, columns, position, slice);
+    let v1 = executors.index_of(0).fetch(id, u64ptr, columns, position, slice);
+    let v2 = executors.index_of(1).fetch(id, u64ptr, columns, position, slice);
     v1.mod_(v2)
 }
 
