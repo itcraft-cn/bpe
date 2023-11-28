@@ -1,10 +1,9 @@
 use crate::consts::{SHOWER_ENV_HOME_KEY, SHOWER_FILENAME_CONFIG_TOML};
 use config::{Config, File};
 use hashbrown::HashMap;
-use state::Storage;
-use std::{env, sync::Once};
+use std::{env, sync::OnceLock};
 
-pub(crate) static CONFIG_STORE: Storage<ShowerConfig> = Storage::new();
+pub(crate) static WRAPPED_CONFIG: OnceLock<ShowerConfig> = OnceLock::new();
 
 pub(crate) struct ShowerConfig {
     pub(crate) map: HashMap<String, String>,
@@ -37,8 +36,7 @@ impl ShowerConfig {
 }
 
 pub(crate) fn load_config() {
-    static INIT: Once = Once::new();
-    INIT.call_once(|| {
+    WRAPPED_CONFIG.get_or_init(|| {
         let mut map = HashMap::new();
         let cfg_file = compose_file_name_with_base_dir(SHOWER_FILENAME_CONFIG_TOML);
         if let Ok(config) = Config::builder()
@@ -53,7 +51,7 @@ pub(crate) fn load_config() {
                 }
             }
         }
-        CONFIG_STORE.set(ShowerConfig { map });
+        ShowerConfig { map }
     });
 }
 
@@ -75,6 +73,6 @@ fn fetch_base_dir() -> String {
 }
 
 pub(crate) fn get_config() -> &'static ShowerConfig {
-    let cfg = CONFIG_STORE.get();
-    cfg
+    let cfg = WRAPPED_CONFIG.get();
+    cfg.unwrap()
 }

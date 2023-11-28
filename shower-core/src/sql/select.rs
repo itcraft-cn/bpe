@@ -103,13 +103,11 @@ fn parse_tab_ref(tab: &TableReference<'_>, tab_ref_vec: &mut Vec<u16>) -> Option
             if as_.is_some() {
                 return Some(String::from("as is not supported"));
             }
-            for id in identifier {
-                let name = id.as_str();
-                if let Some(record_id) = Record::fetch_record_id(name) {
-                    tab_ref_vec.push(*record_id);
-                } else {
-                    return Some(format!("record define: [{}] is not found", name));
-                }
+            let name = identifier.identifier.value;
+            if let Some(record_id) = Record::fetch_record_id(name) {
+                tab_ref_vec.push(*record_id);
+            } else {
+                return Some(format!("record define: [{}] is not found", name));
             }
         }
         TableReference::Query {
