@@ -90,14 +90,14 @@ fn gen_mapper(parsed_sql: &ParsedSql) -> Result<Mapper, ParseSqlError> {
         )));
     }
     let id = next_mapper_id();
-    let rs_filter = create_filter(&parsed_sql.filters());
+    let rs_filter = create_filter(parsed_sql.filters());
     if rs_filter.is_err() {
         return Err(ParseSqlError::new(format!(
             "failed to parse filter: {}",
             rs_filter.err().unwrap()
         )));
     }
-    let rs_executors = create_executor(record_id_array, &parsed_sql.fields());
+    let rs_executors = create_executor(record_id_array, parsed_sql.fields());
     if rs_executors.is_err() {
         return Err(ParseSqlError::new(format!(
             "failed to parse executors: {}",
@@ -200,7 +200,7 @@ fn loop_filter(
     }
 }
 
-fn callback(fn_holder: &FnHolder, vec: &mut Vec<[u8; 512]>) {
+fn callback(fn_holder: &FnHolder, vec: &mut [[u8; 512]]) {
     match fn_holder {
         FnHolder::Func(f) => f(vec),
         FnHolder::FfiFunc(ffi) => ffi.callback(vec),

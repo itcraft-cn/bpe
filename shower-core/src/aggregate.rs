@@ -47,7 +47,7 @@ pub(crate) fn define_aggregate(sql: &str, func_holder: FnHolder) -> Option<u16> 
 }
 
 #[inline]
-pub(crate) fn call_aggregate(wrapped: &WrappedAggregate, data: &Vec<[u8; 512]>) {
+pub(crate) fn call_aggregate(wrapped: &WrappedAggregate, data: &[[u8; 512]]) {
     thread_local! {
         static DATA_REF :RefCell<[u8;512]>= RefCell::new([0_u8; 512]);
     };
@@ -65,7 +65,7 @@ pub(crate) fn call_aggregate(wrapped: &WrappedAggregate, data: &Vec<[u8; 512]>) 
 fn call_with_threadlocal(
     aggregate_data: &mut [u8; 512],
     wrapped: &WrappedAggregate,
-    data: &Vec<[u8; 512]>,
+    data: &[[u8; 512]],
     stream: &Record,
 ) {
     if init_data(aggregate_data, wrapped, stream) {
@@ -92,7 +92,7 @@ fn init_data(aggregate_data: &mut [u8; 512], wrapped: &WrappedAggregate, stream:
 #[inline]
 fn compute_data(
     aggregate_data: &mut [u8; 512],
-    data: &Vec<[u8; 512]>,
+    data: &[[u8; 512]],
     wrapped: &WrappedAggregate,
     stream: &Record,
 ) {
@@ -451,7 +451,7 @@ fn gen_aggregate(parsed_sql: &ParsedSql) -> Result<Aggregate, ParseSqlError> {
             parsed_sql.records()[0]
         )));
     }
-    let rs = create_executor(&parsed_sql.records(), &fields);
+    let rs = create_executor(parsed_sql.records(), fields);
     if let Ok(executors) = rs {
         let id = next_aggregate_id();
         Ok(Aggregate {

@@ -156,8 +156,12 @@ fn add(
         );
         return Element::Long(0);
     }
-    let v1 = executors.index_of(0).fetch(id, u64ptr, columns, position, slice);
-    let v2 = executors.index_of(1).fetch(id, u64ptr, columns, position, slice);
+    let v1 = executors
+        .index_of(0)
+        .fetch(id, u64ptr, columns, position, slice);
+    let v2 = executors
+        .index_of(1)
+        .fetch(id, u64ptr, columns, position, slice);
     v1.add(v2)
 }
 
@@ -176,8 +180,12 @@ fn sub(
         );
         return Element::Long(0);
     }
-    let v1 = executors.index_of(0).fetch(id, u64ptr, columns, position, slice);
-    let v2 = executors.index_of(1).fetch(id, u64ptr, columns, position, slice);
+    let v1 = executors
+        .index_of(0)
+        .fetch(id, u64ptr, columns, position, slice);
+    let v2 = executors
+        .index_of(1)
+        .fetch(id, u64ptr, columns, position, slice);
     v1.sub(v2)
 }
 
@@ -196,8 +204,12 @@ fn mul(
         );
         return Element::Long(0);
     }
-    let v1 = executors.index_of(0).fetch(id, u64ptr, columns, position, slice);
-    let v2 = executors.index_of(1).fetch(id, u64ptr, columns, position, slice);
+    let v1 = executors
+        .index_of(0)
+        .fetch(id, u64ptr, columns, position, slice);
+    let v2 = executors
+        .index_of(1)
+        .fetch(id, u64ptr, columns, position, slice);
     v1.mul(v2)
 }
 
@@ -216,8 +228,12 @@ fn div(
         );
         return Element::Long(0);
     }
-    let v1 = executors.index_of(0).fetch(id, u64ptr, columns, position, slice);
-    let v2 = executors.index_of(1).fetch(id, u64ptr, columns, position, slice);
+    let v1 = executors
+        .index_of(0)
+        .fetch(id, u64ptr, columns, position, slice);
+    let v2 = executors
+        .index_of(1)
+        .fetch(id, u64ptr, columns, position, slice);
     v1.div(v2)
 }
 
@@ -236,8 +252,12 @@ fn mod_(
         );
         return Element::Long(0);
     }
-    let v1 = executors.index_of(0).fetch(id, u64ptr, columns, position, slice);
-    let v2 = executors.index_of(1).fetch(id, u64ptr, columns, position, slice);
+    let v1 = executors
+        .index_of(0)
+        .fetch(id, u64ptr, columns, position, slice);
+    let v2 = executors
+        .index_of(1)
+        .fetch(id, u64ptr, columns, position, slice);
     v1.mod_(v2)
 }
 
@@ -274,8 +294,11 @@ pub(crate) enum Func {
     Avg,
 }
 
+pub(crate) type NormalFunc = Box<dyn Fn(&[[u8; 512]]) + Send + 'static>;
+pub(crate) type LambdaFunc = Box<dyn Fn(&[[u8; 512]]) + 'static>;
+
 pub(crate) enum FnHolder {
-    Func(Box<dyn Fn(&Vec<[u8; 512]>) + Send + 'static>),
+    Func(NormalFunc),
     FfiFunc(Box<dyn FfiFunc>),
-    Lambda(Box<dyn Fn(&Vec<[u8; 512]>) + 'static>),
+    Lambda(LambdaFunc),
 }

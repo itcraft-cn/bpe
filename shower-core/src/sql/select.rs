@@ -368,7 +368,7 @@ fn parse_expr(
         }
         Expression::Identifier(id_vec) => {
             if id_vec.len() == 2 {
-                let id_part1 = id_vec.get(0).unwrap();
+                let id_part1 = id_vec.first().unwrap();
                 let id_part2 = id_vec.get(1).unwrap();
                 let rs1 = fetch_record_id(record_id, id_part1);
                 if rs1.is_err() {
@@ -382,7 +382,7 @@ fn parse_expr(
                 let field_id = rs2.unwrap();
                 expr_entity_vec.push(ExprEntity::FieldWithTab(record_id, field_id));
             } else if id_vec.len() == 1 {
-                let id_part = id_vec.get(0).unwrap();
+                let id_part = id_vec.first().unwrap();
                 let rs = fetch_field_id(record_id, id_part);
                 if rs.is_err() {
                     return Some(rs.err().unwrap());

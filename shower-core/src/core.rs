@@ -63,7 +63,7 @@ fn process_data(array: &mut WrappedArray, data: &U8Bytes) {
 
 pub fn def_mapper<F>(sql: &str, func: F) -> Option<u16>
 where
-    F: Fn(&Vec<[u8; 512]>) + Send + 'static,
+    F: Fn(&[[u8; 512]]) + Send + 'static,
 {
     define_mapper(sql, FnHolder::Func(Box::new(func)))
 }
@@ -84,7 +84,7 @@ pub fn def_mapper_ffi(sql: &str, ffi: Box<dyn FfiFunc>) -> Option<u16> {
 
 pub fn def_aggregate<F>(sql: &str, func: F) -> Option<u16>
 where
-    F: Fn(&Vec<[u8; 512]>) + Send + 'static,
+    F: Fn(&[[u8; 512]]) + Send + 'static,
 {
     define_aggregate(sql, FnHolder::Func(Box::new(func)))
 }

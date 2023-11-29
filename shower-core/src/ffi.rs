@@ -1,3 +1,3 @@
 pub trait FfiFunc {
-    fn callback(&self, data: &Vec<[u8; 512]>);
+    fn callback(&self, data: &[[u8; 512]]);
 }

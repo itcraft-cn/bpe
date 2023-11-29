@@ -244,7 +244,7 @@ struct JavaFfiFunc {
     callback: GlobalRef,
 }
 impl FfiFunc for JavaFfiFunc {
-    fn callback(&self, data: &Vec<[u8; 512]>) {
+    fn callback(&self, data: &[[u8; 512]]) {
         let rs = self.vm.get_env();
         if let Ok(mut env) = rs {
             let len = data.len() as i32;
@@ -264,7 +264,7 @@ impl FfiFunc for JavaFfiFunc {
     }
 }
 
-fn conv_array<'a>(env: &JNIEnv<'a>, data: &Vec<[u8; 512]>) -> JPrimitiveArray<'a, i8> {
+fn conv_array<'a>(env: &JNIEnv<'a>, data: &[[u8; 512]]) -> JPrimitiveArray<'a, i8> {
     let len = data.len();
     let array = env.new_byte_array((len * 512) as i32).unwrap();
     for (i, item) in data.iter().enumerate().take(len) {

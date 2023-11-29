@@ -28,12 +28,13 @@ fn gen_new_data() {
     let core_ids = core_affinity::get_core_ids().unwrap();
     core_affinity::set_for_current(core_ids[core_ids.len() - 1]);
     log::info!("thread:{} started", thread::current().name().unwrap());
-    let mut columns = vec![];
-    columns.push(Column::new_long("a"));
-    columns.push(Column::new_long("b"));
-    columns.push(Column::new_double("c"));
-    columns.push(Column::new_double("d"));
-    columns.push(Column::new_double("e"));
+    let columns = vec![
+        Column::new_long("a"),
+        Column::new_long("b"),
+        Column::new_double("c"),
+        Column::new_double("d"),
+        Column::new_double("e"),
+    ];
     let id = def_incoming("demo", columns).unwrap();
     def_mapper(SQL, |vec| {
         log::info!("fetched data: {}", vec.len());
