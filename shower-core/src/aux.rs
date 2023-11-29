@@ -8,40 +8,20 @@ use std::{
 const U16_FULL_VAL: u32 = u16::MAX as u32 + 1;
 
 #[inline]
-fn fill<T>(slice: &mut [u8], data: T) {
+pub(crate) fn fill<T>(slice: &mut [u8], data: T) {
     let p_val = ptr::addr_of!(*slice);
     let p_data = p_val as *mut T;
     unsafe { *p_data = data };
 }
 
 #[inline]
-fn fetch<T>(slice: &[u8]) -> T
+pub(crate) fn fetch<T>(slice: &[u8]) -> T
 where
     T: Copy,
 {
     let p_val = ptr::addr_of!(*slice);
     let p_data = p_val as *const T;
     unsafe { *p_data }
-}
-
-#[inline]
-pub(crate) fn fill_i64(slice: &mut [u8], data: i64) {
-    fill(slice, data)
-}
-
-#[inline]
-pub(crate) fn fetch_i64(slice: &[u8]) -> i64 {
-    fetch(slice)
-}
-
-#[inline]
-pub(crate) fn fill_f64(slice: &mut [u8], data: f64) {
-    fill(slice, data)
-}
-
-#[inline]
-pub(crate) fn fetch_f64(slice: &[u8]) -> f64 {
-    fetch(slice)
 }
 
 #[inline]
@@ -146,7 +126,7 @@ impl SimpleU16Entry {
 
 #[cfg(test)]
 mod tests {
-    use super::{fetch_f64, fetch_i64, fill_f64, fill_i64};
+    use super::{fetch, fill};
     use crate::utest::base::test_init;
 
     #[test]
@@ -155,12 +135,12 @@ mod tests {
         let mut array = [0_u8; 8];
         let slice = array.as_mut_slice();
         let i64v = 1234;
-        fill_i64(slice, i64v);
-        let fetched = fetch_i64(slice);
+        fill(slice, i64v);
+        let fetched: i64 = fetch(slice);
         log::info!("{},{}", i64v, fetched);
         let f64v = 1234.5678;
-        fill_f64(slice, f64v);
-        let fetched = fetch_f64(slice);
+        fill(slice, f64v);
+        let fetched: f64 = fetch(slice);
         log::info!("{},{}", f64v, fetched);
     }
 }
