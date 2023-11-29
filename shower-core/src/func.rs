@@ -1,6 +1,6 @@
 use crate::{
     aux::fetch,
-    data::{Column, ColumnType},
+    data::{ColumnType, Record},
     element::Element,
     ffi::FfiFunc,
 };
@@ -54,16 +54,16 @@ impl Executor {
         &self,
         id: u16,
         u64ptr: u64,
-        columns: &Vec<Column>,
+        record: &Record,
         position: usize,
         slice: &[u8],
     ) -> Element {
         match self {
             Executor::Fetch(_, field_id) => {
-                fetch_val(slice, id, u64ptr, columns, position, *field_id)
+                fetch_val(slice, id, u64ptr, record, position, *field_id)
             }
             Executor::Compute(f, executors) => {
-                compute_func(slice, id, u64ptr, columns, position, f, executors)
+                compute_func(slice, id, u64ptr, record, position, f, executors)
             }
         }
     }
@@ -74,12 +74,11 @@ pub(crate) fn fetch_val(
     slice: &[u8],
     _id: u16,
     u64ptr: u64,
-    columns: &[Column],
+    record: &Record,
     position: usize,
     idx: u16,
 ) -> Element {
-    // TODO: remove unwrap
-    let column = unsafe { columns.get_unchecked((idx - 1) as usize) };
+    let column = record.column(idx);
     match column.data_type() {
         ColumnType::Long => {
             let offset = column.offset();
@@ -125,17 +124,17 @@ pub(crate) fn compute_func(
     slice: &[u8],
     id: u16,
     u64ptr: u64,
-    columns: &Vec<Column>,
+    record: &Record,
     position: usize,
     f: &Func,
     executors: &Executors,
 ) -> Element {
     match f {
-        Func::Add => add(slice, id, u64ptr, columns, position, executors),
-        Func::Sub => sub(slice, id, u64ptr, columns, position, executors),
-        Func::Mul => mul(slice, id, u64ptr, columns, position, executors),
-        Func::Div => div(slice, id, u64ptr, columns, position, executors),
-        Func::Mod => mod_(slice, id, u64ptr, columns, position, executors),
+        Func::Add => add(slice, id, u64ptr, record, position, executors),
+        Func::Sub => sub(slice, id, u64ptr, record, position, executors),
+        Func::Mul => mul(slice, id, u64ptr, record, position, executors),
+        Func::Div => div(slice, id, u64ptr, record, position, executors),
+        Func::Mod => mod_(slice, id, u64ptr, record, position, executors),
         _ => Element::Long(0),
     }
 }
@@ -144,7 +143,7 @@ fn add(
     slice: &[u8],
     id: u16,
     u64ptr: u64,
-    columns: &Vec<Column>,
+    record: &Record,
     position: usize,
     executors: &Executors,
 ) -> Element {
@@ -157,10 +156,10 @@ fn add(
     }
     let v1 = executors
         .index_of(0)
-        .fetch(id, u64ptr, columns, position, slice);
+        .fetch(id, u64ptr, record, position, slice);
     let v2 = executors
         .index_of(1)
-        .fetch(id, u64ptr, columns, position, slice);
+        .fetch(id, u64ptr, record, position, slice);
     v1.add(v2)
 }
 
@@ -168,7 +167,7 @@ fn sub(
     slice: &[u8],
     id: u16,
     u64ptr: u64,
-    columns: &Vec<Column>,
+    record: &Record,
     position: usize,
     executors: &Executors,
 ) -> Element {
@@ -181,10 +180,10 @@ fn sub(
     }
     let v1 = executors
         .index_of(0)
-        .fetch(id, u64ptr, columns, position, slice);
+        .fetch(id, u64ptr, record, position, slice);
     let v2 = executors
         .index_of(1)
-        .fetch(id, u64ptr, columns, position, slice);
+        .fetch(id, u64ptr, record, position, slice);
     v1.sub(v2)
 }
 
@@ -192,7 +191,7 @@ fn mul(
     slice: &[u8],
     id: u16,
     u64ptr: u64,
-    columns: &Vec<Column>,
+    record: &Record,
     position: usize,
     executors: &Executors,
 ) -> Element {
@@ -205,10 +204,10 @@ fn mul(
     }
     let v1 = executors
         .index_of(0)
-        .fetch(id, u64ptr, columns, position, slice);
+        .fetch(id, u64ptr, record, position, slice);
     let v2 = executors
         .index_of(1)
-        .fetch(id, u64ptr, columns, position, slice);
+        .fetch(id, u64ptr, record, position, slice);
     v1.mul(v2)
 }
 
@@ -216,7 +215,7 @@ fn div(
     slice: &[u8],
     id: u16,
     u64ptr: u64,
-    columns: &Vec<Column>,
+    record: &Record,
     position: usize,
     executors: &Executors,
 ) -> Element {
@@ -229,10 +228,10 @@ fn div(
     }
     let v1 = executors
         .index_of(0)
-        .fetch(id, u64ptr, columns, position, slice);
+        .fetch(id, u64ptr, record, position, slice);
     let v2 = executors
         .index_of(1)
-        .fetch(id, u64ptr, columns, position, slice);
+        .fetch(id, u64ptr, record, position, slice);
     v1.div(v2)
 }
 
@@ -240,7 +239,7 @@ fn mod_(
     slice: &[u8],
     id: u16,
     u64ptr: u64,
-    columns: &Vec<Column>,
+    record: &Record,
     position: usize,
     executors: &Executors,
 ) -> Element {
@@ -253,10 +252,10 @@ fn mod_(
     }
     let v1 = executors
         .index_of(0)
-        .fetch(id, u64ptr, columns, position, slice);
+        .fetch(id, u64ptr, record, position, slice);
     let v2 = executors
         .index_of(1)
-        .fetch(id, u64ptr, columns, position, slice);
+        .fetch(id, u64ptr, record, position, slice);
     v1.mod_(v2)
 }
 

@@ -229,7 +229,7 @@ impl Record {
     }
     pub(crate) fn _get_column(record_id: u16, column_id: u16) -> Option<&'static Column> {
         if let Some(record) = Record::get_record(record_id) {
-            record.column(column_id)
+            Some(record.column(column_id))
         } else {
             None
         }
@@ -246,8 +246,8 @@ impl Record {
     pub(crate) fn column_id(&self, column_name: &str) -> Option<&u16> {
         self.columns_map.get(&String::from(column_name))
     }
-    pub(crate) fn column(&self, column_id: u16) -> Option<&Column> {
-        unsafe { Some(self.columns().get_unchecked((column_id - 1) as usize)) }
+    pub(crate) fn column(&self, column_id: u16) -> &Column {
+        unsafe { self.columns().get_unchecked((column_id - 1) as usize) }
     }
 }
 

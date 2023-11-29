@@ -1,7 +1,7 @@
 use crate::{
     aux::{SimpleU16Entry, SimpleU16Map},
     consts::U8_DATA_MAX_SIZE,
-    data::{Column, Record, U8Bytes},
+    data::{Record, U8Bytes},
     element::Element,
     error::ParseSqlError,
     exec::create_executor,
@@ -71,7 +71,7 @@ pub(crate) fn call_mapper(array: &WrappedArray, data: &U8Bytes) {
         id,
         array,
         &wrapped_mapper.mapper,
-        record.columns(),
+        record,
         &wrapped_mapper.fn_holder,
     );
 }
@@ -155,7 +155,7 @@ fn invoke(
     id: u16,
     array: &WrappedArray,
     mapper: &'static Mapper,
-    columns: &Vec<Column>,
+    record: &Record,
     fn_holder: &FnHolder,
 ) {
     thread_local! {
@@ -163,7 +163,7 @@ fn invoke(
     };
     DATA_REF.with_borrow_mut(|vec| {
         vec.clear();
-        loop_filter(array, mapper, id, columns, vec);
+        loop_filter(array, mapper, id, record, vec);
         callback(fn_holder, vec);
     })
 }
@@ -172,7 +172,7 @@ fn loop_filter(
     array: &WrappedArray,
     mapper: &Mapper,
     id: u16,
-    columns: &Vec<Column>,
+    record: &Record,
     vec: &mut Vec<[u8; 512]>,
 ) {
     let mut idx = 0;
@@ -185,9 +185,9 @@ fn loop_filter(
         let sub_vec = array.sub_data(position);
         if mapper
             .filter
-            .is_match(id, u64ptr, columns, position, sub_vec)
+            .is_match(id, u64ptr, record, position, sub_vec)
         {
-            vec.push(mapper.fetch(id, u64ptr, columns, position, sub_vec));
+            vec.push(mapper.fetch(id, u64ptr, record, position, sub_vec));
         }
         if vec.len() == mapper.limit {
             break;
@@ -213,41 +213,41 @@ fn op_or(
     slice: &[u8],
     id: u16,
     u64ptr: u64,
-    columns: &Vec<Column>,
+    record: &Record,
     position: usize,
     v1: &Filter,
     v2: &Filter,
 ) -> bool {
-    op_logical(slice, id, u64ptr, columns, position, v1, v2, or)
+    op_logical(slice, id, u64ptr, record, position, v1, v2, or)
 }
 #[inline]
 fn op_and(
     slice: &[u8],
     id: u16,
     u64ptr: u64,
-    columns: &Vec<Column>,
+    record: &Record,
     position: usize,
     v1: &Filter,
     v2: &Filter,
 ) -> bool {
-    op_logical(slice, id, u64ptr, columns, position, v1, v2, and)
+    op_logical(slice, id, u64ptr, record, position, v1, v2, and)
 }
 #[inline]
 fn op_logical<F>(
     slice: &[u8],
     id: u16,
     u64ptr: u64,
-    columns: &Vec<Column>,
+    record: &Record,
     position: usize,
     v1: &Filter,
     v2: &Filter,
     f: F,
 ) -> bool
 where
-    F: Fn(&[u8], u16, u64, &Vec<Column>, usize, &Filter, &Filter) -> bool,
+    F: Fn(&[u8], u16, u64, &Record, usize, &Filter, &Filter) -> bool,
 {
     match (v1, v2) {
-        (Filter::Mixed(_), Filter::Mixed(_)) => f(slice, id, u64ptr, columns, position, v1, v2),
+        (Filter::Mixed(_), Filter::Mixed(_)) => f(slice, id, u64ptr, record, position, v1, v2),
         _ => false,
     }
 }
@@ -257,13 +257,13 @@ fn or(
     slice: &[u8],
     id: u16,
     u64ptr: u64,
-    columns: &Vec<Column>,
+    record: &Record,
     position: usize,
     v1: &Filter,
     v2: &Filter,
 ) -> bool {
-    v1.is_match(id, u64ptr, columns, position, slice)
-        || v2.is_match(id, u64ptr, columns, position, slice)
+    v1.is_match(id, u64ptr, record, position, slice)
+        || v2.is_match(id, u64ptr, record, position, slice)
 }
 
 #[inline]
@@ -271,13 +271,13 @@ fn and(
     slice: &[u8],
     id: u16,
     u64ptr: u64,
-    columns: &Vec<Column>,
+    record: &Record,
     position: usize,
     v1: &Filter,
     v2: &Filter,
 ) -> bool {
-    v1.is_match(id, u64ptr, columns, position, slice)
-        && v2.is_match(id, u64ptr, columns, position, slice)
+    v1.is_match(id, u64ptr, record, position, slice)
+        && v2.is_match(id, u64ptr, record, position, slice)
 }
 
 #[inline]
@@ -285,72 +285,72 @@ fn op_eq(
     slice: &[u8],
     id: u16,
     u64ptr: u64,
-    columns: &[Column],
+    record: &Record,
     position: usize,
     v1: &Filter,
     v2: &Filter,
 ) -> bool {
-    compare_slice_val(slice, id, u64ptr, columns, position, v1, v2, eq)
+    compare_slice_val(slice, id, u64ptr, record, position, v1, v2, eq)
 }
 #[inline]
 fn op_gt_eq(
     slice: &[u8],
     id: u16,
     u64ptr: u64,
-    columns: &[Column],
+    record: &Record,
     position: usize,
     v1: &Filter,
     v2: &Filter,
 ) -> bool {
-    compare_slice_val(slice, id, u64ptr, columns, position, v1, v2, gt_eq)
+    compare_slice_val(slice, id, u64ptr, record, position, v1, v2, gt_eq)
 }
 #[inline]
 fn op_gt(
     slice: &[u8],
     id: u16,
     u64ptr: u64,
-    columns: &[Column],
+    record: &Record,
     position: usize,
     v1: &Filter,
     v2: &Filter,
 ) -> bool {
-    compare_slice_val(slice, id, u64ptr, columns, position, v1, v2, gt)
+    compare_slice_val(slice, id, u64ptr, record, position, v1, v2, gt)
 }
 #[inline]
 fn op_lt_eq(
     slice: &[u8],
     id: u16,
     u64ptr: u64,
-    columns: &[Column],
+    record: &Record,
     position: usize,
     v1: &Filter,
     v2: &Filter,
 ) -> bool {
-    compare_slice_val(slice, id, u64ptr, columns, position, v1, v2, lt_eq)
+    compare_slice_val(slice, id, u64ptr, record, position, v1, v2, lt_eq)
 }
 #[inline]
 fn op_lt(
     slice: &[u8],
     id: u16,
     u64ptr: u64,
-    columns: &[Column],
+    record: &Record,
     position: usize,
     v1: &Filter,
     v2: &Filter,
 ) -> bool {
-    compare_slice_val(slice, id, u64ptr, columns, position, v1, v2, lt)
+    compare_slice_val(slice, id, u64ptr, record, position, v1, v2, lt)
 }
 #[inline]
 fn op_neq(
     slice: &[u8],
     id: u16,
     u64ptr: u64,
-    columns: &[Column],
+    record: &Record,
     position: usize,
     v1: &Filter,
     v2: &Filter,
 ) -> bool {
-    compare_slice_val(slice, id, u64ptr, columns, position, v1, v2, neq)
+    compare_slice_val(slice, id, u64ptr, record, position, v1, v2, neq)
 }
 
 #[inline]
@@ -358,7 +358,7 @@ fn compare_slice_val<F>(
     slice: &[u8],
     id: u16,
     u64ptr: u64,
-    columns: &[Column],
+    record: &Record,
     position: usize,
     v1: &Filter,
     v2: &Filter,
@@ -370,16 +370,16 @@ where
     match (v1, v2) {
         (Filter::Original(expr1), Filter::Original(expr2)) => match (expr1, expr2) {
             (ExprEntity::Field(idx), ExprEntity::Val(v_type)) => {
-                compare_with_op(slice, id, u64ptr, columns, position, *idx, v_type, f)
+                compare_with_op(slice, id, u64ptr, record, position, *idx, v_type, f)
             }
             (ExprEntity::FieldWithTab(_, field_idx), ExprEntity::Val(v_type)) => {
-                compare_with_op(slice, id, u64ptr, columns, position, *field_idx, v_type, f)
+                compare_with_op(slice, id, u64ptr, record, position, *field_idx, v_type, f)
             }
             (ExprEntity::Val(v_type), ExprEntity::Field(idx)) => {
-                compare_with_op(slice, id, u64ptr, columns, position, *idx, v_type, f)
+                compare_with_op(slice, id, u64ptr, record, position, *idx, v_type, f)
             }
             (ExprEntity::Val(v_type), ExprEntity::FieldWithTab(_, field_idx)) => {
-                compare_with_op(slice, id, u64ptr, columns, position, *field_idx, v_type, f)
+                compare_with_op(slice, id, u64ptr, record, position, *field_idx, v_type, f)
             }
             _ => false,
         },
@@ -392,7 +392,7 @@ fn compare_with_op<F>(
     slice: &[u8],
     id: u16,
     u64ptr: u64,
-    columns: &[Column],
+    record: &Record,
     position: usize,
     idx: u16,
     v_type: &ValType,
@@ -403,7 +403,7 @@ where
 {
     let opt_expacted = fetch_expacted(v_type);
     if let Some(expacted) = opt_expacted {
-        let val = fetch_val(slice, id, u64ptr, columns, position, idx);
+        let val = fetch_val(slice, id, u64ptr, record, position, idx);
         compare_val(expacted, val, f)
     } else {
         false
@@ -449,7 +449,7 @@ impl Mapper {
         &self,
         id: u16,
         u64ptr: u64,
-        columns: &Vec<Column>,
+        record: &Record,
         position: usize,
         slice: &[u8],
     ) -> [u8; 512] {
@@ -461,7 +461,7 @@ impl Mapper {
         let len = executors.executor_size();
         for i in 0..len {
             let executor = executors.index_of(i);
-            val = executor.fetch(id, u64ptr, columns, position, slice);
+            val = executor.fetch(id, u64ptr, record, position, slice);
             let val_len = val.len();
             val.copy_to_target(&mut target[offset..offset + val_len]);
             offset += val_len;
@@ -491,7 +491,7 @@ impl Filter {
         &self,
         id: u16,
         u64ptr: u64,
-        columns: &Vec<Column>,
+        record: &Record,
         position: usize,
         slice: &[u8],
     ) -> bool {
@@ -499,7 +499,7 @@ impl Filter {
             Filter::Empty => true,
             Filter::Original(_) => false,
             Filter::Mixed(filters) => {
-                self.filter_slice(id, u64ptr, columns, position, filters, slice)
+                self.filter_slice(id, u64ptr, record, position, filters, slice)
             }
         }
     }
@@ -508,7 +508,7 @@ impl Filter {
         &self,
         id: u16,
         u64ptr: u64,
-        columns: &Vec<Column>,
+        record: &Record,
         position: usize,
         filters: &[Filter],
         slice: &[u8],
@@ -519,7 +519,7 @@ impl Filter {
         match op {
             Filter::Empty => true,
             Filter::Original(expr) => {
-                self.filter_slice_by_expr(id, u64ptr, columns, position, expr, v1, v2, slice)
+                self.filter_slice_by_expr(id, u64ptr, record, position, expr, v1, v2, slice)
             }
             Filter::Mixed(_) => false,
         }
@@ -529,7 +529,7 @@ impl Filter {
         &self,
         id: u16,
         u64ptr: u64,
-        columns: &Vec<Column>,
+        record: &Record,
         position: usize,
         expr: &ExprEntity,
         v1: &Filter,
@@ -538,14 +538,14 @@ impl Filter {
     ) -> bool {
         match expr {
             ExprEntity::Op(op_type) => match op_type {
-                OpType::Or => op_or(slice, id, u64ptr, columns, position, v1, v2),
-                OpType::And => op_and(slice, id, u64ptr, columns, position, v1, v2),
-                OpType::Eq => op_eq(slice, id, u64ptr, columns, position, v1, v2),
-                OpType::GtEq => op_gt_eq(slice, id, u64ptr, columns, position, v1, v2),
-                OpType::Gt => op_gt(slice, id, u64ptr, columns, position, v1, v2),
-                OpType::LtEq => op_lt_eq(slice, id, u64ptr, columns, position, v1, v2),
-                OpType::Lt => op_lt(slice, id, u64ptr, columns, position, v1, v2),
-                OpType::Neq => op_neq(slice, id, u64ptr, columns, position, v1, v2),
+                OpType::Or => op_or(slice, id, u64ptr, record, position, v1, v2),
+                OpType::And => op_and(slice, id, u64ptr, record, position, v1, v2),
+                OpType::Eq => op_eq(slice, id, u64ptr, record, position, v1, v2),
+                OpType::GtEq => op_gt_eq(slice, id, u64ptr, record, position, v1, v2),
+                OpType::Gt => op_gt(slice, id, u64ptr, record, position, v1, v2),
+                OpType::LtEq => op_lt_eq(slice, id, u64ptr, record, position, v1, v2),
+                OpType::Lt => op_lt(slice, id, u64ptr, record, position, v1, v2),
+                OpType::Neq => op_neq(slice, id, u64ptr, record, position, v1, v2),
             },
             _ => false,
         }

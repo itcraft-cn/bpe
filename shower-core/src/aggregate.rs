@@ -116,7 +116,7 @@ fn setup_init_val(
     executor: &Executor,
     stream: &Record,
 ) -> Result<(), String> {
-    let offset = stream.column((idx + 1) as u16).unwrap().offset();
+    let offset = stream.column((idx + 1) as u16).offset();
     match executor {
         Executor::Compute(func, _) => {
             init_for_some_func(func, aggregate_data, offset);
@@ -184,7 +184,7 @@ fn compute(
     data_idx: usize,
     stream: &Record,
 ) {
-    let offset = stream.column((idx + 1) as u16).unwrap().offset();
+    let offset = stream.column((idx + 1) as u16).offset();
     match executor {
         Executor::Compute(func, executors) => {
             if executors.executor_size() != 1 {
@@ -226,60 +226,102 @@ fn choose_func(
     offset: usize,
     data_idx: usize,
 ) {
-    match (func, &element) {
-        (Func::Key, Element::Long(v)) => {
-            func_key_long(idx, aggregate_data, field_ref, offset, v);
-        }
-        (Func::Key, Element::Double(v)) => {
-            func_key_double(idx, aggregate_data, field_ref, offset, v);
-        }
-        (Func::Key, Element::Str(u64ptr, str_offset, len)) => {
-            func_key_str(
-                idx,
-                aggregate_data,
-                field_ref,
-                offset,
-                u64ptr,
-                str_offset,
-                len,
-            );
-        }
-        (Func::MaxL, Element::Long(v)) => {
-            func_max_long(aggregate_data, offset, v);
-        }
-        (Func::MinL, Element::Long(v)) => {
-            func_min_long(aggregate_data, offset, v);
-        }
-        (Func::SumL, Element::Long(v)) => {
-            func_sum_long(aggregate_data, offset, v);
-        }
-        (Func::Count, Element::Long(_)) => {
-            func_count_long(aggregate_data, offset);
-        }
-        (Func::MaxD, Element::Long(v)) => {
-            func_maxd_long(aggregate_data, offset, v);
-        }
-        (Func::MinD, Element::Long(v)) => {
-            func_mind_long(aggregate_data, offset, v);
-        }
-        (Func::SumD, Element::Long(v)) => {
-            func_sumd_long(aggregate_data, offset, v);
-        }
-        (Func::Avg, Element::Long(v)) => {
-            func_avg_long(aggregate_data, offset, v, data_idx);
-        }
-        (Func::MaxD, Element::Double(v)) => {
-            func_maxd_double(aggregate_data, offset, v);
-        }
-        (Func::MinD, Element::Double(v)) => {
-            func_mind_double(aggregate_data, offset, v);
-        }
-        (Func::SumD, Element::Double(v)) => {
-            func_sumd_double(aggregate_data, offset, v);
-        }
-        (Func::Avg, Element::Double(v)) => {
-            func_avg_double(aggregate_data, offset, v, data_idx);
-        }
+    match func {
+        Func::Key => match &element {
+            Element::Long(v) => {
+                func_key_long(idx, aggregate_data, field_ref, offset, v);
+            }
+            Element::Double(v) => {
+                func_key_double(idx, aggregate_data, field_ref, offset, v);
+            }
+            Element::Str(u64ptr, str_offset, len) => {
+                func_key_str(
+                    idx,
+                    aggregate_data,
+                    field_ref,
+                    offset,
+                    u64ptr,
+                    str_offset,
+                    len,
+                );
+            }
+        },
+        Func::MaxL => match &element {
+            Element::Long(v) => {
+                func_max_long(aggregate_data, offset, v);
+            }
+            _ => {
+                log::warn!("unsupported function: {:?}-{:?}", func, &element);
+            }
+        },
+        Func::MinL => match &element {
+            Element::Long(v) => {
+                func_min_long(aggregate_data, offset, v);
+            }
+            _ => {
+                log::warn!("unsupported function: {:?}-{:?}", func, &element);
+            }
+        },
+        Func::SumL => match &element {
+            Element::Long(v) => {
+                func_sum_long(aggregate_data, offset, v);
+            }
+            _ => {
+                log::warn!("unsupported function: {:?}-{:?}", func, &element);
+            }
+        },
+        Func::Count => match &element {
+            Element::Long(_) => {
+                func_count_long(aggregate_data, offset);
+            }
+            _ => {
+                log::warn!("unsupported function: {:?}-{:?}", func, &element);
+            }
+        },
+        Func::MaxD => match &element {
+            Element::Long(v) => {
+                func_maxd_long(aggregate_data, offset, v);
+            }
+            Element::Double(v) => {
+                func_maxd_double(aggregate_data, offset, v);
+            }
+            _ => {
+                log::warn!("unsupported function: {:?}-{:?}", func, &element);
+            }
+        },
+        Func::MinD => match &element {
+            Element::Long(v) => {
+                func_mind_long(aggregate_data, offset, v);
+            }
+            Element::Double(v) => {
+                func_mind_double(aggregate_data, offset, v);
+            }
+            _ => {
+                log::warn!("unsupported function: {:?}-{:?}", func, &element);
+            }
+        },
+        Func::SumD => match &element {
+            Element::Long(v) => {
+                func_sumd_long(aggregate_data, offset, v);
+            }
+            Element::Double(v) => {
+                func_sumd_double(aggregate_data, offset, v);
+            }
+            _ => {
+                log::warn!("unsupported function: {:?}-{:?}", func, &element);
+            }
+        },
+        Func::Avg => match &element {
+            Element::Long(v) => {
+                func_avg_long(aggregate_data, offset, v, data_idx);
+            }
+            Element::Double(v) => {
+                func_avg_double(aggregate_data, offset, v, data_idx);
+            }
+            _ => {
+                log::warn!("unsupported function: {:?}-{:?}", func, &element);
+            }
+        },
         _ => {
             log::warn!("unsupported function: {:?}-{:?}", func, &element);
         }
@@ -398,23 +440,15 @@ fn func_avg_double(aggregate_data: &mut [u8; 512], offset: usize, v: &f64, data_
 
 fn fetch_arg_val(sub_data: &[u8; 512], executor: &Executor, stream: &Record) -> Element {
     match executor {
-        Executor::Fetch(record_id, field_id) => {
-            if let Some(column) = stream.column(*field_id) {
-                let column_type = column.data_type();
-                let offset = column.offset();
-                let slice = sub_data.as_slice();
-                match column_type {
-                    ColumnType::Long => Element::Long(fetch(&slice[offset..offset + 8])),
-                    ColumnType::Double => Element::Double(fetch(&slice[offset..offset + 8])),
-                    ColumnType::Str(len) => Element::Str(slice.as_ptr() as u64, offset, *len),
-                }
-            } else {
-                log::warn!(
-                    "fail to fetch record and column: [{}-{}]",
-                    *record_id,
-                    *field_id
-                );
-                Element::Long(0)
+        Executor::Fetch(_record_id, field_id) => {
+            let column = stream.column(*field_id);
+            let column_type = column.data_type();
+            let offset = column.offset();
+            let slice = sub_data.as_slice();
+            match column_type {
+                ColumnType::Long => Element::Long(fetch(&slice[offset..offset + 8])),
+                ColumnType::Double => Element::Double(fetch(&slice[offset..offset + 8])),
+                ColumnType::Str(len) => Element::Str(slice.as_ptr() as u64, offset, *len),
             }
         }
         _ => {
