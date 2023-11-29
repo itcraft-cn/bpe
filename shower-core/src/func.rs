@@ -5,8 +5,8 @@ use crate::{
     ffi::FfiFunc,
 };
 use std::{
-    alloc::{self, Layout},
-    mem::{align_of, size_of},
+    alloc::{alloc, Layout},
+    mem::{align_of, size_of_val},
     ptr,
 };
 use strum_macros::EnumString;
@@ -18,16 +18,15 @@ pub(crate) struct Executors {
 }
 impl Executors {
     pub(crate) fn new(executors: &[Executor]) -> Self {
-        let size_of_executor = size_of::<Executor>();
         let align_of_executor = align_of::<Executor>();
         let len = executors.len();
-        let layout = Layout::from_size_align(len * size_of_executor, align_of_executor).unwrap();
-        let raw_ptr = unsafe { alloc::alloc(layout) };
+        let layout = Layout::from_size_align(size_of_val(executors), align_of_executor).unwrap();
+        let raw_ptr = unsafe { alloc(layout) };
         let executor_ptr = raw_ptr.cast::<Executor>();
-        for i in 0..len {
+        for (i, item) in executors.iter().enumerate() {
             unsafe {
                 let target_ptr = executor_ptr.add(i);
-                ptr::write(target_ptr, executors[i].clone());
+                ptr::write(target_ptr, item.clone());
             }
         }
         Self {

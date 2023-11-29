@@ -19,10 +19,9 @@ fn test_new_proc() {
     start();
     if let Some(id) = define_records() {
         if let Some(id) = def_mapper(FILTER_SQL, |data| {
-            let len = data.len();
             log::info!("data len: [{}]", data.len());
-            for i in 0..len {
-                let slice = data[i].as_slice();
+            for item in data.iter() {
+                let slice = item.as_slice();
                 log::info!("data: {:?}", &slice[0..16]);
                 log::info!("a:{:?}|b:{}", &slice[0..8], fetch_f64(&slice[8..16]),);
             }

@@ -98,16 +98,20 @@ where
         return -1;
     };
     let rs = conv_arrays(env, j_names, j_types, j_sizes);
-    if let Ok((names, types, sizes)) = rs {
-        let names_len = names.len();
-        let types_len = types.len();
-        let sizes_len = sizes.len();
+    if let Ok(mixed) = rs {
+        let names_len = mixed.names.len();
+        let types_len = mixed.types.len();
+        let sizes_len = mixed.sizes.len();
         if names_len != types_len || names_len != sizes_len {
             return -1;
         }
         let mut columns = vec![];
         for i in 0..names_len {
-            columns.push(Column::new(names[i].clone(), types[i], sizes[i]));
+            columns.push(Column::new(
+                mixed.names[i].clone(),
+                mixed.types[i],
+                mixed.sizes[i],
+            ));
         }
         if let Some(id) = f(&name, columns) {
             id as jint
@@ -280,7 +284,7 @@ fn conv_arrays<'a>(
     j_names: JObjectArray<'a>,
     j_types: JIntArray<'a>,
     j_sizes: JIntArray<'a>,
-) -> Result<(Vec<String>, Vec<u16>, Vec<usize>), String> {
+) -> Result<MixedVec, String> {
     let rs1 = conv_string_array(env, j_names);
     let array1 = if let Ok(array) = rs1 {
         array
@@ -305,7 +309,7 @@ fn conv_arrays<'a>(
             "failed to conver java string array to rust vec",
         ));
     };
-    Ok((array1, array2, array3))
+    Ok(MixedVec::new(array1, array2, array3))
 }
 
 fn conv_string_array(
@@ -349,5 +353,20 @@ fn conv_int_array<T>(
         Ok(vec)
     } else {
         Err(String::from("failed to get array length"))
+    }
+}
+
+struct MixedVec {
+    names: Vec<String>,
+    types: Vec<u16>,
+    sizes: Vec<usize>,
+}
+impl MixedVec {
+    fn new(names: Vec<String>, types: Vec<u16>, sizes: Vec<usize>) -> MixedVec {
+        MixedVec {
+            names,
+            types,
+            sizes,
+        }
     }
 }
