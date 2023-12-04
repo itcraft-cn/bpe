@@ -42,7 +42,7 @@ fn init_log4rs() {
     }
 }
 
-fn init_dev_logger() {
+pub(crate) fn init_dev_logger() {
     let console_appender = init_console();
     let file_appender = init_file();
     let root = Root::builder()
