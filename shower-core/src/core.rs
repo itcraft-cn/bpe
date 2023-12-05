@@ -58,7 +58,7 @@ pub fn new_data(data: &U8Bytes) -> bool {
 #[inline]
 fn process_data(array: &mut WrappedArray, data: &U8Bytes) {
     insert(array, data);
-    call_mapper(array, data);
+    call_mapper(array, data.id());
 }
 
 pub fn def_mapper<F>(sql: &str, func: F) -> Option<u16>

@@ -1,7 +1,7 @@
 use crate::{
     aux::{SimpleU16Entry, SimpleU16Map},
     consts::U8_DATA_MAX_SIZE,
-    data::{Record, U8Bytes},
+    data::Record,
     element::Element,
     error::ParseSqlError,
     exec::create_executor,
@@ -58,8 +58,7 @@ pub(crate) fn define_mapper(sql: &str, func_holder: FnHolder) -> Option<u16> {
 }
 
 #[inline]
-pub(crate) fn call_mapper(array: &WrappedArray, data: &U8Bytes) {
-    let id = data.id();
+pub(crate) fn call_mapper(array: &WrappedArray, id: u16) {
     let opt_mappers = search_mapper(id);
     let opt_record = Record::get_record(id);
     if opt_mappers.is_none() || opt_record.is_none() {
