@@ -127,12 +127,10 @@ fn create_filter(entities: &[ExprEntity]) -> Result<Filter, ParseSqlError> {
             break;
         }
         let filter = filters.remove(0);
-        let is_op = match &filter {
-            Filter::Empty => false,
+        if match &filter {
             Filter::Original(expr) => matches!(expr, ExprEntity::Op(_)),
-            Filter::Mixed(_) => false,
-        };
-        if is_op {
+            _ => false,
+        } {
             let m2 = tmp.pop().unwrap();
             let m1 = tmp.pop().unwrap();
             tmp.push(Filter::Mixed(vec![m1, m2, filter]));
