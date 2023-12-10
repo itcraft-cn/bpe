@@ -9,9 +9,7 @@ const U16_FULL_VAL: u32 = u16::MAX as u32 + 1;
 
 #[inline]
 pub(crate) fn fill<T>(slice: &mut [u8], data: T) {
-    let p_val = ptr::addr_of!(*slice);
-    let p_data = p_val as *mut T;
-    unsafe { *p_data = data };
+    unsafe { ptr::write_unaligned(ptr::addr_of!(*slice) as *mut T, data) }
 }
 
 #[inline]
@@ -19,9 +17,7 @@ pub(crate) fn fetch<T>(slice: &[u8]) -> T
 where
     T: Copy,
 {
-    let p_val = ptr::addr_of!(*slice);
-    let p_data = p_val as *const T;
-    unsafe { *p_data }
+    unsafe { ptr::read_unaligned(ptr::addr_of!(*slice) as *mut T) }
 }
 
 #[inline]
