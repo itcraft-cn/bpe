@@ -1,10 +1,9 @@
 mod test_aux;
 mod test_log;
 
-use crate::test_aux::{fill_f64, fill_i64};
 use shower::{def_incoming, def_mapper, new_data, start, stop, Column, U8Bytes};
 use std::thread;
-use test_aux::{fetch_f64, fetch_i64};
+use test_aux::{fetch_ptr, fill_f64, fill_i64};
 use test_log::{init_logger, setup_shower_home};
 
 const LOOP_SIZE: usize = 10;
@@ -36,16 +35,17 @@ fn gen_new_data() {
         Column::new_double("e"),
     ];
     let id = def_incoming("demo", columns).unwrap();
-    def_mapper(SQL, |vec| {
-        log::info!("fetched data: {}", vec.len());
-        for array in vec {
-            let slice = array.as_slice();
-            let v1 = fetch_i64(&slice[0..8]);
-            let v2 = fetch_i64(&slice[8..16]);
-            let v3 = fetch_f64(&slice[16..24]);
-            let v4 = fetch_f64(&slice[24..32]);
-            let v5 = fetch_f64(&slice[32..40]);
-            log::info!("{}/{}/{}/{}/{}", v1, v2, v3, v4, v5);
+    def_mapper(SQL, |data, size| {
+        log::info!("fetched data: {}", size);
+        for idx in 0..size {
+            unsafe {
+                let v1 = fetch_ptr::<i64>(data.add(idx * 512));
+                let v2 = fetch_ptr::<i64>(data.add(idx * 512 + 8));
+                let v3 = fetch_ptr::<f64>(data.add(idx * 512 + 16));
+                let v4 = fetch_ptr::<f64>(data.add(idx * 512 + 24));
+                let v5 = fetch_ptr::<f64>(data.add(idx * 512 + 32));
+                log::info!("{}/{}/{}/{}/{}", v1, v2, v3, v4, v5);
+            }
         }
     });
     let mut vec = vec![0_u8; 512];

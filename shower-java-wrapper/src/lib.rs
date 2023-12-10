@@ -248,13 +248,13 @@ struct JavaFfiFunc {
     callback: GlobalRef,
 }
 impl FfiFunc for JavaFfiFunc {
-    fn callback(&self, data: &[[u8; 512]]) {
+    fn callback(&self, data_ptr: *const u8, size: usize) {
+        /*
         let rs = self.vm.get_env();
         if let Ok(mut env) = rs {
-            let len = data.len() as i32;
-            let array = conv_array(&env, data);
+            let array = conv_array(&env, data, size);
             let param1 = JValueGen::Object(&array as &JObject);
-            let param2 = JValueGen::Int(len);
+            let param2 = JValueGen::Int(size as i32);
             let rs = env.call_method(
                 self.callback.clone(),
                 "callback",
@@ -265,6 +265,7 @@ impl FfiFunc for JavaFfiFunc {
                 log::warn!("call_method failed: {:?}", rs.err().unwrap());
             }
         }
+         */
     }
 }
 

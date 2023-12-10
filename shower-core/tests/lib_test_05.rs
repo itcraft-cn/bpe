@@ -10,7 +10,7 @@ const SQL: &str = r#"
 fn test_new_proc() {
     test_log::setup_shower_home();
     start();
-    def_mapper(SQL, |_vec| {});
+    def_mapper(SQL, |_vec, _size| {});
     let u8data = U8Bytes::new_from_vec(1, 64, vec![0_u8; 64]);
     new_data(&u8data);
     stop();

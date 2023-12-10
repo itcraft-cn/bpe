@@ -6,13 +6,13 @@ use crate::{
 };
 use std::{
     alloc::{self, Layout},
-    slice,
+    ptr,
     sync::Once,
 };
 
 static MAP_INIT: Once = Once::new();
 static mut MAP: Option<SimpleU16Map> = None;
-static mut VEC_SIZE: usize = 0;
+pub(crate) static mut VEC_SIZE: usize = 0;
 
 pub(crate) fn init_store() {
     MAP_INIT.call_once(initial);
@@ -35,9 +35,7 @@ fn insert_into_slice(array: &mut WrappedArray, data: &U8Bytes) {
     let size = data.data_len();
     let data = data.bytes();
     let base = array.walker() & array.mask();
-    let slice = array.data();
-    slice[base..base + size].copy_from_slice(&data[0..size]);
-    array.update_walker(U8_DATA_MAX_SIZE);
+    array.write_data(base, &data[0..size], size);
 }
 
 #[inline]
@@ -92,17 +90,14 @@ impl WrappedArray {
         self.data as u64
     }
 
-    fn data(&mut self) -> &mut [u8] {
-        unsafe { slice::from_raw_parts_mut(self.data, self.size) }
+    fn write_data(&mut self, base: usize, src_data: &[u8], len: usize) {
+        let src_ptr = src_data.as_ptr();
+        unsafe { ptr::copy_nonoverlapping(src_ptr, self.data.add(base), len) };
+        self.update_walker(U8_DATA_MAX_SIZE);
     }
 
-    pub(crate) fn sub_data(&self, offset: usize) -> &[u8] {
-        unsafe {
-            slice::from_raw_parts(
-                (self.data as u64 + offset as u64) as *mut u8,
-                U8_DATA_MAX_SIZE,
-            )
-        }
+    pub(crate) fn sub_data(&self, offset: usize) -> *const u8 {
+        unsafe { self.data.add(offset) }
     }
 
     pub(crate) fn walker(&self) -> usize {

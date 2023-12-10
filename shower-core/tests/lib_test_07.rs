@@ -6,7 +6,7 @@ use shower::{
     Column, U8Bytes,
 };
 use std::thread;
-use test_aux::{fetch_f64, fetch_i64, fill_i64};
+use test_aux::{fetch_ptr, fill_i64};
 use test_log::{init_logger, setup_shower_home};
 
 const LOOP_SIZE: usize = 20;
@@ -27,23 +27,22 @@ fn test_new_proc() {
     init_logger();
     start();
     if let Some((id1, _id2)) = define_records() {
-        if let Some(aggregate_id) = def_aggregate(AGGREGATE_SQL, |data| {
-            let len = data.len();
-            log::info!("data len: [{}]", data.len());
-            if len == 1 {
-                let slice = data[0].as_slice();
-                log::info!("data: {:?}", &slice[0..64]);
-                log::info!(
-                    "maxl:{}|minl:{}|suml:{}|maxd:{}|mind:{}|sumd:{}|avg:{}|count:{}",
-                    fetch_i64(&slice[0..8]),
-                    fetch_i64(&slice[8..16]),
-                    fetch_i64(&slice[16..24]),
-                    fetch_f64(&slice[24..32]),
-                    fetch_f64(&slice[32..40]),
-                    fetch_f64(&slice[40..48]),
-                    fetch_f64(&slice[48..56]),
-                    fetch_i64(&slice[56..64]),
-                );
+        if let Some(aggregate_id) = def_aggregate(AGGREGATE_SQL, |data, size| {
+            log::info!("data len: [{}]", size);
+            if size == 1 {
+                unsafe {
+                    log::info!(
+                        "maxl:{}|minl:{}|suml:{}|maxd:{}|mind:{}|sumd:{}|avg:{}|count:{}",
+                        fetch_ptr::<i64>(data),
+                        fetch_ptr::<i64>(data.add(8)),
+                        fetch_ptr::<i64>(data.add(16)),
+                        fetch_ptr::<f64>(data.add(24)),
+                        fetch_ptr::<f64>(data.add(32)),
+                        fetch_ptr::<f64>(data.add(40)),
+                        fetch_ptr::<f64>(data.add(48)),
+                        fetch_ptr::<i64>(data.add(56)),
+                    );
+                }
             }
         }) {
             let opt = def_mapper_bind_aggregate(FILTER_SQL, aggregate_id);

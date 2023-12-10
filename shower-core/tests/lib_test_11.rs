@@ -6,7 +6,7 @@ use shower::{
     Column, U8Bytes,
 };
 use std::thread;
-use test_aux::{fetch_f64, fill_f64};
+use test_aux::{fetch_ptr, fill_f64};
 use test_log::{init_logger, setup_shower_home};
 
 const LOOP_SIZE: usize = 20;
@@ -24,13 +24,12 @@ fn test_new_proc() {
     init_logger();
     start();
     if let Some((id1, _id2)) = define_records() {
-        if let Some(aggregate_id) = def_aggregate(AGGREGATE_SQL, |data| {
-            let len = data.len();
-            log::info!("data len: [{}]", data.len());
-            if len == 1 {
-                let slice = data[0].as_slice();
-                log::info!("data: {:?}", &slice[0..16]);
-                log::info!("key:{:?}|sumd:{}", &slice[0..8], fetch_f64(&slice[8..16]),);
+        if let Some(aggregate_id) = def_aggregate(AGGREGATE_SQL, |data, size| {
+            log::info!("data len: [{}]", size);
+            if size == 1 {
+                unsafe {
+                    log::info!("sumd:{}", fetch_ptr::<i64>(data.add(8)),);
+                }
             }
         }) {
             let opt = def_mapper_bind_aggregate(FILTER_SQL, aggregate_id);

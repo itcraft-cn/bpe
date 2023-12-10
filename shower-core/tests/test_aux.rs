@@ -8,6 +8,19 @@ use std::{
 const U16_FULL_VAL: u32 = u16::MAX as u32 + 1;
 
 #[inline]
+pub(crate) fn fill_ptr<T>(u8_ptr: *mut u8, data: T) {
+    unsafe { *(u8_ptr as *mut T) = data };
+}
+
+#[inline]
+pub(crate) fn fetch_ptr<T>(u8_ptr: *const u8) -> T
+where
+    T: Copy,
+{
+    unsafe { *(u8_ptr as *const T) }
+}
+
+#[inline]
 fn fill<T>(slice: &mut [u8], data: T) {
     let p_val = ptr::addr_of!(*slice);
     let p_data = p_val as *mut T;

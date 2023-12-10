@@ -1,4 +1,5 @@
-use std::slice;
+use crate::aux::fill_ptr;
+use std::ptr;
 
 const TINY_SMALL_F64: f64 = 0.00000001;
 
@@ -16,15 +17,15 @@ impl Element {
             Element::Str(_, _, len) => *len,
         }
     }
-    pub(crate) fn copy_to_target(&self, target: &mut [u8]) {
+    pub(crate) fn copy_to_target(&self, u8_ptr: *mut u8, offset: usize) {
+        let adjusted = unsafe { u8_ptr.add(offset) };
         match self {
-            Element::Long(val) => target.copy_from_slice(val.to_ne_bytes().as_slice()),
-            Element::Double(val) => target.copy_from_slice(val.to_ne_bytes().as_slice()),
-            Element::Str(u64ptr, offset, len) => {
-                let ptr_slice = (*u64ptr + *offset as u64) as *const u8;
-                let slice = unsafe { slice::from_raw_parts(ptr_slice, *len) };
-                target.copy_from_slice(slice)
-            }
+            Element::Long(val) => fill_ptr(adjusted, *val),
+            Element::Double(val) => fill_ptr(adjusted, *val),
+            Element::Str(u64ptr, offset, len) => unsafe {
+                let ptr_slice = (*u64ptr as *const u8).add(*offset);
+                ptr::copy_nonoverlapping(ptr_slice, adjusted, *len);
+            },
         };
     }
     pub(crate) fn _is_computed(&self) -> bool {

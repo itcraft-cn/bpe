@@ -3,7 +3,7 @@ mod test_log;
 
 use shower::{def_incoming, def_mapper, new_data, start, stop, Column, U8Bytes};
 use std::thread;
-use test_aux::{fetch_f64, fill_f64};
+use test_aux::{fetch_ptr, fill_f64};
 use test_log::{init_logger, setup_shower_home};
 
 const LOOP_SIZE: usize = 20;
@@ -18,12 +18,12 @@ fn test_new_proc() {
     init_logger();
     start();
     if let Some(id) = define_records() {
-        if let Some(id) = def_mapper(FILTER_SQL, |data| {
-            log::info!("data len: [{}]", data.len());
-            for item in data.iter() {
-                let slice = item.as_slice();
-                log::info!("data: {:?}", &slice[0..16]);
-                log::info!("a:{:?}|b:{}", &slice[0..8], fetch_f64(&slice[8..16]),);
+        if let Some(id) = def_mapper(FILTER_SQL, |data, size| {
+            log::info!("fetched data: {}", size);
+            for idx in 0..size {
+                unsafe {
+                    log::info!("b:{}", fetch_ptr::<f64>(data.add(idx * 512 + 8)));
+                }
             }
         }) {
             log::warn!("def_mapper[{}] success", id);

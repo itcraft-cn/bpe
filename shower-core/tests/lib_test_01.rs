@@ -13,6 +13,6 @@ const SQL: &str = r#"
 fn test_sql_parse() {
     test_log::setup_shower_home();
     start();
-    def_mapper(SQL, |_vec| {});
+    def_mapper(SQL, |_vec, _size| {});
     stop();
 }

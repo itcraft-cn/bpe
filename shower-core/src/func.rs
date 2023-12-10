@@ -1,5 +1,5 @@
 use crate::{
-    aux::fetch,
+    aux::fetch_ptr,
     data::{ColumnType, Record},
     element::Element,
     ffi::FfiFunc,
@@ -56,14 +56,14 @@ impl Executor {
         u64ptr: u64,
         record: &Record,
         position: usize,
-        slice: &[u8],
+        sub_data_ptr: *const u8,
     ) -> Element {
         match self {
             Executor::Fetch(_, field_id) => {
-                fetch_val(slice, id, u64ptr, record, position, *field_id)
+                fetch_val(sub_data_ptr, id, u64ptr, record, position, *field_id)
             }
             Executor::Compute(f, executors) => {
-                compute_func(slice, id, u64ptr, record, position, f, executors)
+                compute_func(sub_data_ptr, id, u64ptr, record, position, f, executors)
             }
         }
     }
@@ -71,7 +71,7 @@ impl Executor {
 
 #[inline]
 pub(crate) fn fetch_val(
-    slice: &[u8],
+    sub_data_ptr: *const u8,
     _id: u16,
     u64ptr: u64,
     record: &Record,
@@ -80,13 +80,9 @@ pub(crate) fn fetch_val(
 ) -> Element {
     let column = record.column(idx);
     match column.data_type() {
-        ColumnType::Long => {
-            let offset = column.offset();
-            Element::Long(fetch(&slice[offset..offset + 8]))
-        }
+        ColumnType::Long => Element::Long(fetch_ptr(unsafe { sub_data_ptr.add(column.offset()) })),
         ColumnType::Double => {
-            let offset = column.offset();
-            Element::Double(fetch(&slice[offset..offset + 8]))
+            Element::Double(fetch_ptr(unsafe { sub_data_ptr.add(column.offset()) }))
         }
         ColumnType::Str(len) => {
             let offset = column.offset();
@@ -121,7 +117,7 @@ pub(crate) fn neq(expacted: Element, val: Element) -> bool {
 }
 
 pub(crate) fn compute_func(
-    slice: &[u8],
+    sub_data_ptr: *const u8,
     id: u16,
     u64ptr: u64,
     record: &Record,
@@ -130,17 +126,17 @@ pub(crate) fn compute_func(
     executors: &Executors,
 ) -> Element {
     match f {
-        Func::Add => add(slice, id, u64ptr, record, position, executors),
-        Func::Sub => sub(slice, id, u64ptr, record, position, executors),
-        Func::Mul => mul(slice, id, u64ptr, record, position, executors),
-        Func::Div => div(slice, id, u64ptr, record, position, executors),
-        Func::Mod => mod_(slice, id, u64ptr, record, position, executors),
+        Func::Add => add(sub_data_ptr, id, u64ptr, record, position, executors),
+        Func::Sub => sub(sub_data_ptr, id, u64ptr, record, position, executors),
+        Func::Mul => mul(sub_data_ptr, id, u64ptr, record, position, executors),
+        Func::Div => div(sub_data_ptr, id, u64ptr, record, position, executors),
+        Func::Mod => mod_(sub_data_ptr, id, u64ptr, record, position, executors),
         _ => Element::Long(0),
     }
 }
 
 fn add(
-    slice: &[u8],
+    sub_data_ptr: *const u8,
     id: u16,
     u64ptr: u64,
     record: &Record,
@@ -156,15 +152,15 @@ fn add(
     }
     let v1 = executors
         .index_of(0)
-        .fetch(id, u64ptr, record, position, slice);
+        .fetch(id, u64ptr, record, position, sub_data_ptr);
     let v2 = executors
         .index_of(1)
-        .fetch(id, u64ptr, record, position, slice);
+        .fetch(id, u64ptr, record, position, sub_data_ptr);
     v1.add(v2)
 }
 
 fn sub(
-    slice: &[u8],
+    sub_data_ptr: *const u8,
     id: u16,
     u64ptr: u64,
     record: &Record,
@@ -180,15 +176,15 @@ fn sub(
     }
     let v1 = executors
         .index_of(0)
-        .fetch(id, u64ptr, record, position, slice);
+        .fetch(id, u64ptr, record, position, sub_data_ptr);
     let v2 = executors
         .index_of(1)
-        .fetch(id, u64ptr, record, position, slice);
+        .fetch(id, u64ptr, record, position, sub_data_ptr);
     v1.sub(v2)
 }
 
 fn mul(
-    slice: &[u8],
+    sub_data_ptr: *const u8,
     id: u16,
     u64ptr: u64,
     record: &Record,
@@ -204,15 +200,15 @@ fn mul(
     }
     let v1 = executors
         .index_of(0)
-        .fetch(id, u64ptr, record, position, slice);
+        .fetch(id, u64ptr, record, position, sub_data_ptr);
     let v2 = executors
         .index_of(1)
-        .fetch(id, u64ptr, record, position, slice);
+        .fetch(id, u64ptr, record, position, sub_data_ptr);
     v1.mul(v2)
 }
 
 fn div(
-    slice: &[u8],
+    sub_data_ptr: *const u8,
     id: u16,
     u64ptr: u64,
     record: &Record,
@@ -228,15 +224,15 @@ fn div(
     }
     let v1 = executors
         .index_of(0)
-        .fetch(id, u64ptr, record, position, slice);
+        .fetch(id, u64ptr, record, position, sub_data_ptr);
     let v2 = executors
         .index_of(1)
-        .fetch(id, u64ptr, record, position, slice);
+        .fetch(id, u64ptr, record, position, sub_data_ptr);
     v1.div(v2)
 }
 
 fn mod_(
-    slice: &[u8],
+    sub_data_ptr: *const u8,
     id: u16,
     u64ptr: u64,
     record: &Record,
@@ -252,10 +248,10 @@ fn mod_(
     }
     let v1 = executors
         .index_of(0)
-        .fetch(id, u64ptr, record, position, slice);
+        .fetch(id, u64ptr, record, position, sub_data_ptr);
     let v2 = executors
         .index_of(1)
-        .fetch(id, u64ptr, record, position, slice);
+        .fetch(id, u64ptr, record, position, sub_data_ptr);
     v1.mod_(v2)
 }
 
@@ -292,8 +288,8 @@ pub(crate) enum Func {
     Avg,
 }
 
-pub(crate) type NormalFunc = Box<dyn Fn(&[[u8; 512]]) + Send + 'static>;
-pub(crate) type LambdaFunc = Box<dyn Fn(&[[u8; 512]]) + 'static>;
+pub(crate) type NormalFunc = Box<dyn Fn(*const u8, usize) + Send + 'static>;
+pub(crate) type LambdaFunc = Box<dyn Fn(*const u8, usize) + 'static>;
 
 pub(crate) enum FnHolder {
     Func(NormalFunc),

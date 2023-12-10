@@ -8,6 +8,19 @@ use std::{
 const U16_FULL_VAL: u32 = u16::MAX as u32 + 1;
 
 #[inline]
+pub(crate) fn fill_ptr<T>(u8_ptr: *mut u8, data: T) {
+    unsafe { *(u8_ptr as *mut T) = data };
+}
+
+#[inline]
+pub(crate) fn fetch_ptr<T>(u8_ptr: *const u8) -> T
+where
+    T: Copy,
+{
+    unsafe { *(u8_ptr as *const T) }
+}
+
+#[inline]
 pub(crate) fn fill<T>(slice: &mut [u8], data: T) {
     unsafe { ptr::write_unaligned(ptr::addr_of!(*slice) as *mut T, data) }
 }
@@ -122,8 +135,9 @@ impl SimpleU16Entry {
 
 #[cfg(test)]
 mod tests {
-    use super::{fetch, fill};
+    use super::{fetch, fetch_ptr, fill, fill_ptr};
     use crate::utest::base::test_init;
+    use std::alloc::{self, Layout};
 
     #[test]
     fn test() {
@@ -138,5 +152,35 @@ mod tests {
         fill(slice, f64v);
         let fetched: f64 = fetch(slice);
         log::info!("{},{}", f64v, fetched);
+    }
+
+    #[test]
+    fn test2() {
+        test_init();
+        let u8_ptr = unsafe { alloc::alloc(Layout::from_size_align_unchecked(8, 1)) };
+        let u32v: u32 = 1234;
+        fill_ptr(u8_ptr, u32v);
+        let fetched: u32 = fetch_ptr(u8_ptr);
+        log::info!("u32 {},{}", u32v, fetched);
+        let i32v: i32 = 1234;
+        fill_ptr(u8_ptr, i32v);
+        let fetched: i32 = fetch_ptr(u8_ptr);
+        log::info!("i32 {},{}", i32v, fetched);
+        let f32v: f32 = 1234.5678;
+        fill_ptr(u8_ptr, f32v);
+        let fetched: f32 = fetch_ptr(u8_ptr);
+        log::info!("f32 {},{}", f32v, fetched);
+        let u64v: u64 = 1234;
+        fill_ptr(u8_ptr, u64v);
+        let fetched: u64 = fetch_ptr(u8_ptr);
+        log::info!("u64 {},{}", u64v, fetched);
+        let i64v: i64 = 1234;
+        fill_ptr(u8_ptr, i64v);
+        let fetched: i64 = fetch_ptr(u8_ptr);
+        log::info!("i64 {},{}", i64v, fetched);
+        let f64v: f64 = 1234.5678;
+        fill_ptr(u8_ptr, f64v);
+        let fetched: f64 = fetch_ptr(u8_ptr);
+        log::info!("f64 {},{}", f64v, fetched);
     }
 }

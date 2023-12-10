@@ -52,7 +52,7 @@ fn test_shower(c: &mut Criterion) {
     core_affinity::set_for_current(core_ids[core_ids.len() - 1]);
     log::info!("thread:{} started", thread::current().name().unwrap());
     if let Some((id1, _id2)) = define_records() {
-        if let Some(mapper_id) = shower::def_mapper(FILTER_SQL, |_data| {}) {
+        if let Some(mapper_id) = shower::def_mapper(FILTER_SQL, |_data, _size| {}) {
             log::info!("define mapper: {}", mapper_id);
         } else {
             log::warn!("def_mapper failed");

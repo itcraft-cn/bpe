@@ -34,7 +34,7 @@ fn gen_new_data() {
     core_affinity::set_for_current(core_ids[core_ids.len() - 1]);
     log::info!("thread:{} started", thread::current().name().unwrap());
     if let Some((id1, _id2)) = define_records() {
-        if let Some(aggregate_id) = def_aggregate(AGGREGATE_SQL, |_data| {}) {
+        if let Some(aggregate_id) = def_aggregate(AGGREGATE_SQL, |_data, _size| {}) {
             log::info!("define aggregate: {}", aggregate_id);
             if let Some(mapper_id) = def_mapper_bind_aggregate(FILTER_SQL, aggregate_id) {
                 log::info!("define mapper: {}", mapper_id);

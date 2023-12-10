@@ -139,9 +139,9 @@ struct PythonFfiFunc {
     callback: PyObject,
 }
 impl FfiFunc for PythonFfiFunc {
-    fn callback(&self, data: &[[u8; 512]]) {
+    fn callback(&self, data_ptr: *const u8, size: usize) {
         Python::with_gil(|py| {
-            call_py_func(py, &self.callback, data);
+            //call_py_func(py, &self.callback, data);
         })
     }
 }

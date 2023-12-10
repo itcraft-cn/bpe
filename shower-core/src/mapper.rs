@@ -11,10 +11,14 @@ use crate::{
         base::{parse_options, ExprEntity, OpType, ParsedSql, ValType},
         select::parse_select,
     },
-    store::WrappedArray,
+    store::{WrappedArray, VEC_SIZE},
 };
 use sql_parse::ParseOptions;
-use std::cell::RefCell;
+use std::{
+    alloc::{self, Layout},
+    cell::RefCell,
+    ptr,
+};
 
 static mut MAPPER_MAP: Option<SimpleU16Map> = None;
 static mut PARSE_OPTIONS: Option<ParseOptions> = None;
@@ -156,12 +160,12 @@ fn invoke(
     fn_holder: &FnHolder,
 ) {
     thread_local! {
-        static DATA_REF :RefCell<Vec<[u8;512]>>= RefCell::new(vec![]);
+        static DATA_REF :RefCell<u64> = RefCell::new(unsafe {alloc::alloc(Layout::from_size_align(VEC_SIZE, 1).unwrap())} as u64);
     };
-    DATA_REF.with_borrow_mut(|vec| {
-        vec.clear();
-        loop_filter(array, mapper, id, record, vec);
-        callback(fn_holder, vec);
+    DATA_REF.with_borrow(|u8_ptr_val| {
+        let u8_ptr = *u8_ptr_val as *mut u8;
+        let size = loop_filter(array, mapper, id, record, u8_ptr);
+        callback(fn_holder, u8_ptr, size);
     })
 }
 
@@ -170,44 +174,52 @@ fn loop_filter(
     mapper: &Mapper,
     id: u16,
     record: &Record,
-    vec: &mut Vec<[u8; 512]>,
-) {
+    u8_ptr: *mut u8,
+) -> usize {
     let mut idx = 0;
     let walker = array.walker() + array.size();
     let mask = array.mask();
     let max_idx = array.records() - 1;
     let u64ptr = array.u64ptr();
+    let mut n = 0;
+    let mut offset = 0;
     loop {
         let position = (walker - U8_DATA_MAX_SIZE - idx * U8_DATA_MAX_SIZE) & mask;
-        let sub_vec = array.sub_data(position);
+        let sub_data_ptr = array.sub_data(position);
         if mapper
             .filter
-            .is_match(id, u64ptr, record, position, sub_vec)
+            .is_match(id, u64ptr, record, position, sub_data_ptr)
         {
-            vec.push(mapper.fetch(id, u64ptr, record, position, sub_vec));
-        }
-        if vec.len() == mapper.limit {
-            break;
+            let adjusted = unsafe { u8_ptr.add(offset) };
+            mapper.fetch(id, u64ptr, record, position, sub_data_ptr, adjusted);
+            n += 1;
+            offset += n * U8_DATA_MAX_SIZE;
+            if n == mapper.limit {
+                //log::info!("quit, hit limit: {}", n);
+                break;
+            }
         }
         if idx == max_idx {
+            //log::info!("quit, max idx: {}", idx);
             break;
         } else {
             idx += 1;
         }
     }
+    n
 }
 
-fn callback(fn_holder: &FnHolder, vec: &mut [[u8; 512]]) {
+fn callback(fn_holder: &FnHolder, u8_ptr: *mut u8, size: usize) {
     match fn_holder {
-        FnHolder::Func(f) => f(vec),
-        FnHolder::FfiFunc(ffi) => ffi.callback(vec),
-        FnHolder::Lambda(f) => f(vec),
+        FnHolder::Func(f) => f(u8_ptr, size),
+        FnHolder::FfiFunc(ffi) => ffi.callback(u8_ptr, size),
+        FnHolder::Lambda(f) => f(u8_ptr, size),
     }
 }
 
 #[inline]
 fn op_or(
-    slice: &[u8],
+    sub_data_ptr: *const u8,
     id: u16,
     u64ptr: u64,
     record: &Record,
@@ -215,11 +227,11 @@ fn op_or(
     v1: &Filter,
     v2: &Filter,
 ) -> bool {
-    op_logical(slice, id, u64ptr, record, position, v1, v2, or)
+    op_logical(sub_data_ptr, id, u64ptr, record, position, v1, v2, or)
 }
 #[inline]
 fn op_and(
-    slice: &[u8],
+    sub_data_ptr: *const u8,
     id: u16,
     u64ptr: u64,
     record: &Record,
@@ -227,11 +239,11 @@ fn op_and(
     v1: &Filter,
     v2: &Filter,
 ) -> bool {
-    op_logical(slice, id, u64ptr, record, position, v1, v2, and)
+    op_logical(sub_data_ptr, id, u64ptr, record, position, v1, v2, and)
 }
 #[inline]
 fn op_logical<F>(
-    slice: &[u8],
+    sub_data_ptr: *const u8,
     id: u16,
     u64ptr: u64,
     record: &Record,
@@ -241,17 +253,19 @@ fn op_logical<F>(
     f: F,
 ) -> bool
 where
-    F: Fn(&[u8], u16, u64, &Record, usize, &Filter, &Filter) -> bool,
+    F: Fn(*const u8, u16, u64, &Record, usize, &Filter, &Filter) -> bool,
 {
     match (v1, v2) {
-        (Filter::Mixed(_), Filter::Mixed(_)) => f(slice, id, u64ptr, record, position, v1, v2),
+        (Filter::Mixed(_), Filter::Mixed(_)) => {
+            f(sub_data_ptr, id, u64ptr, record, position, v1, v2)
+        }
         _ => false,
     }
 }
 
 #[inline]
 fn or(
-    slice: &[u8],
+    sub_data_ptr: *const u8,
     id: u16,
     u64ptr: u64,
     record: &Record,
@@ -259,13 +273,13 @@ fn or(
     v1: &Filter,
     v2: &Filter,
 ) -> bool {
-    v1.is_match(id, u64ptr, record, position, slice)
-        || v2.is_match(id, u64ptr, record, position, slice)
+    v1.is_match(id, u64ptr, record, position, sub_data_ptr)
+        || v2.is_match(id, u64ptr, record, position, sub_data_ptr)
 }
 
 #[inline]
 fn and(
-    slice: &[u8],
+    sub_data_ptr: *const u8,
     id: u16,
     u64ptr: u64,
     record: &Record,
@@ -273,13 +287,13 @@ fn and(
     v1: &Filter,
     v2: &Filter,
 ) -> bool {
-    v1.is_match(id, u64ptr, record, position, slice)
-        && v2.is_match(id, u64ptr, record, position, slice)
+    v1.is_match(id, u64ptr, record, position, sub_data_ptr)
+        && v2.is_match(id, u64ptr, record, position, sub_data_ptr)
 }
 
 #[inline]
 fn op_eq(
-    slice: &[u8],
+    sub_data_ptr: *const u8,
     id: u16,
     u64ptr: u64,
     record: &Record,
@@ -287,11 +301,11 @@ fn op_eq(
     v1: &Filter,
     v2: &Filter,
 ) -> bool {
-    compare_slice_val(slice, id, u64ptr, record, position, v1, v2, eq)
+    compare_slice_val(sub_data_ptr, id, u64ptr, record, position, v1, v2, eq)
 }
 #[inline]
 fn op_gt_eq(
-    slice: &[u8],
+    sub_data_ptr: *const u8,
     id: u16,
     u64ptr: u64,
     record: &Record,
@@ -299,11 +313,11 @@ fn op_gt_eq(
     v1: &Filter,
     v2: &Filter,
 ) -> bool {
-    compare_slice_val(slice, id, u64ptr, record, position, v1, v2, gt_eq)
+    compare_slice_val(sub_data_ptr, id, u64ptr, record, position, v1, v2, gt_eq)
 }
 #[inline]
 fn op_gt(
-    slice: &[u8],
+    sub_data_ptr: *const u8,
     id: u16,
     u64ptr: u64,
     record: &Record,
@@ -311,11 +325,11 @@ fn op_gt(
     v1: &Filter,
     v2: &Filter,
 ) -> bool {
-    compare_slice_val(slice, id, u64ptr, record, position, v1, v2, gt)
+    compare_slice_val(sub_data_ptr, id, u64ptr, record, position, v1, v2, gt)
 }
 #[inline]
 fn op_lt_eq(
-    slice: &[u8],
+    sub_data_ptr: *const u8,
     id: u16,
     u64ptr: u64,
     record: &Record,
@@ -323,11 +337,11 @@ fn op_lt_eq(
     v1: &Filter,
     v2: &Filter,
 ) -> bool {
-    compare_slice_val(slice, id, u64ptr, record, position, v1, v2, lt_eq)
+    compare_slice_val(sub_data_ptr, id, u64ptr, record, position, v1, v2, lt_eq)
 }
 #[inline]
 fn op_lt(
-    slice: &[u8],
+    sub_data_ptr: *const u8,
     id: u16,
     u64ptr: u64,
     record: &Record,
@@ -335,11 +349,11 @@ fn op_lt(
     v1: &Filter,
     v2: &Filter,
 ) -> bool {
-    compare_slice_val(slice, id, u64ptr, record, position, v1, v2, lt)
+    compare_slice_val(sub_data_ptr, id, u64ptr, record, position, v1, v2, lt)
 }
 #[inline]
 fn op_neq(
-    slice: &[u8],
+    sub_data_ptr: *const u8,
     id: u16,
     u64ptr: u64,
     record: &Record,
@@ -347,12 +361,12 @@ fn op_neq(
     v1: &Filter,
     v2: &Filter,
 ) -> bool {
-    compare_slice_val(slice, id, u64ptr, record, position, v1, v2, neq)
+    compare_slice_val(sub_data_ptr, id, u64ptr, record, position, v1, v2, neq)
 }
 
 #[inline]
 fn compare_slice_val<F>(
-    slice: &[u8],
+    sub_data_ptr: *const u8,
     id: u16,
     u64ptr: u64,
     record: &Record,
@@ -367,17 +381,31 @@ where
     match (v1, v2) {
         (Filter::Original(expr1), Filter::Original(expr2)) => match (expr1, expr2) {
             (ExprEntity::Field(idx), ExprEntity::Val(v_type)) => {
-                compare_with_op(slice, id, u64ptr, record, position, *idx, v_type, f)
+                compare_with_op(sub_data_ptr, id, u64ptr, record, position, *idx, v_type, f)
             }
-            (ExprEntity::FieldWithTab(_, field_idx), ExprEntity::Val(v_type)) => {
-                compare_with_op(slice, id, u64ptr, record, position, *field_idx, v_type, f)
-            }
+            (ExprEntity::FieldWithTab(_, field_idx), ExprEntity::Val(v_type)) => compare_with_op(
+                sub_data_ptr,
+                id,
+                u64ptr,
+                record,
+                position,
+                *field_idx,
+                v_type,
+                f,
+            ),
             (ExprEntity::Val(v_type), ExprEntity::Field(idx)) => {
-                compare_with_op(slice, id, u64ptr, record, position, *idx, v_type, f)
+                compare_with_op(sub_data_ptr, id, u64ptr, record, position, *idx, v_type, f)
             }
-            (ExprEntity::Val(v_type), ExprEntity::FieldWithTab(_, field_idx)) => {
-                compare_with_op(slice, id, u64ptr, record, position, *field_idx, v_type, f)
-            }
+            (ExprEntity::Val(v_type), ExprEntity::FieldWithTab(_, field_idx)) => compare_with_op(
+                sub_data_ptr,
+                id,
+                u64ptr,
+                record,
+                position,
+                *field_idx,
+                v_type,
+                f,
+            ),
             _ => false,
         },
         _ => false,
@@ -386,7 +414,7 @@ where
 
 #[inline]
 fn compare_with_op<F>(
-    slice: &[u8],
+    sub_data_ptr: *const u8,
     id: u16,
     u64ptr: u64,
     record: &Record,
@@ -400,7 +428,7 @@ where
 {
     let opt_expacted = fetch_expacted(v_type);
     if let Some(expacted) = opt_expacted {
-        let val = fetch_val(slice, id, u64ptr, record, position, idx);
+        let val = fetch_val(sub_data_ptr, id, u64ptr, record, position, idx);
         compare_val(expacted, val, f)
     } else {
         false
@@ -427,6 +455,7 @@ fn compare_val<F>(expacted: Element, val: Element, f: F) -> bool
 where
     F: Fn(Element, Element) -> bool,
 {
+    //log::info!("comparing {:?} and {:?}", &expacted, &val);
     f(expacted, val)
 }
 
@@ -448,22 +477,20 @@ impl Mapper {
         u64ptr: u64,
         record: &Record,
         position: usize,
-        slice: &[u8],
-    ) -> [u8; 512] {
-        let mut result = [0_u8; 512];
-        let target = result.as_mut_slice();
+        sub_data_ptr: *const u8,
+        target: *const u8,
+    ) {
         let mut val;
         let mut offset = 0_usize;
         let executors = &self.executors;
         let len = executors.executor_size();
         for i in 0..len {
             let executor = executors.index_of(i);
-            val = executor.fetch(id, u64ptr, record, position, slice);
+            val = executor.fetch(id, u64ptr, record, position, sub_data_ptr);
             let val_len = val.len();
-            val.copy_to_target(&mut target[offset..offset + val_len]);
+            val.copy_to_target(target as *mut u8, offset);
             offset += val_len;
         }
-        result
     }
 }
 
@@ -490,13 +517,13 @@ impl Filter {
         u64ptr: u64,
         record: &Record,
         position: usize,
-        slice: &[u8],
+        sub_data_ptr: *const u8,
     ) -> bool {
         match self {
             Filter::Empty => true,
             Filter::Original(_) => false,
             Filter::Mixed(filters) => {
-                self.filter_slice(id, u64ptr, record, position, filters, slice)
+                self.filter_slice(id, u64ptr, record, position, filters, sub_data_ptr)
             }
         }
     }
@@ -508,7 +535,7 @@ impl Filter {
         record: &Record,
         position: usize,
         filters: &[Filter],
-        slice: &[u8],
+        sub_data_ptr: *const u8,
     ) -> bool {
         let v1 = &filters[0];
         let v2 = &filters[1];
@@ -516,7 +543,7 @@ impl Filter {
         match op {
             Filter::Empty => true,
             Filter::Original(expr) => {
-                self.filter_slice_by_expr(id, u64ptr, record, position, expr, v1, v2, slice)
+                self.filter_slice_by_expr(id, u64ptr, record, position, expr, v1, v2, sub_data_ptr)
             }
             Filter::Mixed(_) => false,
         }
@@ -531,18 +558,18 @@ impl Filter {
         expr: &ExprEntity,
         v1: &Filter,
         v2: &Filter,
-        slice: &[u8],
+        sub_data_ptr: *const u8,
     ) -> bool {
         match expr {
             ExprEntity::Op(op_type) => match op_type {
-                OpType::Or => op_or(slice, id, u64ptr, record, position, v1, v2),
-                OpType::And => op_and(slice, id, u64ptr, record, position, v1, v2),
-                OpType::Eq => op_eq(slice, id, u64ptr, record, position, v1, v2),
-                OpType::GtEq => op_gt_eq(slice, id, u64ptr, record, position, v1, v2),
-                OpType::Gt => op_gt(slice, id, u64ptr, record, position, v1, v2),
-                OpType::LtEq => op_lt_eq(slice, id, u64ptr, record, position, v1, v2),
-                OpType::Lt => op_lt(slice, id, u64ptr, record, position, v1, v2),
-                OpType::Neq => op_neq(slice, id, u64ptr, record, position, v1, v2),
+                OpType::Or => op_or(sub_data_ptr, id, u64ptr, record, position, v1, v2),
+                OpType::And => op_and(sub_data_ptr, id, u64ptr, record, position, v1, v2),
+                OpType::Eq => op_eq(sub_data_ptr, id, u64ptr, record, position, v1, v2),
+                OpType::GtEq => op_gt_eq(sub_data_ptr, id, u64ptr, record, position, v1, v2),
+                OpType::Gt => op_gt(sub_data_ptr, id, u64ptr, record, position, v1, v2),
+                OpType::LtEq => op_lt_eq(sub_data_ptr, id, u64ptr, record, position, v1, v2),
+                OpType::Lt => op_lt(sub_data_ptr, id, u64ptr, record, position, v1, v2),
+                OpType::Neq => op_neq(sub_data_ptr, id, u64ptr, record, position, v1, v2),
             },
             _ => false,
         }
