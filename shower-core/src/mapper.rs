@@ -17,7 +17,6 @@ use sql_parse::ParseOptions;
 use std::{
     alloc::{self, Layout},
     cell::RefCell,
-    ptr,
 };
 
 static mut MAPPER_MAP: Option<SimpleU16Map> = None;
