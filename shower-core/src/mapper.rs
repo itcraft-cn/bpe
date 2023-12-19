@@ -459,12 +459,17 @@ impl Mapper {
         let mut offset = 0_usize;
         let executors = &self.executors;
         let len = executors.executor_size();
-        for i in 0..len {
+        let mut i = 0;
+        loop {
             let executor = executors.index_of(i);
             val = executor.fetch(id, u64ptr, record, position, slice);
             let val_len = val.len();
             val.copy_to_target(&mut target[offset..offset + val_len]);
             offset += val_len;
+            i += 1;
+            if i >= len {
+                break;
+            }
         }
         result
     }

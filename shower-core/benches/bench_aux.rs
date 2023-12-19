@@ -58,8 +58,13 @@ pub(crate) struct SimpleU16Map<T> {
 impl<T> SimpleU16Map<T> {
     pub(crate) fn new() -> Self {
         let mut vec = vec![];
-        for _ in 0..U16_FULL_VAL {
+        let mut i = 0;
+        loop {
             vec.push(None);
+            i += 1;
+            if i >= U16_FULL_VAL {
+                break;
+            }
         }
         SimpleU16Map { vec }
     }
