@@ -340,7 +340,7 @@ fn fetch_field_id(record_id: u16, id_part: &IdentifierPart<'_>) -> Result<u16, S
     match id_part {
         IdentifierPart::Name(id) => {
             let name = id.as_str();
-            if let Some(id) = Record::fetch_field_id(record_id, name) {
+            if let Some(id) = Record::fetch_column_id(record_id, name) {
                 Ok(*id)
             } else {
                 Err(format!("field [{}] is not found", name))

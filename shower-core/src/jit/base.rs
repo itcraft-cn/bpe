@@ -98,22 +98,22 @@ pub(crate) fn init_func_generator() {
 }
 
 unsafe extern "C" fn fetch_column_u64(data_ptr: u64, record_id: u16, column_id: u16) -> u64 {
-    if let Some(record) = Record::_get_column(record_id, column_id) {
-        return fetch_ptr(unsafe { (data_ptr as *const u8).add(record.offset()) });
+    if let Some(column) = Record::get_column(record_id, column_id) {
+        return fetch_ptr(unsafe { (data_ptr as *const u8).add(column.offset()) });
     }
     0
 }
 
 unsafe extern "C" fn fetch_column_i64(data_ptr: u64, record_id: u16, column_id: u16) -> i64 {
-    if let Some(record) = Record::_get_column(record_id, column_id) {
-        return fetch_ptr(unsafe { (data_ptr as *const u8).add(record.offset()) });
+    if let Some(column) = Record::get_column(record_id, column_id) {
+        return fetch_ptr(unsafe { (data_ptr as *const u8).add(column.offset()) });
     }
     0
 }
 
 unsafe extern "C" fn fetch_column_f64(data_ptr: u64, record_id: u16, column_id: u16) -> f64 {
-    if let Some(record) = Record::_get_column(record_id, column_id) {
-        return fetch_ptr(unsafe { (data_ptr as *const u8).add(record.offset()) });
+    if let Some(column) = Record::get_column(record_id, column_id) {
+        return fetch_ptr(unsafe { (data_ptr as *const u8).add(column.offset()) });
     }
     0_f64
 }

@@ -220,14 +220,14 @@ impl Record {
             name_map.get(&String::from(name))
         }
     }
-    pub(crate) fn fetch_field_id(record_id: u16, column_name: &str) -> Option<&u16> {
+    pub(crate) fn fetch_column_id(record_id: u16, column_name: &str) -> Option<&u16> {
         if let Some(record) = Record::get_record(record_id) {
             record.column_id(column_name)
         } else {
             None
         }
     }
-    pub(crate) fn _get_column(record_id: u16, column_id: u16) -> Option<&'static Column> {
+    pub(crate) fn get_column(record_id: u16, column_id: u16) -> Option<&'static Column> {
         if let Some(record) = Record::get_record(record_id) {
             Some(record.column(column_id))
         } else {
