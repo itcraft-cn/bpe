@@ -1,4 +1,3 @@
-use crate::jit::FuncGenerator;
 use inkwell::execution_engine::JitFunction;
 use sql_parse::{parse_statement, ParseOptions, SQLArguments, SQLDialect, Statement};
 
@@ -53,7 +52,6 @@ pub(crate) fn parse_sql_statement<'a>(
 
 #[derive(Debug, Clone)]
 pub(crate) enum ExprEntity {
-    Op(OpType),
     Val(ValType),
     Field(u16),
     FieldWithTab(u16, u16),
@@ -65,17 +63,6 @@ pub(crate) enum ValType {
     Str(String),
     Int(i64),
     Float(f64),
-}
-#[derive(Debug, Clone)]
-pub(crate) enum OpType {
-    Or,
-    And,
-    Eq,
-    GtEq,
-    Gt,
-    LtEq,
-    Lt,
-    Neq,
 }
 
 #[derive(Debug)]

@@ -11,7 +11,7 @@ use sql_parse::{
 };
 use std::ops::Range;
 
-pub(crate) fn parse_select<'a>(sql: &'a str, options: &ParseOptions) -> Option<ParsedSql> {
+pub(crate) fn parse_select(sql: &str, options: &ParseOptions) -> Option<ParsedSql> {
     parse_sql(sql, options, |ast| match ast {
         Statement::Select(stat) => parse_select_statement(stat),
         _ => None,
@@ -47,12 +47,7 @@ fn parse_select_statement(select_stat: Select<'_>) -> Option<ParsedSql> {
         // 辨识字段
         let fields = parse_select_fields(&select_stat.select_exprs, record_id, &mut issues);
         if issues.is_empty() {
-            Some(ParsedSql::new(
-                records,
-                filter,
-                limit_range,
-                fields,
-            ))
+            Some(ParsedSql::new(records, filter, limit_range, fields))
         } else {
             for issue in issues {
                 log::warn!("hit issue: [{}]", issue);

@@ -34,9 +34,9 @@ impl<'ctx> FuncGenerator<'ctx> {
                 builder: context.create_builder(),
                 execution_engine,
             };
-            let _ = func_generator.reg_func_u64("fetch_u64", fetch_column_u64);
-            let _ = func_generator.reg_func_i64("fetch_i64", fetch_column_i64);
-            let _ = func_generator.reg_func_f64("fetch_f64", fetch_column_f64);
+            func_generator.reg_func_u64("fetch_u64", fetch_column_u64);
+            func_generator.reg_func_i64("fetch_i64", fetch_column_i64);
+            func_generator.reg_func_f64("fetch_f64", fetch_column_f64);
             func_generator
         } else {
             panic!("{:?}", rs_engine.err().unwrap());

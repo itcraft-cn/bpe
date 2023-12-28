@@ -91,31 +91,6 @@ pub(crate) fn fetch_val(
     }
 }
 
-#[inline]
-pub(crate) fn eq(expacted: Element, val: Element) -> bool {
-    val.eq(expacted)
-}
-#[inline]
-pub(crate) fn gt_eq(expacted: Element, val: Element) -> bool {
-    val.gt_eq(expacted)
-}
-#[inline]
-pub(crate) fn gt(expacted: Element, val: Element) -> bool {
-    val.gt(expacted)
-}
-#[inline]
-pub(crate) fn lt_eq(expacted: Element, val: Element) -> bool {
-    val.lt_eq(expacted)
-}
-#[inline]
-pub(crate) fn lt(expacted: Element, val: Element) -> bool {
-    val.lt(expacted)
-}
-#[inline]
-pub(crate) fn neq(expacted: Element, val: Element) -> bool {
-    val.neq(expacted)
-}
-
 pub(crate) fn compute_func(
     sub_data_ptr: *const u8,
     id: u16,

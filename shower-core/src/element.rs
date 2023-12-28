@@ -1,8 +1,6 @@
 use crate::aux::fill_ptr;
 use std::ptr;
 
-const TINY_SMALL_F64: f64 = 0.00000001;
-
 #[derive(Debug, Clone)]
 pub(crate) enum Element {
     Long(i64),
@@ -75,52 +73,6 @@ impl Element {
         match (self, other) {
             (Element::Long(v1), Element::Long(v2)) => Element::Long(v1 % v2),
             _ => Element::Long(0),
-        }
-    }
-    pub(crate) fn eq(self, expacted: Element) -> bool {
-        match (self, expacted) {
-            (Element::Long(v1), Element::Long(v2)) => v1 == v2,
-            (Element::Double(v1), Element::Double(v2)) => f64::abs(v1 - v2) < TINY_SMALL_F64,
-            _ => false,
-        }
-    }
-    pub(crate) fn gt_eq(self, expacted: Element) -> bool {
-        match (self, expacted) {
-            (Element::Long(v1), Element::Long(v2)) => v1 >= v2,
-            (Element::Double(v1), Element::Double(v2)) => {
-                v1 > v2 || f64::abs(v1 - v2) < TINY_SMALL_F64
-            }
-            _ => false,
-        }
-    }
-    pub(crate) fn gt(self, expacted: Element) -> bool {
-        match (self, expacted) {
-            (Element::Long(v1), Element::Long(v2)) => v1 > v2,
-            (Element::Double(v1), Element::Double(v2)) => v1 > v2,
-            _ => false,
-        }
-    }
-    pub(crate) fn lt_eq(self, expacted: Element) -> bool {
-        match (self, expacted) {
-            (Element::Long(v1), Element::Long(v2)) => v1 <= v2,
-            (Element::Double(v1), Element::Double(v2)) => {
-                v1 < v2 || f64::abs(v1 - v2) < TINY_SMALL_F64
-            }
-            _ => false,
-        }
-    }
-    pub(crate) fn lt(self, expacted: Element) -> bool {
-        match (self, expacted) {
-            (Element::Long(v1), Element::Long(v2)) => v1 < v2,
-            (Element::Double(v1), Element::Double(v2)) => v1 > v2,
-            _ => false,
-        }
-    }
-    pub(crate) fn neq(self, expacted: Element) -> bool {
-        match (self, expacted) {
-            (Element::Long(v1), Element::Long(v2)) => v1 != v2,
-            (Element::Double(v1), Element::Double(v2)) => f64::abs(v1 - v2) > TINY_SMALL_F64,
-            _ => true,
         }
     }
 }
