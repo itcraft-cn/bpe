@@ -1,15 +1,17 @@
 use crate::{
     consts::DEFALUT_SELECT_SIZE,
-    data::Record,
-    sql::base::{parse_sql, ExprEntity, OpType, ParsedSql, ValType},
+    data::{ColumnType, Record},
+    jit::FuncGenerator,
+    sql::base::{parse_sql, ExprEntity, FilterFunc, ParsedSql, ValType},
 };
+use inkwell::{execution_engine::JitFunction, values::IntValue, IntPredicate};
 use sql_parse::{
     self, BinaryOperator, Expression, IdentifierPart, ParseOptions, Select, SelectExpr, Statement,
     TableReference,
 };
 use std::ops::Range;
 
-pub(crate) fn parse_select(sql: &str, options: &ParseOptions) -> Option<ParsedSql> {
+pub(crate) fn parse_select<'a>(sql: &'a str, options: &ParseOptions) -> Option<ParsedSql> {
     parse_sql(sql, options, |ast| match ast {
         Statement::Select(stat) => parse_select_statement(stat),
         _ => None,
@@ -20,20 +22,37 @@ fn parse_select_statement(select_stat: Select<'_>) -> Option<ParsedSql> {
     let mut issues = Vec::new();
     check_forbidden_statement(&select_stat, &mut issues);
     if issues.is_empty() {
+        let boxed = Box::new(FuncGenerator::new());
+        let func_generator = Box::leak(boxed);
         // 识别表名
         let records = parse_select_target(&select_stat.table_references, &mut issues);
-        if check_record_invalid(&records) {
+        let record = fetch_record(&records)?;
+        let record_id = record.id();
+        // 辨识过滤条件 jit
+        let filter;
+        let rs_filters_func =
+            parse_select_filter(func_generator, &select_stat.where_, record, &mut issues);
+        if let Ok(filters_func) = rs_filters_func {
+            log::info!("the filter func: {:#?}", filters_func);
+            filter = filters_func;
+        } else {
+            log::warn!("{}", rs_filters_func.err().unwrap());
+            for issue in &issues {
+                log::warn!("issue: {:#?}", issue);
+            }
             return None;
         }
-        let record = records[0];
-        // 辨识过滤条件
-        let filters = parse_select_condition(&select_stat.where_, record, &mut issues);
         // 限制数据范围
         let limit_range = parse_select_limitor(&select_stat.limit, &mut issues);
         // 辨识字段
-        let fields = parse_select_fields(&select_stat.select_exprs, record, &mut issues);
+        let fields = parse_select_fields(&select_stat.select_exprs, record_id, &mut issues);
         if issues.is_empty() {
-            Some(ParsedSql::new(records, filters, limit_range, fields))
+            Some(ParsedSql::new(
+                records,
+                filter,
+                limit_range,
+                fields,
+            ))
         } else {
             for issue in issues {
                 log::warn!("hit issue: [{}]", issue);
@@ -45,18 +64,19 @@ fn parse_select_statement(select_stat: Select<'_>) -> Option<ParsedSql> {
     }
 }
 
-fn check_record_invalid(records: &Vec<u16>) -> bool {
+fn fetch_record(records: &Vec<u16>) -> Option<&Record> {
     if records.is_empty() {
         log::warn!("no records found in sql query");
-        true
+        None
     } else if records.len() != 1 {
         log::warn!("not support multi record select, skipping");
         for record in records {
             log::warn!("record id in sql:{}", record);
         }
-        true
+        None
     } else {
-        false
+        let id = records.first().unwrap();
+        Record::get_record(*id)
     }
 }
 
@@ -129,21 +149,342 @@ fn parse_tab_ref(tab: &TableReference<'_>, tab_ref_vec: &mut Vec<u16>) -> Option
     None
 }
 
-fn parse_select_condition(
+fn parse_select_filter<'ctx>(
+    func_generator: &'ctx mut FuncGenerator<'ctx>,
     where_: &Option<(Expression<'_>, Range<usize>)>,
-    record_id: u16,
+    record: &Record,
     issues: &mut Vec<String>,
-) -> Vec<ExprEntity> {
+) -> Result<JitFunction<'ctx, FilterFunc>, String> {
+    let i64_type = func_generator.context.i64_type();
+    let bool_type = func_generator.context.bool_type();
+    let fn_type = bool_type.fn_type(&[i64_type.into()], false);
+    let func_name = &format!("{}_{}", "record_filter", record.id());
+    log::info!("try to genterator func, named: {}", func_name);
+    let func = func_generator.module.add_function(func_name, fn_type, None);
+    let block = func_generator.context.append_basic_block(func, "entry");
+    func_generator.builder.position_at_end(block);
+    let ret;
     if let Some(where_part) = where_ {
-        let mut expr_entity_vec = vec![];
-        if let Some(issue) = parse_condition(&where_part.0, record_id, &mut expr_entity_vec) {
-            issues.push(issue);
-            vec![]
+        let param_u64ptr = func.get_nth_param(0).unwrap().into_int_value();
+        let opt_val = gen_filter_func(
+            func_generator,
+            &param_u64ptr,
+            &where_part.0,
+            record,
+            issues,
+            0,
+        );
+        if let Some(val) = opt_val {
+            ret = val;
         } else {
-            expr_entity_vec
+            return Err("failed to gen filter function".to_string());
         }
     } else {
-        vec![]
+        ret = bool_type.const_zero();
+    }
+    func_generator.builder.build_return(Some(&ret));
+    let opt_filter_func = func_generator.compile::<FilterFunc>(func_name);
+    if let Some(filter_func) = opt_filter_func {
+        log::info!("filter func: {:#?}", filter_func);
+        Ok(filter_func)
+    } else {
+        Err("failed to compile filter function".to_string())
+    }
+}
+
+fn gen_filter_func<'ctx>(
+    func_generator: &mut FuncGenerator<'ctx>,
+    param_u64ptr: &IntValue<'ctx>,
+    expr: &Expression<'_>,
+    record: &Record,
+    issues: &mut Vec<String>,
+    walker: usize,
+) -> Option<IntValue<'ctx>> {
+    match expr {
+        Expression::Binary {
+            op,
+            op_span: _,
+            lhs,
+            rhs,
+        } => match op {
+            BinaryOperator::Or => {
+                let lhs_val = gen_filter_func(
+                    func_generator,
+                    param_u64ptr,
+                    lhs,
+                    record,
+                    issues,
+                    walker + 1,
+                )?;
+                let rhs_val = gen_filter_func(
+                    func_generator,
+                    param_u64ptr,
+                    rhs,
+                    record,
+                    issues,
+                    walker + 2,
+                )?;
+                let val = func_generator.builder.build_or(
+                    lhs_val,
+                    rhs_val,
+                    &format!("val_{}_or", walker),
+                );
+                Some(val)
+            }
+            BinaryOperator::And => {
+                let lhs_val = gen_filter_func(
+                    func_generator,
+                    param_u64ptr,
+                    lhs,
+                    record,
+                    issues,
+                    walker + 1,
+                )?;
+                let rhs_val = gen_filter_func(
+                    func_generator,
+                    param_u64ptr,
+                    rhs,
+                    record,
+                    issues,
+                    walker + 2,
+                )?;
+                let val = func_generator.builder.build_and(
+                    lhs_val,
+                    rhs_val,
+                    &format!("val_{}_and", walker),
+                );
+                Some(val)
+            }
+            BinaryOperator::Eq => {
+                let lhs_val = gen_filter_func(
+                    func_generator,
+                    param_u64ptr,
+                    lhs,
+                    record,
+                    issues,
+                    walker + 1,
+                )?;
+                let rhs_val = gen_filter_func(
+                    func_generator,
+                    param_u64ptr,
+                    rhs,
+                    record,
+                    issues,
+                    walker + 2,
+                )?;
+                let val = func_generator.builder.build_int_compare(
+                    IntPredicate::EQ,
+                    lhs_val,
+                    rhs_val,
+                    &format!("val_{}_eq", walker),
+                );
+                Some(val)
+            }
+            BinaryOperator::GtEq => {
+                let lhs_val = gen_filter_func(
+                    func_generator,
+                    param_u64ptr,
+                    lhs,
+                    record,
+                    issues,
+                    walker + 1,
+                )?;
+                let rhs_val = gen_filter_func(
+                    func_generator,
+                    param_u64ptr,
+                    rhs,
+                    record,
+                    issues,
+                    walker + 2,
+                )?;
+                let val = func_generator.builder.build_int_compare(
+                    IntPredicate::SGE,
+                    lhs_val,
+                    rhs_val,
+                    &format!("val_{}_gteq", walker),
+                );
+                Some(val)
+            }
+            BinaryOperator::Gt => {
+                let lhs_val = gen_filter_func(
+                    func_generator,
+                    param_u64ptr,
+                    lhs,
+                    record,
+                    issues,
+                    walker + 1,
+                )?;
+                let rhs_val = gen_filter_func(
+                    func_generator,
+                    param_u64ptr,
+                    rhs,
+                    record,
+                    issues,
+                    walker + 2,
+                )?;
+                let val = func_generator.builder.build_int_compare(
+                    IntPredicate::SGT,
+                    lhs_val,
+                    rhs_val,
+                    &format!("val_{}_gt", walker),
+                );
+                Some(val)
+            }
+            BinaryOperator::LtEq => {
+                let lhs_val = gen_filter_func(
+                    func_generator,
+                    param_u64ptr,
+                    lhs,
+                    record,
+                    issues,
+                    walker + 1,
+                )?;
+                let rhs_val = gen_filter_func(
+                    func_generator,
+                    param_u64ptr,
+                    rhs,
+                    record,
+                    issues,
+                    walker + 2,
+                )?;
+                let val = func_generator.builder.build_int_compare(
+                    IntPredicate::SLE,
+                    lhs_val,
+                    rhs_val,
+                    &format!("val_{}_lteq", walker),
+                );
+                Some(val)
+            }
+            BinaryOperator::Lt => {
+                let lhs_val = gen_filter_func(
+                    func_generator,
+                    param_u64ptr,
+                    lhs,
+                    record,
+                    issues,
+                    walker + 1,
+                )?;
+                let rhs_val = gen_filter_func(
+                    func_generator,
+                    param_u64ptr,
+                    rhs,
+                    record,
+                    issues,
+                    walker + 2,
+                )?;
+                let val = func_generator.builder.build_int_compare(
+                    IntPredicate::SLT,
+                    lhs_val,
+                    rhs_val,
+                    &format!("val_{}_lt", walker),
+                );
+                Some(val)
+            }
+            BinaryOperator::Neq => {
+                let lhs_val = gen_filter_func(
+                    func_generator,
+                    param_u64ptr,
+                    lhs,
+                    record,
+                    issues,
+                    walker + 1,
+                )?;
+                let rhs_val = gen_filter_func(
+                    func_generator,
+                    param_u64ptr,
+                    rhs,
+                    record,
+                    issues,
+                    walker + 2,
+                )?;
+                let val = func_generator.builder.build_int_compare(
+                    IntPredicate::NE,
+                    lhs_val,
+                    rhs_val,
+                    &format!("val_{}_neq", walker),
+                );
+                Some(val)
+            }
+            _ => {
+                issues.push(format!("unsupported expr condition: {:?}", expr));
+                None
+            }
+        },
+        Expression::Identifier(id_vec) => {
+            let len = id_vec.len();
+            if len == 1 {
+                let idp = id_vec.first().unwrap();
+                gen_call_fetch_column(func_generator, param_u64ptr, idp, record, issues)
+            } else if len == 2 {
+                let idp = id_vec.get(1).unwrap();
+                gen_call_fetch_column(func_generator, param_u64ptr, idp, record, issues)
+            } else {
+                issues.push(format!("unsupported id: {:?}", id_vec));
+                None
+            }
+        }
+        Expression::Integer(group) => {
+            let i64_type = func_generator.context.i64_type();
+            Some(i64_type.const_int(group.0, true))
+        }
+        Expression::Float(group) => {
+            let i64_type = func_generator.context.i64_type();
+            // TODO: support float
+            Some(i64_type.const_int(group.0 as u64, true))
+        }
+        Expression::String(_str) => {
+            issues.push(format!("unsupported String: {:?}", _str));
+            None
+        }
+        _ => {
+            issues.push(format!("unsupported expr condition: {:?}", expr));
+            None
+        }
+    }
+}
+
+fn gen_call_fetch_column<'ctx>(
+    func_generator: &mut FuncGenerator<'ctx>,
+    param_u64ptr: &IntValue<'ctx>,
+    idp: &IdentifierPart<'_>,
+    record: &Record,
+    issues: &mut Vec<String>,
+) -> Option<IntValue<'ctx>> {
+    match idp {
+        IdentifierPart::Name(id) => {
+            let name = id.as_str();
+            let column_id = *record.column_id(name)?;
+            let column = record.column(column_id);
+            let i16_type = func_generator.context.i16_type();
+            let param_record_id = i16_type.const_int(record.id() as u64, false);
+            let param_column_id = i16_type.const_int(column_id as u64, false);
+            let fetch_val_func = match column.data_type() {
+                ColumnType::Long => func_generator.module.get_function("fetch_i64"),
+                // TODO: support float
+                ColumnType::Double => func_generator.module.get_function("fetch_i64"),
+                ColumnType::Str(_) => todo!(),
+            }
+            .unwrap();
+            let call_site_value = func_generator.builder.build_call(
+                fetch_val_func,
+                &[
+                    (*param_u64ptr).into(),
+                    param_record_id.into(),
+                    param_column_id.into(),
+                ],
+                "ret",
+            );
+            let ret = call_site_value
+                .try_as_basic_value()
+                .left()
+                .unwrap()
+                .into_int_value();
+            Some(ret)
+        }
+        _ => {
+            issues.push(format!("unsupported id: {:?}", idp));
+            None
+        }
     }
 }
 
@@ -186,85 +527,6 @@ fn parse_select_fields(
         }
     }
     expr_vec
-}
-
-fn parse_condition(
-    expr: &Expression<'_>,
-    record_id: u16,
-    expr_entity_vec: &mut Vec<ExprEntity>,
-) -> Option<String> {
-    match expr {
-        Expression::Binary {
-            op,
-            op_span: _,
-            lhs,
-            rhs,
-        } => {
-            if let Some(op_type) = conv_op(op) {
-                expr_entity_vec.push(ExprEntity::Op(op_type));
-            } else {
-                return Some(format!("op[{:?}] is not supported", op));
-            }
-            let mut left_vec = vec![];
-            if let Some(issue) = parse_condition(lhs.as_ref(), record_id, &mut left_vec) {
-                return Some(issue);
-            }
-            expr_entity_vec.append(&mut left_vec);
-            let mut right_vec = vec![];
-            if let Some(issue) = parse_condition(rhs.as_ref(), record_id, &mut right_vec) {
-                return Some(issue);
-            }
-            expr_entity_vec.append(&mut right_vec);
-        }
-        _ => {
-            if let Some(issue) = check_not_allow_expr(expr) {
-                return Some(issue);
-            }
-            if let Some(issue) = parse_expr(expr, record_id, expr_entity_vec) {
-                return Some(issue);
-            }
-        }
-    }
-    None
-}
-
-fn check_not_support_op(op: &BinaryOperator) -> bool {
-    matches!(
-        op,
-        BinaryOperator::Xor
-            | BinaryOperator::NullSafeEq
-            | BinaryOperator::ShiftLeft
-            | BinaryOperator::ShiftRight
-            | BinaryOperator::BitAnd
-            | BinaryOperator::BitOr
-            | BinaryOperator::BitXor
-            | BinaryOperator::Add
-            | BinaryOperator::Subtract
-            | BinaryOperator::Divide
-            | BinaryOperator::Div
-            | BinaryOperator::Mod
-            | BinaryOperator::Mult
-            | BinaryOperator::Like
-            | BinaryOperator::NotLike
-    )
-}
-
-fn conv_op(op: &BinaryOperator) -> Option<OpType> {
-    if check_not_support_op(op) {
-        None
-    } else {
-        match op {
-            BinaryOperator::Or => Some(OpType::Or),
-            BinaryOperator::And => Some(OpType::And),
-            BinaryOperator::Eq => Some(OpType::Eq),
-            BinaryOperator::GtEq => Some(OpType::GtEq),
-            BinaryOperator::Gt => Some(OpType::Gt),
-            BinaryOperator::LtEq => Some(OpType::LtEq),
-            BinaryOperator::Lt => Some(OpType::Lt),
-            BinaryOperator::Neq => Some(OpType::Neq),
-            _ => None,
-        }
-    }
 }
 
 fn check_not_allow_expr(expr: &Expression<'_>) -> Option<String> {

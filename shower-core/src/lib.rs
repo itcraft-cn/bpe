@@ -13,6 +13,7 @@ pub(crate) mod exec;
 pub(crate) mod ffi;
 pub(crate) mod func;
 pub(crate) mod id;
+pub(crate) mod jit;
 pub(crate) mod logger;
 pub(crate) mod mapper;
 pub(crate) mod sql;

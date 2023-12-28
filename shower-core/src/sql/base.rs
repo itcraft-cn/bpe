@@ -1,4 +1,8 @@
+use crate::jit::FuncGenerator;
+use inkwell::execution_engine::JitFunction;
 use sql_parse::{parse_statement, ParseOptions, SQLArguments, SQLDialect, Statement};
+
+pub(crate) type FilterFunc = unsafe extern "C" fn(u64) -> bool;
 
 pub(crate) fn parse_options() -> ParseOptions {
     ParseOptions::new()
@@ -74,23 +78,23 @@ pub(crate) enum OpType {
     Neq,
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug)]
 pub(crate) struct ParsedSql {
     records: Vec<u16>,
-    filters: Vec<ExprEntity>,
+    filter: JitFunction<'static, FilterFunc>,
     limit: usize,
     fields: Vec<ExprEntity>,
 }
 impl ParsedSql {
     pub(crate) fn new(
         records: Vec<u16>,
-        filters: Vec<ExprEntity>,
+        filter: JitFunction<'static, FilterFunc>,
         limit: usize,
         fields: Vec<ExprEntity>,
     ) -> ParsedSql {
         ParsedSql {
             records,
-            filters,
+            filter,
             limit,
             fields,
         }
@@ -100,8 +104,8 @@ impl ParsedSql {
         &self.records
     }
 
-    pub(crate) fn filters(&self) -> &Vec<ExprEntity> {
-        &self.filters
+    pub(crate) fn filter(&self) -> &JitFunction<'static, FilterFunc> {
+        &self.filter
     }
 
     pub(crate) fn limit(&self) -> usize {

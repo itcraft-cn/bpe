@@ -5,6 +5,7 @@ use crate::{
     ffi::FfiFunc,
     func::FnHolder,
     id::init_walker,
+    jit::init_func_generator,
     logger::init_logger,
     mapper::{call_mapper, define_mapper, init_mapper_store},
     store::{find_or_insert_array, init_store, insert, WrappedArray},
@@ -20,6 +21,7 @@ fn actual_start() {
     load_config();
     init_logger();
     init_walker();
+    init_func_generator();
     init_mapper_store();
     init_aggregate_store();
     init_record_store();

@@ -491,11 +491,6 @@ pub(crate) fn search_aggregate<'a>(id: u16) -> Option<&'a WrappedAggregate> {
 }
 
 fn gen_aggregate(parsed_sql: &ParsedSql) -> Result<Aggregate, ParseSqlError> {
-    if !parsed_sql.filters().is_empty() {
-        return Err(ParseSqlError::new(String::from(
-            "filter in aggregate is not supported",
-        )));
-    }
     let fields = parsed_sql.fields();
     if fields.is_empty() {
         return Err(ParseSqlError::new(String::from("no field in aggregate")));

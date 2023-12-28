@@ -8,11 +8,12 @@ use crate::{
     func::{eq, fetch_val, gt, gt_eq, lt, lt_eq, neq, Executors, FnHolder},
     id::next_mapper_id,
     sql::{
-        base::{parse_options, ExprEntity, OpType, ParsedSql, ValType},
+        base::{parse_options, ExprEntity, FilterFunc, OpType, ParsedSql, ValType},
         select::parse_select,
     },
     store::{WrappedArray, VEC_SIZE},
 };
+use inkwell::execution_engine::JitFunction;
 use sql_parse::ParseOptions;
 use std::{
     alloc::{self, Layout},
@@ -31,7 +32,7 @@ pub(crate) fn init_mapper_store() {
 
 pub(crate) fn define_mapper(sql: &str, func_holder: FnHolder) -> Option<u16> {
     if let Some(parsed_sql) = parse_select(sql, unsafe { PARSE_OPTIONS.as_ref().unwrap() }) {
-        let rs = gen_mapper(&parsed_sql);
+        let rs = gen_mapper(parsed_sql);
         if let Ok(mapper) = rs {
             let id = mapper.id();
             let map = unsafe { MAPPER_MAP.as_mut().unwrap() };
@@ -83,7 +84,7 @@ fn search_mapper<'a>(id: u16) -> Option<&'a WrappedMapper> {
     map.get(id)
 }
 
-fn gen_mapper(parsed_sql: &ParsedSql) -> Result<Mapper, ParseSqlError> {
+fn gen_mapper(parsed_sql: ParsedSql) -> Result<Mapper, ParseSqlError> {
     let record_id_array = &parsed_sql.records();
     if record_id_array.len() != 1 {
         return Err(ParseSqlError::new(format!(
@@ -92,13 +93,6 @@ fn gen_mapper(parsed_sql: &ParsedSql) -> Result<Mapper, ParseSqlError> {
         )));
     }
     let id = next_mapper_id();
-    let rs_filter = create_filter(parsed_sql.filters());
-    if rs_filter.is_err() {
-        return Err(ParseSqlError::new(format!(
-            "failed to parse filter: {}",
-            rs_filter.err().unwrap()
-        )));
-    }
     let rs_executors = create_executor(record_id_array, parsed_sql.fields());
     if rs_executors.is_err() {
         return Err(ParseSqlError::new(format!(
@@ -107,12 +101,11 @@ fn gen_mapper(parsed_sql: &ParsedSql) -> Result<Mapper, ParseSqlError> {
         )));
     }
     let vec_executors = rs_executors.unwrap();
-    Ok(Mapper {
+    Ok(Mapper::new(
         id,
-        filter: rs_filter.unwrap(),
-        limit: parsed_sql.limit(),
-        executors: Executors::new(vec_executors.as_slice()),
-    })
+        parsed_sql,
+        Executors::new(vec_executors.as_slice()),
+    ))
 }
 
 fn create_filter(entities: &[ExprEntity]) -> Result<Filter, ParseSqlError> {
@@ -185,15 +178,13 @@ fn loop_filter(
     loop {
         let position = (walker - U8_DATA_MAX_SIZE - idx * U8_DATA_MAX_SIZE) & mask;
         let sub_data_ptr = array.sub_data(position);
-        if mapper
-            .filter
-            .is_match(id, u64ptr, record, position, sub_data_ptr)
-        {
+        if unsafe { mapper.filter().call(u64ptr) } {
+            //log::info!("position: {}", position);
             let adjusted = unsafe { u8_ptr.add(offset) };
             mapper.fetch(id, u64ptr, record, position, sub_data_ptr, adjusted);
             n += 1;
             offset += n * U8_DATA_MAX_SIZE;
-            if n == mapper.limit {
+            if n == mapper.limit() {
                 //log::info!("quit, hit limit: {}", n);
                 break;
             }
@@ -461,11 +452,18 @@ where
 #[derive(Debug)]
 pub(crate) struct Mapper {
     id: u16,
-    filter: Filter,
-    limit: usize,
+    parsed_sql: ParsedSql,
     executors: Executors,
 }
 impl Mapper {
+    fn new(id: u16, parsed_sql: ParsedSql, executors: Executors) -> Mapper {
+        Self {
+            id,
+            parsed_sql,
+            executors,
+        }
+    }
+
     pub(crate) fn id(&self) -> u16 {
         self.id
     }
@@ -496,13 +494,21 @@ impl Mapper {
             }
         }
     }
+
+    fn filter(&self) -> &JitFunction<FilterFunc> {
+        self.parsed_sql.filter()
+    }
+
+    fn limit(&self) -> usize {
+        self.parsed_sql.limit()
+    }
 }
 
 pub(crate) struct WrappedMapper {
     mapper: Mapper,
     fn_holder: FnHolder,
 }
-impl WrappedMapper {
+impl<'a> WrappedMapper {
     fn new(mapper: Mapper, fn_holder: FnHolder) -> Self {
         WrappedMapper { mapper, fn_holder }
     }
