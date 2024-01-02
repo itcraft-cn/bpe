@@ -2,8 +2,9 @@ use crate::{
     consts::DEFALUT_SELECT_SIZE,
     data::Record,
     jit::{base::FuncGenerator, filter::gen_select_filter_func},
-    sql::base::{parse_sql, ExprEntity, ParsedSql, ValType},
+    sql::base::{parse_sql, ExprEntity, FilterFunc, ParsedSql, ValType},
 };
+use inkwell::execution_engine::JitFunction;
 use sql_parse::{
     Expression, IdentifierPart, ParseOptions, Select, SelectExpr, Statement, TableReference,
 };
@@ -27,25 +28,18 @@ fn parse_select_statement(select_stat: Select<'_>) -> Option<ParsedSql> {
         let record = fetch_record(&records)?;
         let record_id = record.id();
         // 辨识过滤条件 jit
-        let filter;
-        let rs_filters_func =
-            gen_select_filter_func(func_generator, &select_stat.where_, record, &mut issues);
-        if let Ok(filters_func) = rs_filters_func {
-            log::info!("the filter func: {:#?}", filters_func);
-            filter = filters_func;
-        } else {
-            log::warn!("{}", rs_filters_func.err().unwrap());
-            for issue in &issues {
-                log::warn!("issue: {:#?}", issue);
-            }
-            return None;
-        }
+        let opt_filter = parse_select_filter(func_generator, &select_stat, record, &mut issues);
         // 限制数据范围
         let limit_range = parse_select_limitor(&select_stat.limit, &mut issues);
         // 辨识字段
         let fields = parse_select_fields(&select_stat.select_exprs, record_id, &mut issues);
         if issues.is_empty() {
-            Some(ParsedSql::new(records, filter, limit_range, fields))
+            if let Some(filter) = opt_filter {
+                Some(ParsedSql::new(records, filter, limit_range, fields))
+            } else {
+                log::warn!("hit failed to parse select filter");
+                None
+            }
         } else {
             for issue in issues {
                 log::warn!("hit issue: [{}]", issue);
@@ -140,6 +134,26 @@ fn parse_tab_ref(tab: &TableReference<'_>, tab_ref_vec: &mut Vec<u16>) -> Option
         }
     }
     None
+}
+
+fn parse_select_filter<'ctx>(
+    func_generator: &'ctx mut FuncGenerator<'ctx>,
+    select_stat: &Select<'_>,
+    record: &Record,
+    issues: &mut Vec<String>,
+) -> Option<JitFunction<'ctx, FilterFunc>> {
+    let rs_filters_func =
+        gen_select_filter_func(func_generator, &select_stat.where_, record, issues);
+    if let Ok(filters_func) = rs_filters_func {
+        log::info!("the filter func: {:#?}", filters_func);
+        Some(filters_func)
+    } else {
+        log::warn!("{}", rs_filters_func.err().unwrap());
+        for issue in &*issues {
+            log::warn!("issue: {:#?}", issue);
+        }
+        None
+    }
 }
 
 fn parse_select_limitor(
