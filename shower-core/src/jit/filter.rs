@@ -8,7 +8,7 @@ use sql_parse::{BinaryOperator, Expression, IdentifierPart};
 use std::ops::Range;
 
 pub(crate) fn gen_select_filter_func<'ctx>(
-    func_generator: &'ctx mut FuncGenerator<'ctx>,
+    func_generator: &'ctx FuncGenerator<'ctx>,
     where_: &Option<(Expression<'_>, Range<usize>)>,
     record: &Record,
     issues: &mut Vec<String>,
@@ -51,7 +51,7 @@ pub(crate) fn gen_select_filter_func<'ctx>(
 }
 
 fn gen_filter_func<'ctx>(
-    func_generator: &mut FuncGenerator<'ctx>,
+    func_generator: &FuncGenerator<'ctx>,
     param_u64ptr: &IntValue<'ctx>,
     expr: &Expression<'_>,
     record: &Record,
@@ -302,7 +302,7 @@ fn gen_filter_func<'ctx>(
 }
 
 fn gen_call_fetch_column<'ctx>(
-    func_generator: &mut FuncGenerator<'ctx>,
+    func_generator: &FuncGenerator<'ctx>,
     param_u64ptr: &IntValue<'ctx>,
     idp: &IdentifierPart<'_>,
     record: &Record,

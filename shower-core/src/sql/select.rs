@@ -11,8 +11,8 @@ use sql_parse::{
 use std::ops::Range;
 
 pub(crate) fn parse_select(sql: &str, options: &ParseOptions) -> Option<ParsedSql> {
-    parse_sql(sql, options, |ast| match ast {
-        Statement::Select(stat) => parse_select_statement(stat),
+    parse_sql(sql, options, |statement| match statement {
+        Statement::Select(select_stat) => parse_select_statement(select_stat),
         _ => None,
     })
 }
@@ -137,7 +137,7 @@ fn parse_tab_ref(tab: &TableReference<'_>, tab_ref_vec: &mut Vec<u16>) -> Option
 }
 
 fn parse_select_filter<'ctx>(
-    func_generator: &'ctx mut FuncGenerator<'ctx>,
+    func_generator: &'ctx FuncGenerator<'ctx>,
     select_stat: &Select<'_>,
     record: &Record,
     issues: &mut Vec<String>,
