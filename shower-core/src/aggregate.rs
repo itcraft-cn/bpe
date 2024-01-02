@@ -192,7 +192,6 @@ fn loop_compute(
 fn compute(
     idx: usize,
     executor: &Executor,
-
     aggregate_data_ptr: *mut u8,
     field_ref: &mut [u8; 8],
     sub_data: *const u8,

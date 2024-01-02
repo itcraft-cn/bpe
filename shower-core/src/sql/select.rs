@@ -32,7 +32,12 @@ fn parse_select_statement(select_stat: Select<'_>) -> Option<ParsedSql> {
         // 限制数据范围
         let limit_range = parse_select_limitor(&select_stat.limit, &mut issues);
         // 辨识字段
-        let fields = parse_select_fields(&select_stat.select_exprs, record_id, &mut issues);
+        let fields = parse_select_fields(
+            func_generator,
+            &select_stat.select_exprs,
+            record_id,
+            &mut issues,
+        );
         if issues.is_empty() {
             if let Some(filter) = opt_filter {
                 Some(ParsedSql::new(records, filter, limit_range, fields))
@@ -174,7 +179,8 @@ fn parse_select_limitor(
     }
 }
 
-fn parse_select_fields(
+fn parse_select_fields<'ctx>(
+    func_generator: &'ctx FuncGenerator<'ctx>,
     select_exprs: &[SelectExpr<'_>],
     record_id: u16,
     issues: &mut Vec<String>,
@@ -189,7 +195,8 @@ fn parse_select_fields(
             issues.push(value);
             return vec![];
         }
-        if let Some(value) = parse_expr(&select_expr.expr, record_id, &mut expr_vec) {
+        if let Some(value) = parse_expr(func_generator, &select_expr.expr, record_id, &mut expr_vec)
+        {
             issues.push(value);
             return vec![];
         }
@@ -263,7 +270,8 @@ fn check_not_allow_expr(expr: &Expression<'_>) -> Option<String> {
     }
 }
 
-fn parse_expr(
+fn parse_expr<'ctx>(
+    _func_generator: &'ctx FuncGenerator<'ctx>,
     expr: &Expression<'_>,
     record_id: u16,
     expr_entity_vec: &mut Vec<ExprEntity>,
@@ -288,7 +296,7 @@ fn parse_expr(
             };
             let mut expr_sub_entity_vec = vec![];
             for expr in expr_vec {
-                parse_expr(expr, record_id, &mut expr_sub_entity_vec);
+                parse_expr(_func_generator, expr, record_id, &mut expr_sub_entity_vec);
             }
             if fn_tuple.1 {
                 expr_entity_vec.push(ExprEntity::Function(fn_tuple.0, expr_sub_entity_vec));
