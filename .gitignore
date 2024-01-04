@@ -4,9 +4,11 @@ target
 
 Cargo.lock
 pyvenv.cfg
+hs_err_pid*.log
 *.zip
 
 perf.data*
 flamegraph*
 *.log
 .~*
+
