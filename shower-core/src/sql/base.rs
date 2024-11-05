@@ -1,3 +1,5 @@
+#![allow(dead_code)] // TODO: remove
+
 use inkwell::execution_engine::JitFunction;
 use sql_parse::{parse_statement, ParseOptions, SQLArguments, SQLDialect, Statement};
 
