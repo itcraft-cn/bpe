@@ -4,12 +4,14 @@ use crate::{
     id::next_record_id,
 };
 use hashbrown::HashMap;
-use std::cmp::Ordering as CmpOrdering;
+use lazy_static::lazy_static;
+use std::{cmp::Ordering as CmpOrdering, sync::Mutex};
 
-static mut RECORD_MAP: Option<SimpleU16Map> = None;
-static mut NAME_MAP: Option<HashMap<String, u16>> = None;
-
-static mut ID_STORE: [u8; 8192] = [0; 8192];
+lazy_static! {
+    static ref RECORD_MAP: Mutex<SimpleU16Map> = Mutex::new(SimpleU16Map::new());
+    static ref NAME_MAP: Mutex<HashMap<String, u16>> = Mutex::new(HashMap::new());
+    static ref ID_STORE: Mutex<[u8; 8192]> = Mutex::new([0; 8192]);
+}
 
 #[derive(Clone, Copy, Debug)]
 pub struct U8Bytes {
@@ -191,33 +193,45 @@ impl Record {
         record_type: RecordType,
         columns: Vec<Column>,
     ) -> Option<u16> {
-        unsafe {
-            let record_map = RECORD_MAP.as_mut().unwrap();
-            let id = next_record_id();
-            record_map.insert(
+        let id = next_record_id();
+        if let Ok(mut guard) = RECORD_MAP.lock() {
+            guard.insert(
                 id,
                 Record::new(name, id, record_type, Column::copy_from_columns(&columns)),
             );
-            let name_map = NAME_MAP.as_mut().unwrap();
+        } else {
+            return None;
+        }
+        if let Ok(mut guard) = NAME_MAP.lock() {
             let key = String::from(name);
-            if name_map.contains_key(&key) {
+            if guard.contains_key(&key) {
                 log::warn!("Record name {} already exists", name);
                 None
             } else {
-                name_map.insert(key, id);
-                set_id(ID_STORE.as_mut_slice(), id);
-                Some(id)
+                guard.insert(key, id);
+                if let Ok(mut guard) = ID_STORE.lock() {
+                    set_id(guard.as_mut_slice(), id);
+                    Some(id)
+                } else {
+                    None
+                }
             }
+        } else {
+            None
         }
     }
-    pub(crate) fn get_record<'a>(id: u16) -> Option<&'a Record> {
-        let map = unsafe { RECORD_MAP.as_ref().unwrap() };
-        map.get(id)
+    pub(crate) fn get_record(id: u16) -> Option<&'static Record> {
+        if let Ok(guard) = RECORD_MAP.lock() {
+            guard.get(id)
+        } else {
+            None
+        }
     }
-    pub(crate) fn fetch_record_id(name: &str) -> Option<&u16> {
-        unsafe {
-            let name_map = NAME_MAP.as_ref().unwrap();
-            name_map.get(&String::from(name))
+    pub(crate) fn fetch_record_id(name: &str) -> Option<u16> {
+        if let Ok(guard) = NAME_MAP.lock() {
+            guard.get(&String::from(name)).copied()
+        } else {
+            None
         }
     }
     pub(crate) fn fetch_column_id(record_id: u16, column_name: &str) -> Option<&u16> {
@@ -251,13 +265,10 @@ impl Record {
     }
 }
 
-pub(crate) fn init_record_store() {
-    unsafe {
-        RECORD_MAP = Some(SimpleU16Map::new());
-        NAME_MAP = Some(HashMap::new());
-    }
-}
-
 pub(crate) fn check_id_in_store(id: u16) -> bool {
-    check_id(unsafe { ID_STORE }.as_slice(), id)
+    if let Ok(guard) = ID_STORE.lock() {
+        check_id(guard.as_slice(), id)
+    } else {
+        false
+    }
 }

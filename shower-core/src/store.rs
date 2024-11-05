@@ -4,27 +4,20 @@ use crate::{
     consts::{DEFAULT_VEC_SIZE, KEY_VEC_SIZE, U8_DATA_MAX_SIZE},
     data::U8Bytes,
 };
+use lazy_static::lazy_static;
 use std::{
     alloc::{self, Layout},
     ptr,
-    sync::Once,
+    sync::Mutex,
 };
 
-static MAP_INIT: Once = Once::new();
-static mut MAP: Option<SimpleU16Map> = None;
-pub(crate) static mut VEC_SIZE: usize = 0;
-
-pub(crate) fn init_store() {
-    MAP_INIT.call_once(initial);
-}
-
-fn initial() {
-    unsafe {
-        MAP.get_or_insert(SimpleU16Map::new());
-        VEC_SIZE = get_config()
+lazy_static! {
+    static ref MAP: Mutex<SimpleU16Map> = Mutex::new(SimpleU16Map::new());
+    static ref VEC_SIZE: Mutex<usize> = Mutex::new(
+        get_config()
             .fetch_cfg_usize(KEY_VEC_SIZE)
-            .unwrap_or(DEFAULT_VEC_SIZE);
-    }
+            .unwrap_or(DEFAULT_VEC_SIZE)
+    );
 }
 
 pub(crate) fn insert(array: &mut WrappedArray, data: &U8Bytes) {
@@ -40,10 +33,22 @@ fn insert_into_slice(array: &mut WrappedArray, data: &U8Bytes) {
 
 #[inline]
 pub(crate) fn find_or_insert_array<'a>(id: u16) -> &'a mut WrappedArray {
-    let map = unsafe { MAP.as_mut().unwrap() };
-    map.entry(id)
-        .or_insert_with(map, || WrappedArray::new(unsafe { VEC_SIZE }));
-    map.get_mut(id).unwrap()
+    if let Ok(mut guard) = MAP.lock() {
+        guard
+            .entry(id)
+            .or_insert_with(&mut guard, || WrappedArray::new(get_vec_size()));
+        guard.get_mut(id).unwrap()
+    } else {
+        panic!("lock failed");
+    }
+}
+
+pub(crate) fn get_vec_size() -> usize {
+    if let Ok(guard) = VEC_SIZE.lock() {
+        *guard
+    } else {
+        panic!("lock failed")
+    }
 }
 
 #[derive(Debug)]

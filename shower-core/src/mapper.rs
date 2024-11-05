@@ -10,52 +10,60 @@ use crate::{
         base::{parse_options, FilterFunc, ParsedSql},
         select::parse_select,
     },
-    store::{WrappedArray, VEC_SIZE},
+    store::{get_vec_size, WrappedArray},
 };
 use inkwell::execution_engine::JitFunction;
+use lazy_static::lazy_static;
 use sql_parse::ParseOptions;
 use std::{
     alloc::{self, Layout},
     cell::RefCell,
+    sync::Mutex,
 };
 
-static mut MAPPER_MAP: Option<SimpleU16Map> = None;
-static mut PARSE_OPTIONS: Option<ParseOptions> = None;
-
-pub(crate) fn init_mapper_store() {
-    unsafe {
-        PARSE_OPTIONS = Some(parse_options());
-        MAPPER_MAP = Some(SimpleU16Map::new());
-    }
+lazy_static! {
+    static ref MAPPER_MAP: Mutex<SimpleU16Map> = Mutex::new(SimpleU16Map::new());
+    static ref PARSE_OPTIONS: Mutex<ParseOptions> = Mutex::new(parse_options());
 }
 
 pub(crate) fn define_mapper(sql: &str, func_holder: FnHolder) -> Option<u16> {
-    if let Some(parsed_sql) = parse_select(sql, unsafe { PARSE_OPTIONS.as_ref().unwrap() }) {
-        let rs = gen_mapper(parsed_sql);
-        if let Ok(mapper) = rs {
-            let id = mapper.id();
-            let map = unsafe { MAPPER_MAP.as_mut().unwrap() };
-            let entry = map.entry(id);
-            match entry {
-                SimpleU16Entry::Exist(_) => {
-                    log::warn!("id {} already exists, sql[{}] is skipped", id, sql);
+    let options_lock_rs = PARSE_OPTIONS.lock();
+    if let Ok(guard) = options_lock_rs {
+        if let Some(parsed_sql) = parse_select(sql, &guard) {
+            let rs = gen_mapper(parsed_sql);
+            if let Ok(mapper) = rs {
+                let id = mapper.id();
+                let map_lock_rs = MAPPER_MAP.lock();
+                if let Ok(mut guard) = map_lock_rs {
+                    let entry = guard.entry(id);
+                    match entry {
+                        SimpleU16Entry::Exist(_) => {
+                            log::warn!("id {} already exists, sql[{}] is skipped", id, sql);
+                            None
+                        }
+                        SimpleU16Entry::NotExist(_) => {
+                            guard.insert(id, WrappedMapper::new(mapper, func_holder));
+                            Some(id)
+                        }
+                    }
+                } else {
+                    log::warn!("{:?}", map_lock_rs.err());
                     None
                 }
-                SimpleU16Entry::NotExist(_) => {
-                    map.insert(id, WrappedMapper::new(mapper, func_holder));
-                    Some(id)
-                }
+            } else {
+                log::warn!(
+                    "fail to create mapper from sql[{}], hit unexpected error: {:?}",
+                    sql,
+                    rs.err().unwrap()
+                );
+                None
             }
         } else {
-            log::warn!(
-                "fail to create mapper from sql[{}], hit unexpected error: {:?}",
-                sql,
-                rs.err().unwrap()
-            );
+            log::warn!("not supported sql statement: [{}]", sql);
             None
         }
     } else {
-        log::warn!("not supported sql statement: [{}]", sql);
+        log::warn!("{:?}", options_lock_rs.err());
         None
     }
 }
@@ -78,9 +86,12 @@ pub(crate) fn call_mapper(array: &WrappedArray, id: u16) {
     );
 }
 
-fn search_mapper<'a>(id: u16) -> Option<&'a WrappedMapper> {
-    let map = unsafe { MAPPER_MAP.as_ref().unwrap() };
-    map.get(id)
+fn search_mapper(id: u16) -> Option<&'static WrappedMapper> {
+    if let Ok(guard) = MAPPER_MAP.lock() {
+        guard.get(id)
+    } else {
+        None
+    }
 }
 
 fn gen_mapper(parsed_sql: ParsedSql) -> Result<Mapper, ParseSqlError> {
@@ -116,7 +127,7 @@ fn invoke(
     fn_holder: &FnHolder,
 ) {
     thread_local! {
-        static DATA_REF :RefCell<u64> = RefCell::new(unsafe {alloc::alloc(Layout::from_size_align(VEC_SIZE, 1).unwrap())} as u64);
+        static DATA_REF :RefCell<u64> = RefCell::new(unsafe {alloc::alloc(Layout::from_size_align(get_vec_size(), 1).unwrap())} as u64);
     };
     DATA_REF.with_borrow(|u8_ptr_val| {
         let u8_ptr = *u8_ptr_val as *mut u8;

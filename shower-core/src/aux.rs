@@ -85,7 +85,7 @@ impl SimpleU16Map {
         }
     }
     #[inline]
-    pub(crate) fn get_mut<T>(&mut self, id: u16) -> Option<&mut T> {
+    pub(crate) fn get_mut<T>(&mut self, id: u16) -> Option<&'static mut T> {
         let u64v = self.ptr_array[id as usize];
         if u64v == 0 {
             None
@@ -95,7 +95,7 @@ impl SimpleU16Map {
         }
     }
     #[inline]
-    pub(crate) fn get<T>(&self, id: u16) -> Option<&T> {
+    pub(crate) fn get<T>(&self, id: u16) -> Option<&'static T> {
         let u64v = self.ptr_array[id as usize];
         if u64v == 0 {
             None
@@ -125,7 +125,7 @@ impl SimpleU16Entry {
     }
 
     #[inline]
-    pub(crate) fn _fetch_as_mut<'a, T>(&self, map: &'a mut SimpleU16Map) -> Option<&'a mut T> {
+    pub(crate) fn _fetch_as_mut<T>(&self, map: &mut SimpleU16Map) -> Option<&'static mut T> {
         match *self {
             SimpleU16Entry::Exist(id) => map.get_mut(id),
             _ => None,

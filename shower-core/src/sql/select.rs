@@ -117,7 +117,7 @@ fn parse_tab_ref(tab: &TableReference<'_>, tab_ref_vec: &mut Vec<u16>) -> Option
             }
             let name = identifier.identifier.value;
             if let Some(record_id) = Record::fetch_record_id(name) {
-                tab_ref_vec.push(*record_id);
+                tab_ref_vec.push(record_id);
             } else {
                 return Some(format!("record define: [{}] is not found", name));
             }
@@ -341,9 +341,8 @@ fn fetch_record_id(record_id: u16, id_part: &IdentifierPart<'_>) -> Result<u16, 
         IdentifierPart::Name(id) => {
             let name = id.as_str();
             if let Some(id) = Record::fetch_record_id(name) {
-                let rid = *id;
-                if rid == record_id {
-                    Ok(rid)
+                if id == record_id {
+                    Ok(id)
                 } else {
                     Err(format!(
                         "record [{}] is not match the target record in sql query",
