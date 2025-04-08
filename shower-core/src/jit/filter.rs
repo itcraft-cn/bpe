@@ -40,7 +40,7 @@ pub(crate) fn gen_select_filter_func<'ctx>(
     } else {
         ret = bool_type.const_zero();
     }
-    func_generator.builder.build_return(Some(&ret));
+    let _ = func_generator.builder.build_return(Some(&ret));
     let opt_filter_func = func_generator.compile::<FilterFunc>(func_name);
     if let Some(filter_func) = opt_filter_func {
         log::info!("filter func: {:#?}", filter_func);
@@ -73,7 +73,8 @@ fn gen_filter_func<'ctx>(
                     record,
                     issues,
                     walker + 1,
-                )?;
+                )
+                .unwrap();
                 let rhs_val = gen_filter_func(
                     func_generator,
                     param_u64ptr,
@@ -81,12 +82,12 @@ fn gen_filter_func<'ctx>(
                     record,
                     issues,
                     walker + 2,
-                )?;
-                let val = func_generator.builder.build_or(
-                    lhs_val,
-                    rhs_val,
-                    &format!("val_{}_or", walker),
-                );
+                )
+                .unwrap();
+                let val = func_generator
+                    .builder
+                    .build_or(lhs_val, rhs_val, &format!("val_{}_or", walker))
+                    .unwrap();
                 Some(val)
             }
             BinaryOperator::And => {
@@ -97,7 +98,8 @@ fn gen_filter_func<'ctx>(
                     record,
                     issues,
                     walker + 1,
-                )?;
+                )
+                .unwrap();
                 let rhs_val = gen_filter_func(
                     func_generator,
                     param_u64ptr,
@@ -105,12 +107,12 @@ fn gen_filter_func<'ctx>(
                     record,
                     issues,
                     walker + 2,
-                )?;
-                let val = func_generator.builder.build_and(
-                    lhs_val,
-                    rhs_val,
-                    &format!("val_{}_and", walker),
-                );
+                )
+                .unwrap();
+                let val = func_generator
+                    .builder
+                    .build_and(lhs_val, rhs_val, &format!("val_{}_and", walker))
+                    .unwrap();
                 Some(val)
             }
             BinaryOperator::Eq => {
@@ -121,7 +123,8 @@ fn gen_filter_func<'ctx>(
                     record,
                     issues,
                     walker + 1,
-                )?;
+                )
+                .unwrap();
                 let rhs_val = gen_filter_func(
                     func_generator,
                     param_u64ptr,
@@ -129,13 +132,17 @@ fn gen_filter_func<'ctx>(
                     record,
                     issues,
                     walker + 2,
-                )?;
-                let val = func_generator.builder.build_int_compare(
-                    IntPredicate::EQ,
-                    lhs_val,
-                    rhs_val,
-                    &format!("val_{}_eq", walker),
-                );
+                )
+                .unwrap();
+                let val = func_generator
+                    .builder
+                    .build_int_compare(
+                        IntPredicate::EQ,
+                        lhs_val,
+                        rhs_val,
+                        &format!("val_{}_eq", walker),
+                    )
+                    .unwrap();
                 Some(val)
             }
             BinaryOperator::GtEq => {
@@ -146,7 +153,8 @@ fn gen_filter_func<'ctx>(
                     record,
                     issues,
                     walker + 1,
-                )?;
+                )
+                .unwrap();
                 let rhs_val = gen_filter_func(
                     func_generator,
                     param_u64ptr,
@@ -154,13 +162,17 @@ fn gen_filter_func<'ctx>(
                     record,
                     issues,
                     walker + 2,
-                )?;
-                let val = func_generator.builder.build_int_compare(
-                    IntPredicate::SGE,
-                    lhs_val,
-                    rhs_val,
-                    &format!("val_{}_gteq", walker),
-                );
+                )
+                .unwrap();
+                let val = func_generator
+                    .builder
+                    .build_int_compare(
+                        IntPredicate::SGE,
+                        lhs_val,
+                        rhs_val,
+                        &format!("val_{}_gteq", walker),
+                    )
+                    .unwrap();
                 Some(val)
             }
             BinaryOperator::Gt => {
@@ -171,7 +183,8 @@ fn gen_filter_func<'ctx>(
                     record,
                     issues,
                     walker + 1,
-                )?;
+                )
+                .unwrap();
                 let rhs_val = gen_filter_func(
                     func_generator,
                     param_u64ptr,
@@ -179,13 +192,17 @@ fn gen_filter_func<'ctx>(
                     record,
                     issues,
                     walker + 2,
-                )?;
-                let val = func_generator.builder.build_int_compare(
-                    IntPredicate::SGT,
-                    lhs_val,
-                    rhs_val,
-                    &format!("val_{}_gt", walker),
-                );
+                )
+                .unwrap();
+                let val = func_generator
+                    .builder
+                    .build_int_compare(
+                        IntPredicate::SGT,
+                        lhs_val,
+                        rhs_val,
+                        &format!("val_{}_gt", walker),
+                    )
+                    .unwrap();
                 Some(val)
             }
             BinaryOperator::LtEq => {
@@ -196,7 +213,8 @@ fn gen_filter_func<'ctx>(
                     record,
                     issues,
                     walker + 1,
-                )?;
+                )
+                .unwrap();
                 let rhs_val = gen_filter_func(
                     func_generator,
                     param_u64ptr,
@@ -204,13 +222,17 @@ fn gen_filter_func<'ctx>(
                     record,
                     issues,
                     walker + 2,
-                )?;
-                let val = func_generator.builder.build_int_compare(
-                    IntPredicate::SLE,
-                    lhs_val,
-                    rhs_val,
-                    &format!("val_{}_lteq", walker),
-                );
+                )
+                .unwrap();
+                let val = func_generator
+                    .builder
+                    .build_int_compare(
+                        IntPredicate::SLE,
+                        lhs_val,
+                        rhs_val,
+                        &format!("val_{}_lteq", walker),
+                    )
+                    .unwrap();
                 Some(val)
             }
             BinaryOperator::Lt => {
@@ -221,7 +243,8 @@ fn gen_filter_func<'ctx>(
                     record,
                     issues,
                     walker + 1,
-                )?;
+                )
+                .unwrap();
                 let rhs_val = gen_filter_func(
                     func_generator,
                     param_u64ptr,
@@ -229,13 +252,17 @@ fn gen_filter_func<'ctx>(
                     record,
                     issues,
                     walker + 2,
-                )?;
-                let val = func_generator.builder.build_int_compare(
-                    IntPredicate::SLT,
-                    lhs_val,
-                    rhs_val,
-                    &format!("val_{}_lt", walker),
-                );
+                )
+                .unwrap();
+                let val = func_generator
+                    .builder
+                    .build_int_compare(
+                        IntPredicate::SLT,
+                        lhs_val,
+                        rhs_val,
+                        &format!("val_{}_lt", walker),
+                    )
+                    .unwrap();
                 Some(val)
             }
             BinaryOperator::Neq => {
@@ -246,7 +273,8 @@ fn gen_filter_func<'ctx>(
                     record,
                     issues,
                     walker + 1,
-                )?;
+                )
+                .unwrap();
                 let rhs_val = gen_filter_func(
                     func_generator,
                     param_u64ptr,
@@ -254,13 +282,17 @@ fn gen_filter_func<'ctx>(
                     record,
                     issues,
                     walker + 2,
-                )?;
-                let val = func_generator.builder.build_int_compare(
-                    IntPredicate::NE,
-                    lhs_val,
-                    rhs_val,
-                    &format!("val_{}_neq", walker),
-                );
+                )
+                .unwrap();
+                let val = func_generator
+                    .builder
+                    .build_int_compare(
+                        IntPredicate::NE,
+                        lhs_val,
+                        rhs_val,
+                        &format!("val_{}_neq", walker),
+                    )
+                    .unwrap();
                 Some(val)
             }
             _ => {
@@ -311,7 +343,7 @@ fn gen_call_fetch_column<'ctx>(
     match idp {
         IdentifierPart::Name(id) => {
             let name = id.as_str();
-            let column_id = *record.column_id(name)?;
+            let column_id = *record.column_id(name).unwrap();
             let column = record.column(column_id);
             let i16_type = func_generator.context.i16_type();
             let param_record_id = i16_type.const_int(record.id() as u64, false);
@@ -323,15 +355,18 @@ fn gen_call_fetch_column<'ctx>(
                 ColumnType::Str(_) => todo!(),
             }
             .unwrap();
-            let call_site_value = func_generator.builder.build_call(
-                fetch_val_func,
-                &[
-                    (*param_u64ptr).into(),
-                    param_record_id.into(),
-                    param_column_id.into(),
-                ],
-                "ret",
-            );
+            let call_site_value = func_generator
+                .builder
+                .build_call(
+                    fetch_val_func,
+                    &[
+                        (*param_u64ptr).into(),
+                        param_record_id.into(),
+                        param_column_id.into(),
+                    ],
+                    "ret",
+                )
+                .unwrap();
             let ret = call_site_value
                 .try_as_basic_value()
                 .left()
