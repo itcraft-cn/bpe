@@ -111,6 +111,7 @@ fn parse_tab_ref(tab: &TableReference<'_>, tab_ref_vec: &mut Vec<u16>) -> Option
             identifier,
             as_span: _,
             as_,
+            index_hints: _,
         } => {
             if as_.is_some() {
                 return Some(String::from("as is not supported"));

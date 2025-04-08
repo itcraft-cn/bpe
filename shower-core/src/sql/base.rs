@@ -1,7 +1,7 @@
 #![allow(dead_code)] // TODO: remove
 
 use inkwell::execution_engine::JitFunction;
-use sql_parse::{parse_statement, ParseOptions, SQLArguments, SQLDialect, Statement};
+use sql_parse::{parse_statement, Issues, ParseOptions, SQLArguments, SQLDialect, Statement};
 
 pub(crate) type FilterFunc = unsafe extern "C" fn(u64) -> bool;
 
@@ -33,10 +33,12 @@ pub(crate) fn parse_sql_statement<'a>(
     sql: &'a str,
     options: &ParseOptions,
 ) -> Option<Statement<'a>> {
-    let mut issues = Vec::new();
+    let mut issues = Issues::new(sql);
     let ast_opt = parse_statement(sql, &mut issues, options);
-    if !issues.is_empty() {
-        for issue in &issues {
+    if issues.is_ok() {
+        ast_opt
+    } else {
+        for issue in &issues.issues {
             log::warn!(
                 "found issue: [{:?}]{:?} at {:?}",
                 issue.level,
@@ -44,12 +46,16 @@ pub(crate) fn parse_sql_statement<'a>(
                 issue.span
             );
             for fragment in &issue.fragments {
-                log::warn!("detail: {:?}, {:?}", fragment.0, fragment.1);
+                log::warn!(
+                    "detail: {:?},{:?},{:?}",
+                    fragment.message,
+                    fragment.span,
+                    fragment.sql_segment
+                );
             }
         }
-        return None;
+        None
     }
-    ast_opt
 }
 
 #[derive(Debug, Clone)]
