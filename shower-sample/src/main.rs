@@ -7,7 +7,7 @@ use std::{
     time::{Duration, SystemTime},
 };
 
-const LOOP_SIZE: usize = 100000;
+const LOOP_SIZE: usize = 10000000;
 
 const FILTER_SQL: &str = r#"
     SELECT demo.a, demo.b, demo.c, _sub(_add(demo.d, demo.d), demo.e)
@@ -25,36 +25,39 @@ const AGGREGATE_SQL: &str = r#"
 pub fn main() {
     env::set_var("SHOWER_HOME", env::current_dir().unwrap());
     start();
-    exec_with_time_it(gen_new_data);
+    let (id1, _id2) = init_func();
+    exec_with_time_it(|| gen_new_data(id1));
     stop();
 }
 
-fn gen_new_data() {
+fn init_func() -> (u16, u16) {
     let core_ids = core_affinity::get_core_ids().unwrap();
     core_affinity::set_for_current(core_ids[core_ids.len() - 1]);
     log::info!("thread:{} started", thread::current().name().unwrap());
-    if let Some((id1, _id2)) = define_records() {
+    if let Some((id1, id2)) = define_records() {
+        log::info!("define record: {}/{}", id1, id2);
         if let Some(aggregate_id) = def_aggregate(AGGREGATE_SQL, |_data, _size| {}) {
             log::info!("define aggregate: {}", aggregate_id);
             if let Some(mapper_id) = def_mapper_bind_aggregate(FILTER_SQL, aggregate_id) {
                 log::info!("define mapper: {}", mapper_id);
+                return (id1, id2);
             } else {
                 log::warn!("def_mapper_bind_aggregate failed");
-                return;
             }
         } else {
             log::warn!("def_aggregate failed");
-            return;
         }
-        let u8data = gen_u8_bytes(id1);
-        for _ in 1..=LOOP_SIZE {
-            let ret = new_data(&u8data);
-            if ret {
-                log::debug!("send success");
-            } else {
-                log::warn!("send failed");
-            }
-        }
+    }
+    (0, 0)
+}
+
+fn gen_new_data(id: u16) {
+    let u8data = gen_u8_bytes(id);
+    let ret = new_data(&u8data);
+    if ret {
+        log::debug!("send success");
+    } else {
+        log::warn!("send failed");
     }
 }
 
@@ -119,7 +122,9 @@ where
     F: Fn(),
 {
     let start = SystemTime::now();
-    f();
+    for _ in 1..=LOOP_SIZE {
+        f();
+    }
     let end = SystemTime::now();
     let duration = end
         .duration_since(start)
