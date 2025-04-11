@@ -1,9 +1,9 @@
-#!/bin/zsh
+#!/bin/bash
 
 rm -rf target/wheels/*.whl
 
 # Build core
-cargo build
+RUSTFLAGS='-lLLVM-14' cargo build --release
 
 # Build java
 cd bambootube4j
@@ -13,7 +13,7 @@ cd ..
 # Build python
 cd bambootube-py-wrapper
 source bin/activate
-maturin build
+RUSTFLAGS='-lLLVM-14' maturin build --release
 deactivate
 cd ..
 
