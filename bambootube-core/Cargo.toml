@@ -1,0 +1,47 @@
+[package]
+name = "bambootube"
+version = "0.2.0-dev"
+edition = "2021"
+authors = ["Guo Zheyong <guozheyong@erayt.com>"]
+exclude = ["tests", "test_data", "benches", "examples", ".vscode"]
+homepage = ""
+repository = ""
+license = "Apache-2.0"
+readme = "README.md"
+description = ""
+categories = [""]
+documentation = ""
+keywords = [""]
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[[bench]]
+name = "benchmarks1"
+harness = false
+
+[[bench]]
+name = "benchmarks2"
+harness = false
+
+[dependencies]
+config = "0.15.11"
+log = "0.4.17"
+log4rs = { version = "1.2.0", features = [] }
+hashbrown = "0.15.2"
+core_affinity = "0.8.1"
+chrono = "0.4.31"
+sql-parse = "0.24.0"
+strum = "0.27.1"
+strum_macros = "0.27.1"
+tikv-jemalloc-sys = { version = "0.6.0+5.3.0-1-ge13ca993e8ccb9ba9847cc330696e02839f328f7", features = [
+    "stats",
+    "profiling",
+    "unprefixed_malloc_on_supported_platforms",
+] }
+tikv-jemallocator = "0.6.0"
+tikv-jemalloc-ctl = "0.6.0"
+inkwell = { version = "0.5.0", features = ["llvm14-0"] }
+lazy_static = "1.5.0"
+
+[dev-dependencies]
+criterion = { version = "0.5.1", features = ["html_reports"] }
