@@ -1,8 +1,8 @@
 [workspace]
 members = [
     "bambootube-core",
-    #"bambootube-java-wrapper",
-    #"bambootube-py-wrapper",
+    "bambootube-java-wrapper",
+    "bambootube-py-wrapper",
     "bambootube-sample"
 ]
 # https://substrate.stackexchange.com/questions/9011/warning-some-crates-are-on-edition-2021-which-defaults-to-resolver-2

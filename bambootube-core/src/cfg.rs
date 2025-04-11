@@ -24,11 +24,7 @@ impl ShowerConfig {
 
     pub(crate) fn fetch_cfg_usize(&self, key: &str) -> Option<usize> {
         if let Some(val) = self.fetch_cfg_str(key) {
-            if let Ok(v) = val.as_str().parse::<usize>() {
-                Some(v)
-            } else {
-                None
-            }
+            val.as_str().parse::<usize>().ok()
         } else {
             None
         }
