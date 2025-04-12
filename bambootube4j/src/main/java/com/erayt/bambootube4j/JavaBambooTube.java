@@ -17,15 +17,15 @@ public class JavaBambooTube {
 
     private static final long TIMEOUT = 5000L;
 
-    private static final JavaBambooTubeThread JAVA_SHOWER_THREAD = new JavaBambooTubeThread();
+    private static final JavaBambooTubeThread JAVA_BAMBOOTUBE_THREAD = new JavaBambooTubeThread();
 
     public static boolean start() {
-        JAVA_SHOWER_THREAD.start();
+        JAVA_BAMBOOTUBE_THREAD.start();
         return BambooTube.start();
     }
 
     public static void stop() {
-        JAVA_SHOWER_THREAD.stop(TIMEOUT);
+        JAVA_BAMBOOTUBE_THREAD.stop(TIMEOUT);
         BambooTube.stop();
     }
 
@@ -68,7 +68,7 @@ public class JavaBambooTube {
 
     public static <T> CompletableFuture<Boolean> newDataAsync(int id, T data) {
         CompletableFuture<Boolean> future = new CompletableFuture<>();
-        JAVA_SHOWER_THREAD.fillQueue(new WrappedData<>(future, id, data));
+        JAVA_BAMBOOTUBE_THREAD.fillQueue(new WrappedData<>(future, id, data));
         return future;
     }
 

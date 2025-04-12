@@ -85,5 +85,5 @@ fn fetch_log_path() -> PathBuf {
 }
 
 pub(crate) fn setup_bambootube_home() {
-    env::set_var("SHOWER_HOME", env::current_dir().unwrap());
+    env::set_var("BAMBOOTUBE_HOME", env::current_dir().unwrap());
 }

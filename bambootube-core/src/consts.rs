@@ -1,6 +1,6 @@
-pub(crate) const SHOWER_ENV_HOME_KEY: &str = "SHOWER_HOME";
+pub(crate) const BAMBOOTUBE_ENV_HOME_KEY: &str = "BAMBOOTUBE_HOME";
 
-pub(crate) const SHOWER_FILENAME_CONFIG_TOML: &str = "cfg/config.toml";
+pub(crate) const BAMBOOTUBE_FILENAME_CONFIG_TOML: &str = "cfg/config.toml";
 
 pub(crate) const DEFAULT_VEC_SIZE: usize = 1048576;
 

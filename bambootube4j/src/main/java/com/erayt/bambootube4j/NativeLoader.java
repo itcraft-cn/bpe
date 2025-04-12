@@ -29,54 +29,54 @@ class NativeLoader {
     private static final String OS_NAME = System.getProperty("os.name");
     private static final String EXT = (OS_NAME.toLowerCase().contains("win")) ? ".dll" : ".so";
 
-    private static final String SHOWER_LIB_SHORT_NAME = "bambootube4j";
-    private static final String SHOWER_LIB_PREFIX = "lib" + SHOWER_LIB_SHORT_NAME;
-    private static final String SHOWER_LIB_NAME = SHOWER_LIB_PREFIX + EXT;
-    private static final String SHOWER_LIB_IN_JAR_PATH = "resources/" + SHOWER_LIB_NAME;
+    private static final String BAMBOOTUBE_LIB_SHORT_NAME = "bambootube4j";
+    private static final String BAMBOOTUBE_LIB_PREFIX = "lib" + BAMBOOTUBE_LIB_SHORT_NAME;
+    private static final String BAMBOOTUBE_LIB_NAME = BAMBOOTUBE_LIB_PREFIX + EXT;
+    private static final String BAMBOOTUBE_LIB_IN_JAR_PATH = "resources/" + BAMBOOTUBE_LIB_NAME;
 
-    private static final String SHOWER_LIB_DEF = "ENV_LIB_PARAM_NOT_EXIST";
-    private static final String SHOWER_LIB = System.getProperty("bambootubeLib", SHOWER_LIB_DEF);
+    private static final String BAMBOOTUBE_LIB_DEF = "ENV_LIB_PARAM_NOT_EXIST";
+    private static final String BAMBOOTUBE_LIB = System.getProperty("bambootubeLib", BAMBOOTUBE_LIB_DEF);
 
     public static void load() {
-        LOGGER.info("try load native library[{}] from sys lib path", SHOWER_LIB_NAME);
+        LOGGER.info("try load native library[{}] from sys lib path", BAMBOOTUBE_LIB_NAME);
         try {
-            System.loadLibrary(SHOWER_LIB_SHORT_NAME);
+            System.loadLibrary(BAMBOOTUBE_LIB_SHORT_NAME);
             return;
         } catch (UnsatisfiedLinkError error) {
             LOGGER.warn("try load lib from sys lib path failed: {}", error.getMessage());
         }
-        if (SHOWER_LIB_DEF.equals(SHOWER_LIB)) {
-            LOGGER.info("try load native library[{}] from classpath", SHOWER_LIB_IN_JAR_PATH);
+        if (BAMBOOTUBE_LIB_DEF.equals(BAMBOOTUBE_LIB)) {
+            LOGGER.info("try load native library[{}] from classpath", BAMBOOTUBE_LIB_IN_JAR_PATH);
             loadFromJar();
         } else {
-            LOGGER.info("try load native library[{}] from {}", SHOWER_LIB_NAME, SHOWER_LIB);
+            LOGGER.info("try load native library[{}] from {}", BAMBOOTUBE_LIB_NAME, BAMBOOTUBE_LIB);
             loadFromSysProperties();
         }
-        LOGGER.info("load native library[{}] success", SHOWER_LIB_NAME);
+        LOGGER.info("load native library[{}] success", BAMBOOTUBE_LIB_NAME);
     }
 
     private static void loadFromJar() {
         try (InputStream is = Thread.currentThread()
-                .getContextClassLoader().getResourceAsStream(SHOWER_LIB_IN_JAR_PATH)) {
+                .getContextClassLoader().getResourceAsStream(BAMBOOTUBE_LIB_IN_JAR_PATH)) {
             if (is == null) {
-                throw new RuntimeException(SHOWER_LIB_IN_JAR_PATH + " is not found in classpath");
+                throw new RuntimeException(BAMBOOTUBE_LIB_IN_JAR_PATH + " is not found in classpath");
             }
             Path tmpDir = Paths.get(TMP_DIR);
-            Path tmpLib = Files.createTempFile(tmpDir, SHOWER_LIB_PREFIX, EXT);
+            Path tmpLib = Files.createTempFile(tmpDir, BAMBOOTUBE_LIB_PREFIX, EXT);
             tmpLib.toFile().deleteOnExit();
             Files.copy(is, tmpLib, StandardCopyOption.REPLACE_EXISTING);
             System.load(tmpLib.toAbsolutePath().toString());
         } catch (UnsatisfiedLinkError | IOException e) {
-            LOGGER.warn("failed to load native library[{}] from classpath: {}", SHOWER_LIB_IN_JAR_PATH, e.getMessage());
+            LOGGER.warn("failed to load native library[{}] from classpath: {}", BAMBOOTUBE_LIB_IN_JAR_PATH, e.getMessage());
             throw new RuntimeException(e);
         }
     }
 
     private static void loadFromSysProperties() {
         try {
-            System.load(SHOWER_LIB);
+            System.load(BAMBOOTUBE_LIB);
         } catch (UnsatisfiedLinkError e) {
-            LOGGER.info("failed to load native library[{}] from {}: {}", SHOWER_LIB_NAME, SHOWER_LIB, e.getMessage());
+            LOGGER.info("failed to load native library[{}] from {}: {}", BAMBOOTUBE_LIB_NAME, BAMBOOTUBE_LIB, e.getMessage());
             throw new RuntimeException(e);
         }
     }

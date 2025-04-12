@@ -27,7 +27,7 @@ class XDemo(BambooTubeRecordCallback):
 class TestBambooTube:
     # 函数级开始
     def setup_method(self):
-        os.environ["SHOWER_HOME"] = "/home/helly/code/rust/bambootube"
+        os.environ["BAMBOOTUBE_HOME"] = "/home/helly/code/rust/bambootube"
         BambooTube.start()
 
     # 函数级结束

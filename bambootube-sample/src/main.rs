@@ -23,7 +23,7 @@ const AGGREGATE_SQL: &str = r#"
     "#;
 
 pub fn main() {
-    env::set_var("SHOWER_HOME", env::current_dir().unwrap());
+    env::set_var("BAMBOOTUBE_HOME", env::current_dir().unwrap());
     start();
     let (id1, _id2) = init_func();
     exec_with_time_it(|| gen_new_data(id1));
