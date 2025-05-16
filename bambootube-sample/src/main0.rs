@@ -1,63 +1,42 @@
-use shower::{
+use bambootube::{
     def_aggregate, def_incoming, def_mapper_bind_aggregate, def_stream, new_data, start, stop,
     Column, U8Bytes,
 };
 use std::{
-    env, ptr,
-    sync::{
-        atomic::{AtomicI64, Ordering},
-        Arc,
-    },
-    thread,
+    env, ptr, thread,
     time::{Duration, SystemTime},
 };
 
-const BASE: f64 = 1000000f64;
 const LOOP_SIZE: usize = 10000000;
 
 const FILTER_SQL: &str = r#"
-    SELECT demo.f, demo.a, demo.b, demo.c, _sub(_add(demo.d, demo.d), demo.e)
+    SELECT demo.a, demo.b, demo.c, _sub(_add(demo.d, demo.d), demo.e)
     FROM demo
     WHERE (demo.a = 1 AND demo.b = 2) OR (demo.a = 3 AND demo.b = 4)
     LIMIT 10
     "#;
 const AGGREGATE_SQL: &str = r#"
-    select _maxd(stream.a), _mind(stream.a), _sumd(stream.a),
-           _avg(stream.a)
+    select _maxl(stream.a), _minl(stream.a), _suml(stream.a),
+           _maxd(stream.a), _mind(stream.a), _sumd(stream.a),
+           _avg(stream.a), _count(stream.a)
     from stream
     "#;
 
 pub fn main() {
-    env::set_var("SHOWER_HOME", env::current_dir().unwrap());
+    env::set_var("BAMBOOTUBE_HOME", env::current_dir().unwrap());
     start();
-    let sum_store = Arc::new(AtomicI64::new(0));
-    let sum_clone = Arc::clone(&sum_store);
-    let (id1, _id2) = init_func(sum_clone);
+    let (id1, _id2) = init_func();
     exec_with_time_it(|| gen_new_data(id1));
-    let sum = sum_store.load(Ordering::SeqCst);
-    log::info!(
-        "sum: {}s({}ns), latency: {}s({}ns)",
-        sum as f64 / BASE / 1_000_000_000f64,
-        sum,
-        (sum as f64 / BASE / LOOP_SIZE as f64) / 1_000_000_000f64,
-        sum as f64 / BASE / LOOP_SIZE as f64
-    );
     stop();
 }
 
-fn init_func(sum_store: Arc<AtomicI64>) -> (u16, u16) {
+fn init_func() -> (u16, u16) {
     let core_ids = core_affinity::get_core_ids().unwrap();
     core_affinity::set_for_current(core_ids[core_ids.len() - 1]);
     log::info!("thread:{} started", thread::current().name().unwrap());
     if let Some((id1, id2)) = define_records() {
         log::info!("define record: {}/{}", id1, id2);
-        if let Some(aggregate_id) = def_aggregate(
-            AGGREGATE_SQL,
-            #[inline]
-            move |data, size| {
-                func_callback(&sum_store, data, size);
-            },
-        ) {
+        if let Some(aggregate_id) = def_aggregate(AGGREGATE_SQL, |_data, _size| {}) {
             log::info!("define aggregate: {}", aggregate_id);
             if let Some(mapper_id) = def_mapper_bind_aggregate(FILTER_SQL, aggregate_id) {
                 log::info!("define mapper: {}", mapper_id);
@@ -70,17 +49,6 @@ fn init_func(sum_store: Arc<AtomicI64>) -> (u16, u16) {
         }
     }
     (0, 0)
-}
-
-#[inline]
-fn func_callback(sum_store: &Arc<AtomicI64>, _data: *const u8, _size: usize) {
-    let now = now();
-    let timestamp = fetch_f64(_data);
-    //log::info!("data_ptr:{:?}, size: {}", _data, _size);
-    //log::info!("now: {}, timestamp: {}", now, timestamp);
-    let delta = now as f64 - timestamp;
-    //log::info!("delta: {}", delta);
-    sum_store.fetch_add((BASE * delta) as i64, Ordering::SeqCst);
 }
 
 fn gen_new_data(id: u16) {
@@ -138,29 +106,15 @@ fn define_records() -> Option<(u16, u16)> {
     Some((id1, id2))
 }
 
-#[inline]
 fn gen_u8_bytes(id: u16) -> U8Bytes {
     let mut u8array = [0_u8; 512];
     let slice = u8array.as_mut_slice();
-    let now = now();
-    //log::info!("now: {}", now);
     fill_u64(&mut slice[0..8], 1);
     fill_u64(&mut slice[8..16], 2);
     fill_u64(&mut slice[16..24], 3);
     fill_u64(&mut slice[24..32], 4);
     fill_u64(&mut slice[32..40], 5);
-    fill_u64(&mut slice[40..48], now);
-    //let v = fetch_u64(slice.as_ptr());
-    //log::info!("v: {}", v);
     U8Bytes::new_from_vec(id, 512, Vec::from(u8array))
-}
-
-#[inline]
-fn now() -> u64 {
-    SystemTime::now()
-        .duration_since(SystemTime::UNIX_EPOCH)
-        .unwrap()
-        .as_nanos() as u64
 }
 
 pub fn exec_with_time_it<F>(f: F)
@@ -188,16 +142,4 @@ pub(crate) fn fill_u64(slice: &mut [u8], data: u64) {
     let p_val = ptr::addr_of!(*slice);
     let p_u64 = p_val as *mut u64;
     unsafe { *p_u64 = data };
-}
-
-// #[inline]
-// pub(crate) fn fetch_u64(p_val: *const u8) -> u64 {
-//     let p_u64 = p_val as *const u64;
-//     unsafe { *p_u64 }
-// }
-
-#[inline]
-pub(crate) fn fetch_f64(p_val: *const u8) -> f64 {
-    let p_f64 = p_val as *const f64;
-    unsafe { *p_f64 }
 }
