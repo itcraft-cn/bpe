@@ -1,4 +1,4 @@
-use shower::{
+use bambootube::{
     def_aggregate, def_incoming, def_mapper_bind_aggregate, def_stream, new_data, start, stop,
     Column, U8Bytes,
 };
