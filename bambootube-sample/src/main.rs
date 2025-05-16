@@ -28,7 +28,7 @@ const AGGREGATE_SQL: &str = r#"
     "#;
 
 pub fn main() {
-    env::set_var("SHOWER_HOME", env::current_dir().unwrap());
+    env::set_var("BAMBOOTUBE_HOME", env::current_dir().unwrap());
     start();
     let sum_store = Arc::new(AtomicI64::new(0));
     let sum_clone = Arc::clone(&sum_store);
