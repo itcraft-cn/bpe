@@ -27,6 +27,7 @@ impl U8Bytes {
             bytes,
         }
     }
+
     pub fn new_from_vec(id: u16, data_len: usize, vec: Vec<u8>) -> U8Bytes {
         let mut bytes = [0_u8; U8_DATA_MAX_SIZE];
         let slice = vec.as_slice();
@@ -40,6 +41,7 @@ impl U8Bytes {
             bytes,
         }
     }
+
     pub fn new_from_slice(id: u16, data_len: usize, slice: &[u8]) -> U8Bytes {
         let mut bytes = [0_u8; U8_DATA_MAX_SIZE];
         match slice.len().cmp(&U8_DATA_MAX_SIZE) {
@@ -52,14 +54,21 @@ impl U8Bytes {
             bytes,
         }
     }
+
     pub fn id(&self) -> u16 {
         self.id
     }
+
     pub fn data_len(&self) -> usize {
         self.data_len
     }
+
     pub fn bytes(&self) -> &[u8] {
         self.bytes.as_slice()
+    }
+
+    pub fn bytes_mut(&mut self) -> &mut [u8] {
+        self.bytes.as_mut_slice()
     }
 }
 
@@ -100,6 +109,7 @@ impl Column {
             offset: 0,
         }
     }
+
     pub fn new_double(name: &str) -> Column {
         Column {
             name: String::from(name),
@@ -108,6 +118,7 @@ impl Column {
             offset: 0,
         }
     }
+
     pub fn new_string(name: &str, len: usize) -> Column {
         Column {
             name: String::from(name),
@@ -116,6 +127,7 @@ impl Column {
             offset: 0,
         }
     }
+
     pub fn new(name: String, type_idx: u16, size: usize) -> Column {
         Column {
             name,
@@ -124,18 +136,23 @@ impl Column {
             offset: 0,
         }
     }
+
     pub(crate) fn _name(&self) -> &str {
         &self.name
     }
+
     pub(crate) fn data_type(&self) -> &ColumnType {
         &self.data_type
     }
+
     pub(crate) fn _idx(&self) -> u16 {
         self.idx
     }
+
     pub(crate) fn offset(&self) -> usize {
         self.offset
     }
+
     pub(crate) fn _adjust(&mut self, idx: u16, offset: usize) {
         self.idx = idx;
         self.offset = offset;
@@ -220,6 +237,7 @@ impl Record {
             None
         }
     }
+
     pub(crate) fn get_record(id: u16) -> Option<&'static Record> {
         if let Ok(guard) = RECORD_MAP.lock() {
             guard.get(id)
@@ -227,6 +245,7 @@ impl Record {
             None
         }
     }
+
     pub(crate) fn fetch_record_id(name: &str) -> Option<u16> {
         if let Ok(guard) = NAME_MAP.lock() {
             guard.get(&String::from(name)).copied()
@@ -234,6 +253,7 @@ impl Record {
             None
         }
     }
+
     pub(crate) fn fetch_column_id(record_id: u16, column_name: &str) -> Option<&u16> {
         if let Some(record) = Record::get_record(record_id) {
             record.column_id(column_name)
@@ -241,6 +261,7 @@ impl Record {
             None
         }
     }
+
     pub(crate) fn get_column(record_id: u16, column_id: u16) -> Option<&'static Column> {
         if let Some(record) = Record::get_record(record_id) {
             Some(record.column(column_id))
@@ -248,20 +269,25 @@ impl Record {
             None
         }
     }
+
     pub(crate) fn id(&self) -> u16 {
         self.id
     }
+
     pub(crate) fn _record_type(&self) -> &RecordType {
         &self._record_type
     }
-    pub(crate) fn columns(&self) -> &Vec<Column> {
+
+    pub(crate) fn _columns(&self) -> &Vec<Column> {
         &self.columns
     }
+
     pub(crate) fn column_id(&self, column_name: &str) -> Option<&u16> {
         self.columns_map.get(&String::from(column_name))
     }
+
     pub(crate) fn column(&self, column_id: u16) -> &Column {
-        unsafe { self.columns().get_unchecked((column_id - 1) as usize) }
+        unsafe { self.columns.get_unchecked((column_id - 1) as usize) }
     }
 }
 

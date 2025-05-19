@@ -33,7 +33,8 @@ pub fn main() {
     let sum_store = Arc::new(AtomicI64::new(0));
     let sum_clone = Arc::clone(&sum_store);
     let (id1, _id2) = init_func(sum_clone);
-    exec_with_time_it(|| gen_new_data(id1));
+    let mut u8data = gen_u8_bytes(id1);
+    exec_with_time_it(move || gen_new_data(&mut u8data));
     let sum = sum_store.load(Ordering::SeqCst);
     log::info!(
         "sum: {}s({}ns), latency: {}s({}ns)",
@@ -83,8 +84,8 @@ fn func_callback(sum_store: &Arc<AtomicI64>, _data: *const u8, _size: usize) {
     sum_store.fetch_add((BASE * delta) as i64, Ordering::SeqCst);
 }
 
-fn gen_new_data(id: u16) {
-    let u8data = gen_u8_bytes(id);
+fn gen_new_data(u8data: &mut U8Bytes) {
+    update_now(u8data);
     let ret = new_data(&u8data);
     if ret {
         log::debug!("send success");
@@ -156,6 +157,12 @@ fn gen_u8_bytes(id: u16) -> U8Bytes {
 }
 
 #[inline]
+fn update_now(u8data: &mut U8Bytes) {
+    let now = now();
+    fill_u64(&mut u8data.bytes_mut()[40..48], now);
+}
+
+#[inline]
 fn now() -> u64 {
     SystemTime::now()
         .duration_since(SystemTime::UNIX_EPOCH)
@@ -163,9 +170,9 @@ fn now() -> u64 {
         .as_nanos() as u64
 }
 
-pub fn exec_with_time_it<F>(f: F)
+pub fn exec_with_time_it<F>(mut f: F)
 where
-    F: Fn(),
+    F: FnMut(),
 {
     let start = SystemTime::now();
     for _ in 1..=LOOP_SIZE {

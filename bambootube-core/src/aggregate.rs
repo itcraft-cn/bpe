@@ -245,7 +245,6 @@ fn choose_func(
     element: Element,
     field_ref: &mut [u8; 8],
     idx: usize,
-
     aggregate_data_ptr: *mut u8,
     offset: usize,
     data_idx: usize,
