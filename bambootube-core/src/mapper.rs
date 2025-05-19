@@ -12,58 +12,51 @@ use crate::{
     },
     store::{get_vec_size, WrappedArray},
 };
+use globalvar::{def_global_ptr, get_global, get_global_mut};
 use inkwell::execution_engine::JitFunction;
-use lazy_static::lazy_static;
-use sql_parse::ParseOptions;
 use std::{
     alloc::{self, Layout},
     cell::RefCell,
-    sync::Mutex,
 };
 
-lazy_static! {
-    static ref MAPPER_MAP: Mutex<SimpleU16Map> = Mutex::new(SimpleU16Map::new());
-    static ref PARSE_OPTIONS: Mutex<ParseOptions> = Mutex::new(parse_options());
+static mut PTR_MAPPER_MAP: u64 = 0;
+static mut PTR_PARSE_OPTIONS: u64 = 0;
+
+pub(crate) fn init_mapper() {
+    unsafe {
+        PTR_MAPPER_MAP = def_global_ptr(SimpleU16Map::new());
+        PTR_PARSE_OPTIONS = def_global_ptr(parse_options());
+    }
 }
 
 pub(crate) fn define_mapper(sql: &str, func_holder: FnHolder) -> Option<u16> {
-    let options_lock_rs = PARSE_OPTIONS.lock();
-    if let Ok(guard) = options_lock_rs {
-        if let Some(parsed_sql) = parse_select(sql, &guard) {
-            let rs = gen_mapper(parsed_sql);
-            if let Ok(mapper) = rs {
-                let id = mapper.id();
-                let map_lock_rs = MAPPER_MAP.lock();
-                if let Ok(mut guard) = map_lock_rs {
-                    let entry = guard.entry(id);
-                    match entry {
-                        SimpleU16Entry::Exist(_) => {
-                            log::warn!("id {} already exists, sql[{}] is skipped", id, sql);
-                            None
-                        }
-                        SimpleU16Entry::NotExist(_) => {
-                            guard.insert(id, WrappedMapper::new(mapper, func_holder));
-                            Some(id)
-                        }
-                    }
-                } else {
-                    log::warn!("{:?}", map_lock_rs.err());
+    let options = get_global(unsafe { PTR_PARSE_OPTIONS });
+    if let Some(parsed_sql) = parse_select(sql, &options) {
+        let rs = gen_mapper(parsed_sql);
+        if let Ok(mapper) = rs {
+            let id = mapper.id();
+            let mapper_map = get_global_mut::<SimpleU16Map>(unsafe { PTR_MAPPER_MAP });
+            let entry = mapper_map.entry(id);
+            match entry {
+                SimpleU16Entry::Exist(_) => {
+                    log::warn!("id {} already exists, sql[{}] is skipped", id, sql);
                     None
                 }
-            } else {
-                log::warn!(
-                    "fail to create mapper from sql[{}], hit unexpected error: {:?}",
-                    sql,
-                    rs.err().unwrap()
-                );
-                None
+                SimpleU16Entry::NotExist(_) => {
+                    mapper_map.insert(id, WrappedMapper::new(mapper, func_holder));
+                    Some(id)
+                }
             }
         } else {
-            log::warn!("not supported sql statement: [{}]", sql);
+            log::warn!(
+                "fail to create mapper from sql[{}], hit unexpected error: {:?}",
+                sql,
+                rs.err().unwrap()
+            );
             None
         }
     } else {
-        log::warn!("{:?}", options_lock_rs.err());
+        log::warn!("not supported sql statement: [{}]", sql);
         None
     }
 }
@@ -87,11 +80,8 @@ pub(crate) fn call_mapper(array: &WrappedArray, id: u16) {
 }
 
 fn search_mapper(id: u16) -> Option<&'static WrappedMapper> {
-    if let Ok(guard) = MAPPER_MAP.lock() {
-        guard.get(id)
-    } else {
-        None
-    }
+    let mapper_map = get_global::<SimpleU16Map>(unsafe { PTR_MAPPER_MAP });
+    mapper_map.get(id)
 }
 
 fn gen_mapper(parsed_sql: ParsedSql) -> Result<Mapper, ParseSqlError> {

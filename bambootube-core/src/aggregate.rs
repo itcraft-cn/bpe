@@ -12,50 +12,43 @@ use crate::{
         select::parse_select,
     },
 };
-use lazy_static::lazy_static;
-use sql_parse::ParseOptions;
+use globalvar::{def_global_ptr, get_global, get_global_mut};
 use std::{
     alloc::{self, Layout},
     cell::RefCell,
     ptr,
-    sync::Mutex,
 };
 
-lazy_static! {
-    static ref AGGREGATE_MAP: Mutex<SimpleU16Map> = Mutex::new(SimpleU16Map::new());
-    static ref PARSE_OPTIONS: Mutex<ParseOptions> = Mutex::new(parse_options());
-}
+static mut PTR_AGGREGATE_MAP: u64 = 0;
+static mut PTR_PARSE_OPTIONS: u64 = 0;
 
 thread_local! {
     static FIELD_REF :RefCell<[u8;8]>= const { RefCell::new([0_u8; 8]) };
 }
 
+pub(crate) fn init_aggregate() {
+    unsafe {
+        PTR_AGGREGATE_MAP = def_global_ptr(SimpleU16Map::new());
+        PTR_PARSE_OPTIONS = def_global_ptr(parse_options());
+    }
+}
+
 pub(crate) fn define_aggregate(sql: &str, func_holder: FnHolder) -> Option<u16> {
-    let options_lock_rs = PARSE_OPTIONS.lock();
-    if let Ok(guard) = options_lock_rs {
-        if let Some(parsed_sql) = parse_select(sql, &guard) {
-            let rs = gen_aggregate(&parsed_sql);
-            if let Ok(aggregate) = rs {
-                let map_lock_rs = AGGREGATE_MAP.lock();
-                if let Ok(mut guard) = map_lock_rs {
-                    guard.insert(
-                        aggregate.id(),
-                        WrappedAggregate::new(aggregate, func_holder),
-                    );
-                    Some(1)
-                } else {
-                    log::warn!("{:?}", map_lock_rs.err());
-                    None
-                }
-            } else {
-                log::warn!("{:?}", rs.err());
-                None
-            }
+    let options = get_global(unsafe { PTR_PARSE_OPTIONS });
+    if let Some(parsed_sql) = parse_select(sql, &options) {
+        let rs = gen_aggregate(&parsed_sql);
+        if let Ok(aggregate) = rs {
+            let map = get_global_mut::<SimpleU16Map>(unsafe { PTR_AGGREGATE_MAP });
+            map.insert(
+                aggregate.id(),
+                WrappedAggregate::new(aggregate, func_holder),
+            );
+            Some(1)
         } else {
+            log::warn!("{:?}", rs.err());
             None
         }
     } else {
-        log::warn!("{:?}", options_lock_rs.err());
         None
     }
 }
@@ -493,11 +486,8 @@ fn fetch_arg_val(sub_data: *const u8, executor: &Executor, stream: &Record) -> E
 }
 
 pub(crate) fn search_aggregate(id: u16) -> Option<&'static WrappedAggregate> {
-    if let Ok(guard) = AGGREGATE_MAP.lock() {
-        guard.get(id)
-    } else {
-        None
-    }
+    let map = get_global::<SimpleU16Map>(unsafe { PTR_AGGREGATE_MAP });
+    map.get(id)
 }
 
 fn gen_aggregate(parsed_sql: &ParsedSql) -> Result<Aggregate, ParseSqlError> {

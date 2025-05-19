@@ -1,4 +1,5 @@
 use crate::{aux::fetch_ptr, data::Record};
+use globalvar::{def_global_ptr, get_global_mut};
 use inkwell::{
     builder::Builder,
     context::Context,
@@ -7,9 +8,8 @@ use inkwell::{
     types::FunctionType,
     OptimizationLevel,
 };
-use std::{ptr, sync::Mutex};
 
-static LLVM_CTX_STORE: Mutex<u64> = Mutex::new(0);
+static mut PTR_LLVM_CTX_STORE: u64 = 0;
 
 pub(crate) type FetchU64Func = unsafe extern "C" fn(u64, u16, u16) -> u64;
 pub(crate) type FetchI64Func = unsafe extern "C" fn(u64, u16, u16) -> i64;
@@ -89,14 +89,8 @@ impl FuncGenerator<'_> {
 }
 
 pub(crate) fn init_func_generator() {
-    let boxed_context = Box::new(Context::create());
-    let static_context = Box::leak::<'static>(boxed_context);
-    let ctx_ptr = ptr::addr_of_mut!(*static_context);
-    let lock_rs = LLVM_CTX_STORE.lock();
-    if let Ok(mut guard) = lock_rs {
-        *guard = ctx_ptr as u64;
-    } else {
-        panic!("failed to init func generator, {}", lock_rs.err().unwrap());
+    unsafe {
+        PTR_LLVM_CTX_STORE = def_global_ptr(Context::create());
     }
 }
 
@@ -122,17 +116,7 @@ unsafe extern "C" fn fetch_column_f64(data_ptr: u64, record_id: u16, column_id: 
 }
 
 fn get_ctx() -> &'static mut Context {
-    let lock_rs = LLVM_CTX_STORE.lock();
-    if let Ok(guard) = lock_rs {
-        if *guard == 0 {
-            panic!("failed to get llvm context, null pointer");
-        } else {
-            let ctx_ptr = *guard as *mut Context;
-            unsafe { &mut *ctx_ptr }
-        }
-    } else {
-        panic!("failed to get llvm context, {}", lock_rs.err().unwrap());
-    }
+    get_global_mut(unsafe { PTR_LLVM_CTX_STORE })
 }
 
 fn reg_rust_fn<'ctx>(

@@ -1,13 +1,13 @@
 use crate::{
-    aggregate::{call_aggregate, define_aggregate, search_aggregate},
+    aggregate::{call_aggregate, define_aggregate, init_aggregate, search_aggregate},
     cfg::load_config,
-    data::{check_id_in_store, Column, Record, RecordType, U8Bytes},
+    data::{check_id_in_store, init_data, Column, Record, RecordType, U8Bytes},
     ffi::FfiFunc,
     func::FnHolder,
     jit::base::init_func_generator,
     logger::init_logger,
-    mapper::{call_mapper, define_mapper},
-    store::{find_or_insert_array, insert, WrappedArray},
+    mapper::{call_mapper, define_mapper, init_mapper},
+    store::{find_or_insert_array, init_store, insert, WrappedArray},
 };
 use std::sync::Once;
 
@@ -23,6 +23,10 @@ fn actual_start() {
     load_config();
     init_logger();
     init_func_generator();
+    init_data();
+    init_store();
+    init_mapper();
+    init_aggregate();
 }
 
 pub fn stop() {
