@@ -3,7 +3,8 @@
 rm -rf target/wheels/*.whl
 
 # Build core
-cargo build
+#cargo build
+RUSTFLAGS='-Zub-checks=no' cargo build     
 
 # Build java
 cd bambootube4j
