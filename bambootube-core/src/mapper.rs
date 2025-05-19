@@ -14,18 +14,17 @@ use crate::{
 };
 use globalvar::{def_global_ptr, get_global, get_global_mut};
 use inkwell::execution_engine::JitFunction;
-use std::{
-    alloc::{self, Layout},
-    cell::RefCell,
-};
+use std::alloc::{self, Layout};
 
 static mut PTR_MAPPER_MAP: u64 = 0;
 static mut PTR_PARSE_OPTIONS: u64 = 0;
+static mut PTR_VAL_DATA_REF: u64 = 0;
 
 pub(crate) fn init_mapper() {
     unsafe {
         PTR_MAPPER_MAP = def_global_ptr(SimpleU16Map::new());
         PTR_PARSE_OPTIONS = def_global_ptr(parse_options());
+        PTR_VAL_DATA_REF = alloc::alloc(Layout::from_size_align(get_vec_size(), 1).unwrap()) as u64;
     }
 }
 
@@ -116,14 +115,9 @@ fn invoke(
     record: &Record,
     fn_holder: &FnHolder,
 ) {
-    thread_local! {
-        static DATA_REF :RefCell<u64> = RefCell::new(unsafe {alloc::alloc(Layout::from_size_align(get_vec_size(), 1).unwrap())} as u64);
-    };
-    DATA_REF.with_borrow(|u8_ptr_val| {
-        let u8_ptr = *u8_ptr_val as *mut u8;
-        let size = loop_filter(array, mapper, id, record, u8_ptr);
-        callback(fn_holder, u8_ptr, size);
-    })
+    let u8_ptr = unsafe { PTR_VAL_DATA_REF } as *mut u8;
+    let size = loop_filter(array, mapper, id, record, u8_ptr);
+    callback(fn_holder, u8_ptr, size);
 }
 
 fn loop_filter(

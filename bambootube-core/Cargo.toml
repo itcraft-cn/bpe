@@ -41,7 +41,6 @@ tikv-jemalloc-sys = { version = "0.6.0+5.3.0-1-ge13ca993e8ccb9ba9847cc330696e028
 tikv-jemallocator = "0.6.0"
 tikv-jemalloc-ctl = "0.6.0"
 inkwell = { version = "0.5.0", features = ["llvm14-0"] }
-lazy_static = "1.5.0"
 globalvar = "0.2.0"
 
 [dev-dependencies]

@@ -15,21 +15,21 @@ use crate::{
 use globalvar::{def_global_ptr, get_global, get_global_mut};
 use std::{
     alloc::{self, Layout},
-    cell::RefCell,
     ptr,
 };
 
 static mut PTR_AGGREGATE_MAP: u64 = 0;
 static mut PTR_PARSE_OPTIONS: u64 = 0;
-
-thread_local! {
-    static FIELD_REF :RefCell<[u8;8]>= const { RefCell::new([0_u8; 8]) };
-}
+static mut PTR_FIELD_REF: u64 = 0;
+static mut PTR_VAL_DATA_REF: u64 = 0;
 
 pub(crate) fn init_aggregate() {
     unsafe {
         PTR_AGGREGATE_MAP = def_global_ptr(SimpleU16Map::new());
         PTR_PARSE_OPTIONS = def_global_ptr(parse_options());
+        PTR_FIELD_REF = def_global_ptr([0_u8; 8]);
+        PTR_VAL_DATA_REF =
+            alloc::alloc(Layout::from_size_align(U8_DATA_MAX_SIZE, 1).unwrap()) as u64;
     }
 }
 
@@ -55,22 +55,17 @@ pub(crate) fn define_aggregate(sql: &str, func_holder: FnHolder) -> Option<u16> 
 
 #[inline]
 pub(crate) fn call_aggregate(wrapped: &WrappedAggregate, u8_ptr: *const u8, size: usize) {
-    thread_local! {
-        static DATA_REF :RefCell<u64>= RefCell::new(unsafe {alloc::alloc(Layout::from_size_align(U8_DATA_MAX_SIZE, 1).unwrap())} as u64);
-    };
     let id = wrapped.aggregate().stream_id();
     if let Some(stream) = Record::get_record(id) {
-        DATA_REF.with_borrow(|aggregate_data_ptr_val| {
-            let aggregate_data_ptr = *aggregate_data_ptr_val as *mut u8;
-            call_with_threadlocal(aggregate_data_ptr, wrapped, u8_ptr, stream, size);
-        });
+        let aggregate_data_ptr = unsafe { PTR_VAL_DATA_REF } as *mut u8;
+        call_with_aggregate_data(aggregate_data_ptr, wrapped, u8_ptr, stream, size);
     } else {
         log::warn!("failed to find stream by id[{}]", id);
     }
 }
 
 #[inline]
-fn call_with_threadlocal(
+fn call_with_aggregate_data(
     aggregate_data_ptr: *mut u8,
     wrapped: &WrappedAggregate,
     u8_ptr: *const u8,
@@ -85,9 +80,8 @@ fn call_with_threadlocal(
 
 #[inline]
 fn init_data(aggregate_data_ptr: *mut u8, wrapped: &WrappedAggregate, stream: &Record) -> bool {
-    FIELD_REF.with_borrow_mut(|field_ref| {
-        field_ref.fill(0_u8);
-    });
+    let field_ref = get_global_mut::<[u8; 8]>(unsafe { PTR_FIELD_REF });
+    field_ref.fill(0_u8);
     for (idx, executor) in wrapped.aggregate().executors().iter().enumerate() {
         let rs = setup_init_val(aggregate_data_ptr, idx, executor, stream);
         if rs.is_err() {
@@ -175,19 +169,18 @@ fn loop_compute(
     wrapped: &WrappedAggregate,
     stream: &Record,
 ) {
-    FIELD_REF.with_borrow_mut(|field_ref| {
-        for (idx, executor) in wrapped.aggregate().executors().iter().enumerate() {
-            compute(
-                idx,
-                executor,
-                aggregate_data_ptr,
-                field_ref,
-                sub_data,
-                data_idx,
-                stream,
-            );
-        }
-    });
+    let field_ref = get_global_mut::<[u8; 8]>(unsafe { PTR_FIELD_REF });
+    for (idx, executor) in wrapped.aggregate().executors().iter().enumerate() {
+        compute(
+            idx,
+            executor,
+            aggregate_data_ptr,
+            field_ref,
+            sub_data,
+            data_idx,
+            stream,
+        );
+    }
 }
 
 #[inline]
