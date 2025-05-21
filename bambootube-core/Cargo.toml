@@ -33,13 +33,6 @@ chrono = "0.4.31"
 sql-parse = "0.24.0"
 strum = "0.27.1"
 strum_macros = "0.27.1"
-tikv-jemalloc-sys = { version = "0.6.0+5.3.0-1-ge13ca993e8ccb9ba9847cc330696e02839f328f7", features = [
-    "stats",
-    "profiling",
-    "unprefixed_malloc_on_supported_platforms",
-] }
-tikv-jemallocator = "0.6.0"
-tikv-jemalloc-ctl = "0.6.0"
 inkwell = { version = "0.5.0", features = ["llvm14-0"] }
 globalvar = "0.2.0"
 

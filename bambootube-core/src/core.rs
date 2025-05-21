@@ -11,9 +11,6 @@ use crate::{
 };
 use std::sync::Once;
 
-#[global_allocator]
-static ALLOC: tikv_jemallocator::Jemalloc = tikv_jemallocator::Jemalloc;
-
 pub fn start() {
     static START: Once = Once::new();
     START.call_once(actual_start);
