@@ -1,9 +1,22 @@
 plugins {
     id 'java'
+    id 'maven-publish'
 }
 
 sourceCompatibility = 1.8
 version = '0.2.0-dev'
+
+publishing {
+    publications {
+        maven(MavenPublication) {
+            groupId = 'com.erayt.bambootube'
+            artifactId = 'bambootube4j'
+            version = '0.2.0-dev'
+
+            from components.java
+        }
+    }
+}
 
 repositories {
     mavenCentral()
