@@ -8,7 +8,7 @@ RUSTFLAGS='-Zub-checks=no' cargo build
 
 # Build java
 cd bambootube4j
-gradle build -x test
+mvnd package -Dmaven.test.skip=true
 cd ..
 
 # Build python

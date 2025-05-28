@@ -7,7 +7,7 @@ RUSTFLAGS='-lLLVM-14' cargo build --release
 
 # Build java
 cd bambootube4j
-gradle build -x test
+mvnd package -Dmaven.test.skip=true
 cd ..
 
 # Build python
