@@ -22,16 +22,15 @@ import java.util.concurrent.TimeUnit;
  */
 
 @State(Scope.Benchmark)
-@Fork(value = 3)
+@Fork(value = 3, jvmArgsAppend = "-DbambootubeLib=/home/helly/code/rust/bambootube/target/release/libbambootube4j.so")
 @Threads(value = 1)
 @Warmup(iterations = 10, time = 1)
-@Measurement(iterations = 20, time = 1)
-@OutputTimeUnit(TimeUnit.MICROSECONDS)
-// TODO: need to fix it
+@Measurement(iterations = 5, time = 100, timeUnit = TimeUnit.MILLISECONDS)
+@OutputTimeUnit(TimeUnit.MILLISECONDS)
 public class BambooTubeBenchmark {
 
     private static final String SQL = "select demo.a, demo.b, demo.c, demo.d from demo limit 10";
-    private static final String SQL2 = "select _suml(stream.a) from stream";
+    private static final String SQL2 = "select _suml(stream.a), _suml(stream.b), _sumd(stream.c) from stream";
 
     private static final SimpleData DATA = new SimpleData(1, 2L, 3.45D, "hello");
 
