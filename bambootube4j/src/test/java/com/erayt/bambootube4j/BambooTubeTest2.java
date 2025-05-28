@@ -16,7 +16,7 @@ public class BambooTubeTest2 {
     private static final Logger LOGGER = LoggerFactory.getLogger(BambooTubeTest2.class);
 
     private static final String SQL = "select demo.a, demo.b, demo.c, demo.d from demo limit 10";
-    private static final String SQL2 = "select _suml(stream.a) from stream";
+    private static final String SQL2 = "select _suml(stream.a), _suml(stream.b), _sumd(stream.c) from stream";
 
     @Test
     public void test() {
@@ -36,11 +36,15 @@ public class BambooTubeTest2 {
         if (recordId == -1) {
             LOGGER.warn("failed to def record");
             return;
+        } else {
+            LOGGER.info("recordId={}", recordId);
         }
         int recordId2 = JavaBambooTube.defStream("stream", list2);
         if (recordId2 == -1) {
             LOGGER.warn("failed to def record");
             return;
+        } else {
+            LOGGER.info("recordId={}", recordId2);
         }
         int aggregateId = JavaBambooTube.defAggregate(SQL2, (data, size) -> {
             for (int i = 0; i < size; i++) {
@@ -52,17 +56,25 @@ public class BambooTubeTest2 {
         if (aggregateId == -1) {
             LOGGER.warn("failed to def aggregate");
             return;
+        } else {
+            LOGGER.info("aggregateId={}", aggregateId);
         }
         int mapperId = JavaBambooTube.defMapperBindAggregate(SQL, aggregateId);
         if (mapperId == -1) {
             LOGGER.warn("failed to def mapper");
             return;
+        } else {
+            LOGGER.info("mapperId={}", mapperId);
         }
         JavaBambooTube.regConvert(recordId, converter);
         for (int i = 0; i < 100; i++) {
-            JavaBambooTube.newData(recordId, new SimpleData(i, i + 1, i + 0.2D, Integer.toHexString(i)));
+            JavaBambooTube.newData(recordId, newData(i));
         }
         JavaBambooTube.stop();
+    }
+
+    private SimpleData newData(int i) {
+        return new SimpleData(i, i + 1, i + 0.2D, Integer.toHexString(i));
     }
 
 }

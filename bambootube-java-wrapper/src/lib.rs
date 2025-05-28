@@ -1,3 +1,4 @@
+use bambootube::{Column, FfiFunc, U8Bytes};
 use jni::{
     objects::{
         GlobalRef, JByteArray, JClass, JIntArray, JObject, JObjectArray, JPrimitiveArray, JString,
@@ -6,43 +7,30 @@ use jni::{
     sys::{jboolean, jint},
     JNIEnv, JavaVM,
 };
-use bambootube::{Column, FfiFunc, U8Bytes};
-use std::sync::Once;
-
-static mut OPT_GLOBAL_REF: Option<Vec<GlobalRef>> = None;
+use std::{slice, sync::Once};
 
 #[no_mangle]
 pub extern "system" fn Java_com_erayt_bambootube4j_BambooTube_start<'local>(
     _env: JNIEnv<'local>,
-    // This is the class that owns our static method. It's not going to be used,
-    // but still must be present to match the expected signature of a static
-    // native method.
     _class: JClass<'local>,
-) {
+) -> jboolean {
     static START: Once = Once::new();
-    START.call_once(|| unsafe {
-        OPT_GLOBAL_REF.replace(vec![]);
-    });
-    bambootube::start();
+    START.call_once(|| bambootube::start());
+    jboolean::from(true)
 }
 
 #[no_mangle]
 pub extern "system" fn Java_com_erayt_bambootube4j_BambooTube_stop<'local>(
     _env: JNIEnv<'local>,
-    // This is the class that owns our static method. It's not going to be used,
-    // but still must be present to match the expected signature of a static
-    // native method.
     _class: JClass<'local>,
 ) {
-    bambootube::stop()
+    static STOP: Once = Once::new();
+    STOP.call_once(|| bambootube::stop());
 }
 
 #[no_mangle]
 pub extern "system" fn Java_com_erayt_bambootube4j_BambooTube_defIncoming<'local>(
     mut env: JNIEnv<'local>,
-    // This is the class that owns our static method. It's not going to be used,
-    // but still must be present to match the expected signature of a static
-    // native method.
     _class: JClass<'local>,
     j_name: JString<'local>,
     j_names: JObjectArray<'local>,
@@ -62,9 +50,6 @@ pub extern "system" fn Java_com_erayt_bambootube4j_BambooTube_defIncoming<'local
 #[no_mangle]
 pub extern "system" fn Java_com_erayt_bambootube4j_BambooTube_defStream<'local>(
     mut env: JNIEnv<'local>,
-    // This is the class that owns our static method. It's not going to be used,
-    // but still must be present to match the expected signature of a static
-    // native method.
     _class: JClass<'local>,
     j_name: JString<'local>,
     j_names: JObjectArray<'local>,
@@ -127,9 +112,6 @@ where
 #[no_mangle]
 pub extern "system" fn Java_com_erayt_bambootube4j_BambooTube_newData<'local>(
     env: JNIEnv<'local>,
-    // This is the class that owns our static method. It's not going to be used,
-    // but still must be present to match the expected signature of a static
-    // native method.
     _class: JClass<'local>,
     j_record_id: jint,
     j_bdata: JByteArray<'local>,
@@ -143,9 +125,6 @@ pub extern "system" fn Java_com_erayt_bambootube4j_BambooTube_newData<'local>(
 #[no_mangle]
 pub extern "system" fn Java_com_erayt_bambootube4j_BambooTube_defMapper<'local>(
     env: JNIEnv<'local>,
-    // This is the class that owns our static method. It's not going to be used,
-    // but still must be present to match the expected signature of a static
-    // native method.
     _class: JClass<'local>,
     j_sql: JString<'local>,
     j_callback: JObject<'local>,
@@ -156,9 +135,6 @@ pub extern "system" fn Java_com_erayt_bambootube4j_BambooTube_defMapper<'local>(
 #[no_mangle]
 pub extern "system" fn Java_com_erayt_bambootube4j_BambooTube_defMapperBindAggregate<'local>(
     env: JNIEnv<'local>,
-    // This is the class that owns our static method. It's not going to be used,
-    // but still must be present to match the expected signature of a static
-    // native method.
     _class: JClass<'local>,
     j_sql: JString<'local>,
     j_aggregate: jint,
@@ -180,9 +156,6 @@ pub extern "system" fn Java_com_erayt_bambootube4j_BambooTube_defMapperBindAggre
 #[no_mangle]
 pub extern "system" fn Java_com_erayt_bambootube4j_BambooTube_defAggregate<'local>(
     env: JNIEnv<'local>,
-    // This is the class that owns our static method. It's not going to be used,
-    // but still must be present to match the expected signature of a static
-    // native method.
     _class: JClass<'local>,
     j_sql: JString<'local>,
     j_callback: JObject<'local>,
@@ -249,10 +222,13 @@ struct JavaFfiFunc {
 }
 impl FfiFunc for JavaFfiFunc {
     fn callback(&self, data_ptr: *const u8, size: usize) {
-        /*
         let rs = self.vm.get_env();
         if let Ok(mut env) = rs {
-            let array = conv_array(&env, data, size);
+            let data = unsafe {
+                let array_ptr = data_ptr as *const [u8; 512];
+                slice::from_raw_parts(array_ptr, size)
+            };
+            let array = conv_array(&env, data);
             let param1 = JValueGen::Object(&array as &JObject);
             let param2 = JValueGen::Int(size as i32);
             let rs = env.call_method(
@@ -265,7 +241,6 @@ impl FfiFunc for JavaFfiFunc {
                 log::warn!("call_method failed: {:?}", rs.err().unwrap());
             }
         }
-         */
     }
 }
 

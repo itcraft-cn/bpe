@@ -1,7 +1,7 @@
 [workspace]
 members = [
     "bambootube-core",
-    #"bambootube-java-wrapper",
+    "bambootube-java-wrapper",
     #"bambootube-py-wrapper",
     "bambootube-sample"
 ]
