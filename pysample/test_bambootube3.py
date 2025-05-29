@@ -1,16 +1,6 @@
-import os, sys
-
-sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
-sys.path.insert(
-    0, os.path.join(os.path.dirname(__file__), "../lib/python3.11/site-packages")
-)
-sys.path.insert(
-    0, os.path.join(os.path.dirname(__file__), "../lib64/python3.11/site-packages")
-)
-
+import os
 from pybambootube.bambootube import BambooTube, BambooTubeRecordCallback
 from time import sleep
-import pytest
 
 SQL = "select demo.a from demo limit 10"
 
@@ -51,4 +41,7 @@ class TestBambooTube:
 
 
 if __name__ == "__main__":
-    pytest.main()
+    a = TestBambooTube()
+    a.setup_method()
+    a.test()
+    a.teardown_method()

@@ -1,5 +1,9 @@
 from .bambootube4py import *
 
+__author__ = """Guo Zheyong"""
+__email__ = 'guozheyong@erayt.com'
+__version__ = '0.2.0'
+
 __all__ = (
     "start",
     "stop",

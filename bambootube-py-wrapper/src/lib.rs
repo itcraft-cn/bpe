@@ -1,5 +1,7 @@
-use pyo3::prelude::*;
+use std::slice;
+
 use bambootube::{Column, FfiFunc, U8Bytes};
+use pyo3::prelude::*;
 
 #[pyfunction]
 #[allow(dead_code)]
@@ -141,7 +143,11 @@ struct PythonFfiFunc {
 impl FfiFunc for PythonFfiFunc {
     fn callback(&self, data_ptr: *const u8, size: usize) {
         Python::with_gil(|py| {
-            //call_py_func(py, &self.callback, data);
+            let data = unsafe {
+                let array_ptr = data_ptr as *const [u8; 512];
+                slice::from_raw_parts(array_ptr, size)
+            };
+            call_py_func(py, &self.callback, data);
         })
     }
 }

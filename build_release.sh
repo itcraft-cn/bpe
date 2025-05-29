@@ -18,9 +18,10 @@ deactivate
 cd ..
 
 # Build python wrapper
-whl_file_name=$(ls target/wheels/bambootube4py-*)
-cd pybambootube
-source bin/activate
-pip install ../$whl_file_name --force-reinstall
-deactivate
-cd ..
+#whl_file_name=$(ls target/wheels/bambootube4py-*)
+#cd pybambootube
+#source bin/activate
+#pip install ../$whl_file_name --force-reinstall
+#deactivate
+#cd ..
+
