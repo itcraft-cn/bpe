@@ -32,6 +32,7 @@ public class BambooTubeSample {
 
     public static void main(String[] args) {
         JavaBambooTube.start();
+        define();
         waitCmd();
         JavaBambooTube.stop();
     }
@@ -65,37 +66,6 @@ public class BambooTubeSample {
     }
 
     private static void sendData() {
-        List<ColumnDefine> list = new ArrayList<>();
-        list.add(ColumnDefine.createLong("a"));
-        list.add(ColumnDefine.createLong("b"));
-        list.add(ColumnDefine.createDouble("c"));
-        list.add(ColumnDefine.createString("d", 16));
-        List<ColumnDefine> list2 = new ArrayList<>();
-        list2.add(ColumnDefine.createLong("a"));
-        list2.add(ColumnDefine.createLong("b"));
-        list2.add(ColumnDefine.createDouble("c"));
-        list2.add(ColumnDefine.createString("d", 16));
-        int recordId = JavaBambooTube.defIncoming("demo", list);
-        if (recordId == -1) {
-            LOGGER.warn("failed to def record");
-            return;
-        }
-        int recordId2 = JavaBambooTube.defStream("stream", list2);
-        if (recordId2 == -1) {
-            LOGGER.warn("failed to def stream");
-            return;
-        }
-        int aggregateId = JavaBambooTube.defAggregate(SQL2, BambooTubeSample::listenData);
-        if (aggregateId == -1) {
-            LOGGER.warn("failed to def aggregate");
-            return;
-        }
-        int mapperId = JavaBambooTube.defMapperBindAggregate(SQL, aggregateId);
-        if (mapperId == -1) {
-            LOGGER.warn("failed to def mapper");
-            return;
-        }
-        JavaBambooTube.regConvert(recordId, CONVERTER);
         long start = System.nanoTime();
         boolean success;
         for (int i = 0; i < LOOP_SIZE; i++) {
@@ -114,5 +84,39 @@ public class BambooTubeSample {
         LOGGER.info("output: sum1={}", DATA1_SUM.get());
         LOGGER.info("output: sum2={}", DATA2_SUM.get());
         LOGGER.info("output: sum3={}", DATA3_SUM.get());
+    }
+
+    private static void define() {
+        List<ColumnDefine> list = new ArrayList<>();
+        list.add(ColumnDefine.createLong("a"));
+        list.add(ColumnDefine.createLong("b"));
+        list.add(ColumnDefine.createDouble("c"));
+        list.add(ColumnDefine.createString("d", 16));
+        List<ColumnDefine> list2 = new ArrayList<>();
+        list2.add(ColumnDefine.createLong("a"));
+        list2.add(ColumnDefine.createLong("b"));
+        list2.add(ColumnDefine.createDouble("c"));
+        list2.add(ColumnDefine.createString("d", 16));
+        int recordId = JavaBambooTube.defIncoming("demo", list);
+        if (recordId == -1) {
+            LOGGER.warn("failed to def record");
+            throw new RuntimeException("failed to def record");
+        }
+        int recordId2 = JavaBambooTube.defStream("stream", list2);
+        if (recordId2 == -1) {
+            LOGGER.warn("failed to def stream");
+            throw new RuntimeException("failed to def stream");
+        }
+        int aggregateId = JavaBambooTube.defAggregate(SQL2, BambooTubeSample::listenData);
+        if (aggregateId == -1) {
+            LOGGER.warn("failed to def aggregate");
+            throw new RuntimeException("failed to def aggregate");
+        }
+        int mapperId = JavaBambooTube.defMapperBindAggregate(SQL, aggregateId);
+        if (mapperId == -1) {
+            LOGGER.warn("failed to def mapper");
+            throw new RuntimeException("failed to def mapper");
+        }
+        JavaBambooTube.regConvert(recordId, CONVERTER);
     }
 }

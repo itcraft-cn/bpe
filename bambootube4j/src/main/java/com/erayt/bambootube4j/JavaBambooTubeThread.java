@@ -31,7 +31,7 @@ class JavaBambooTubeThread {
 
     private void runBambooTube() {
         MessagePassingQueue.Consumer<WrappedData<?>> dataConsumer = this::consumeData;
-        MessagePassingQueue.WaitStrategy waitStrategy = (counter) -> counter + 1;
+        MessagePassingQueue.WaitStrategy waitStrategy = new AdaptiveWaitStrategy();
         MessagePassingQueue.ExitCondition exitCondition = active::get;
         while (active.get()) {
             queue.drain(dataConsumer, waitStrategy, exitCondition);
