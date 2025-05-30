@@ -1,8 +1,12 @@
 package com.erayt.bambootube4j;
 
-class BambooTube {
+import cn.itcraft.nativeloader.NativeLoader;
+import cn.itcraft.nativeloader.SimpleLibInfo;
+
+final class BambooTube {
+
     static {
-        NativeLoader.load();
+        NativeLoader.load(new SimpleLibInfo("bambootube4j"));
     }
 
     native static boolean start();
