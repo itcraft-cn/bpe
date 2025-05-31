@@ -53,7 +53,8 @@ public class JavaBambooTube {
 
     public static <T> NewDataResult newDataSync(int id, T data) {
         try {
-            return newDataAsync(id, data).get(TIMEOUT, TimeUnit.MILLISECONDS) ? NewDataResult.SUCCESSFUL : NewDataResult.FAILURE;
+            return newDataAsync(id, data).get(TIMEOUT, TimeUnit.MILLISECONDS)
+                   ? NewDataResult.SUCCESSFUL : NewDataResult.FAILURE;
         } catch (InterruptedException e) {
             LOGGER.warn("interrupted: {}", e.getMessage());
             return NewDataResult.INTERRUPTED;
@@ -76,6 +77,11 @@ public class JavaBambooTube {
     @SuppressWarnings("unchecked")
     static <T> boolean newData(int id, T data) {
         return BambooTube.newData(id, ((ByteConverter<T>) CONVERTERS[id]).convert(data));
+    }
+
+    @SuppressWarnings("unchecked")
+    static <T> T convert(int id, byte[] data, int offset) {
+        return ((ByteConverter<T>) CONVERTERS[id]).convert(data, offset);
     }
 
     public static int defMapper(String sql, BambooTubeCallback callback) {
