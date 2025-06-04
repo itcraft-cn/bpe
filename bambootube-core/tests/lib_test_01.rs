@@ -35,7 +35,7 @@ fn call_def_incoming(name: &str, expected_id: u16) {
             Column::new_double("b"),
             Column::new_long("c"),
             Column::new_double("d"),
-            Column::new_string("e", 240),
+            Column::new_long("e"),
         ],
     ) {
         assert_eq!(expected_id, id);

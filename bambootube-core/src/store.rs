@@ -119,7 +119,7 @@ mod tests {
         test_init();
         let mut map = SimpleU16Map::new();
         map.entry(1)
-            .or_insert_with(&mut map, || WrappedArray::new(1));
+            .or_insert_with(&mut map, || WrappedArray::new(512));
         if let Some(array) = map.get_mut::<WrappedArray>(1) {
             log::info!("{:?}", array.walker());
             for _ in 0..100 {

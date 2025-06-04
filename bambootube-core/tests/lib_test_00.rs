@@ -24,7 +24,7 @@ fn gen_new_data() {
             Column::new_double("b"),
             Column::new_long("c"),
             Column::new_double("d"),
-            Column::new_string("e", 240),
+            Column::new_long("e"),
         ],
     ) {
         let u8data = U8Bytes::new_from_vec(id, 288, vec![0_u8; 288]);

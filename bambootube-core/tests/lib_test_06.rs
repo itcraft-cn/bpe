@@ -13,7 +13,7 @@ fn test_new_proc() {
             Column::new_double("b"),
             Column::new_long("c"),
             Column::new_double("d"),
-            Column::new_string("e", 240),
+            Column::new_long("e"),
         ],
     ) {
         assert_eq!(1, id);

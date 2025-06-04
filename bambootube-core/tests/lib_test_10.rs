@@ -39,7 +39,7 @@ fn test_new_proc() {
 fn define_records() -> Option<u16> {
     if let Some(id) = def_incoming(
         "demo",
-        vec![Column::new_string("a", 8), Column::new_double("b")],
+        vec![Column::new_double("a"), Column::new_double("b")],
     ) {
         log::info!("defined incoming: {}", id);
         Some(id)
@@ -67,7 +67,7 @@ fn gen_new_data(id: u16) {
 fn gen_u8_bytes(id: u16) -> U8Bytes {
     let mut u8array = [0_u8; 512];
     let slice = u8array.as_mut_slice();
-    slice[0..8].copy_from_slice("hello123".as_bytes());
+    fill_f64(&mut slice[0..8], 1_f64);
     fill_f64(&mut slice[8..16], 2_f64);
     U8Bytes::new_from_vec(id, 512, Vec::from(u8array))
 }

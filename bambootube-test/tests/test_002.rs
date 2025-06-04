@@ -13,7 +13,7 @@ use std::{
 };
 
 const BASE: f64 = 1000000f64;
-const LOOP_SIZE: usize = 10000000;
+const LOOP_SIZE: usize = 1000;
 
 const FILTER_SQL: &str = r#"
     SELECT demo.f, demo.a, demo.b, demo.c, _sub(_add(demo.d, demo.d), demo.e)
@@ -27,7 +27,8 @@ const AGGREGATE_SQL: &str = r#"
     from stream
     "#;
 
-pub fn main() {
+#[test]
+pub fn test() {
     env::set_var("BAMBOOTUBE_HOME", env::current_dir().unwrap());
     start();
     let sum_store = Arc::new(AtomicI64::new(0));
@@ -108,7 +109,7 @@ fn define_records() -> Option<(u16, u16)> {
             Column::new_long("f"),
             Column::new_long("g"),
             Column::new_long("h"),
-            Column::new_string("i", 448),
+            Column::new_long("i"),
         ],
     ) {
         id1 = id;

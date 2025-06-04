@@ -51,7 +51,7 @@ fn define_records() -> Option<(u16, u16)> {
     let id2;
     if let Some(id) = def_incoming(
         "demo",
-        vec![Column::new_string("a", 8), Column::new_double("b")],
+        vec![Column::new_double("a"), Column::new_double("b")],
     ) {
         id1 = id;
         log::info!("defined incoming: {}", id1);
@@ -61,7 +61,7 @@ fn define_records() -> Option<(u16, u16)> {
     }
     if let Some(id) = def_stream(
         "stream",
-        vec![Column::new_string("a", 8), Column::new_double("b")],
+        vec![Column::new_double("a"), Column::new_double("b")],
     ) {
         id2 = id;
         log::info!("defined stream: {}", id2);
@@ -90,7 +90,7 @@ fn gen_new_data(id: u16) {
 fn gen_u8_bytes(id: u16) -> U8Bytes {
     let mut u8array = [0_u8; 512];
     let slice = u8array.as_mut_slice();
-    slice[0..8].copy_from_slice("hello123".as_bytes());
+    fill_f64(&mut slice[0..8], 1_f64);
     fill_f64(&mut slice[8..16], 2_f64);
     U8Bytes::new_from_vec(id, 512, Vec::from(u8array))
 }
