@@ -20,11 +20,11 @@ where
     if let Some(ast) = ast_opt {
         let opt = f(ast);
         if opt.is_none() {
-            log::warn!("failed to parse sql [{}]", sql);
+            log::warn!("failed to parse sql [{sql}]");
         }
         opt
     } else {
-        log::warn!("failed to parse sql [{}]", sql);
+        log::warn!("failed to parse sql [{sql}]");
         None
     }
 }

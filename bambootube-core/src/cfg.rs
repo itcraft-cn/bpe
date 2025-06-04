@@ -62,7 +62,7 @@ fn fetch_base_dir() -> String {
     if let Ok(path) = env::var(BAMBOOTUBE_ENV_HOME_KEY) {
         path
     } else if let Ok(dir) = env::current_dir() {
-        format!("{:?}", dir)
+        format!("{dir:?}")
     } else {
         String::from(".")
     }

@@ -48,13 +48,13 @@ fn conv_as_executor(
                         return Err(rs.err().unwrap());
                     }
                 } else {
-                    let err_msg = format!("unknown func: {:?}", func_name);
-                    log::warn!("{}", err_msg);
+                    let err_msg = format!("unknown func: {func_name:?}");
+                    log::warn!("{err_msg}");
                     return Err(ParseSqlError::new(err_msg));
                 }
             } else {
-                let err_msg = format!("unknown func: {:?}", func_name);
-                log::warn!("{}", err_msg);
+                let err_msg = format!("unknown func: {func_name:?}");
+                log::warn!("{err_msg}");
                 return Err(ParseSqlError::new(err_msg));
             }
         }
@@ -79,8 +79,7 @@ fn parse_args_fetchers(
         });
     if hit_error {
         Err(ParseSqlError::new(format!(
-            "failed to parse args: {:?}",
-            args
+            "failed to parse args: {args:?}"
         )))
     } else {
         Ok(args_fetchers)

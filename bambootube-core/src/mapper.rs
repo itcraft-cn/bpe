@@ -30,7 +30,7 @@ pub(crate) fn init_mapper() {
 
 pub(crate) fn define_mapper(sql: &str, func_holder: FnHolder) -> Option<u16> {
     let options = get_global(unsafe { PTR_PARSE_OPTIONS });
-    if let Some(parsed_sql) = parse_select(sql, &options) {
+    if let Some(parsed_sql) = parse_select(sql, options) {
         let rs = gen_mapper(parsed_sql);
         if let Ok(mapper) = rs {
             let id = mapper.id();
@@ -38,7 +38,7 @@ pub(crate) fn define_mapper(sql: &str, func_holder: FnHolder) -> Option<u16> {
             let entry = mapper_map.entry(id);
             match entry {
                 SimpleU16Entry::Exist(_) => {
-                    log::warn!("id {} already exists, sql[{}] is skipped", id, sql);
+                    log::warn!("id {id} already exists, sql[{sql}] is skipped");
                     None
                 }
                 SimpleU16Entry::NotExist(_) => {
@@ -55,7 +55,7 @@ pub(crate) fn define_mapper(sql: &str, func_holder: FnHolder) -> Option<u16> {
             None
         }
     } else {
-        log::warn!("not supported sql statement: [{}]", sql);
+        log::warn!("not supported sql statement: [{sql}]");
         None
     }
 }
@@ -138,18 +138,18 @@ fn loop_filter(
         let position = (walker - U8_DATA_MAX_SIZE - idx * U8_DATA_MAX_SIZE) & mask;
         let sub_data_ptr = array.sub_data(position);
         if unsafe { mapper.filter().call(u64ptr) } {
-            //log::info!("position: {}", position);
+            //log::info!("position: {position}");
             let adjusted = unsafe { u8_ptr.add(offset) };
             mapper.fetch(id, u64ptr, record, position, sub_data_ptr, adjusted);
             n += 1;
             offset += n * U8_DATA_MAX_SIZE;
             if n == mapper.limit() {
-                //log::info!("quit, hit limit: {}", n);
+                //log::info!("quit, hit limit: {n}");
                 break;
             }
         }
         if idx == max_idx {
-            //log::info!("quit, max idx: {}", idx);
+            //log::info!("quit, max idx: {idx}");
             break;
         } else {
             idx += 1;

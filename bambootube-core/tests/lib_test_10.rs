@@ -19,14 +19,14 @@ fn test_new_proc() {
     start();
     if let Some(id) = define_records() {
         if let Some(id) = def_mapper(FILTER_SQL, |data, size| {
-            log::info!("fetched data: {}", size);
+            log::info!("fetched data: {size}");
             for idx in 0..size {
                 unsafe {
                     log::info!("b:{}", fetch_ptr::<f64>(data.add(idx * 512 + 8)));
                 }
             }
         }) {
-            log::warn!("def_mapper[{}] success", id);
+            log::warn!("def_mapper[{id}] success");
         } else {
             log::warn!("def_mapper failed");
             return;
@@ -41,7 +41,7 @@ fn define_records() -> Option<u16> {
         "demo",
         vec![Column::new_double("a"), Column::new_double("b")],
     ) {
-        log::info!("defined incoming: {}", id);
+        log::info!("defined incoming: {id}");
         Some(id)
     } else {
         log::warn!("failed to define incoming record");

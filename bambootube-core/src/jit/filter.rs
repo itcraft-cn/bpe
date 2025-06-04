@@ -17,7 +17,7 @@ pub(crate) fn gen_select_filter_func<'ctx>(
     let bool_type = func_generator.context.bool_type();
     let fn_type = bool_type.fn_type(&[i64_type.into()], false);
     let func_name = &format!("{}_{}", "record_filter", record.id());
-    log::info!("try to genterator func, named: {}", func_name);
+    log::info!("try to genterator func, named: {func_name}");
     let func = func_generator.module.add_function(func_name, fn_type, None);
     let block = func_generator.context.append_basic_block(func, "entry");
     func_generator.builder.position_at_end(block);
@@ -43,7 +43,7 @@ pub(crate) fn gen_select_filter_func<'ctx>(
     let _ = func_generator.builder.build_return(Some(&ret));
     let opt_filter_func = func_generator.compile::<FilterFunc>(func_name);
     if let Some(filter_func) = opt_filter_func {
-        log::info!("filter func: {:#?}", filter_func);
+        log::info!("filter func: {filter_func:#?}");
         Ok(filter_func)
     } else {
         Err("failed to compile filter function".to_string())
@@ -86,7 +86,7 @@ fn gen_filter_func<'ctx>(
                 .unwrap();
                 let val = func_generator
                     .builder
-                    .build_or(lhs_val, rhs_val, &format!("val_{}_or", walker))
+                    .build_or(lhs_val, rhs_val, &format!("val_{walker}_or"))
                     .unwrap();
                 Some(val)
             }
@@ -111,7 +111,7 @@ fn gen_filter_func<'ctx>(
                 .unwrap();
                 let val = func_generator
                     .builder
-                    .build_and(lhs_val, rhs_val, &format!("val_{}_and", walker))
+                    .build_and(lhs_val, rhs_val, &format!("val_{walker}_and"))
                     .unwrap();
                 Some(val)
             }
@@ -140,7 +140,7 @@ fn gen_filter_func<'ctx>(
                         IntPredicate::EQ,
                         lhs_val,
                         rhs_val,
-                        &format!("val_{}_eq", walker),
+                        &format!("val_{walker}_eq"),
                     )
                     .unwrap();
                 Some(val)
@@ -170,7 +170,7 @@ fn gen_filter_func<'ctx>(
                         IntPredicate::SGE,
                         lhs_val,
                         rhs_val,
-                        &format!("val_{}_gteq", walker),
+                        &format!("val_{walker}_gteq"),
                     )
                     .unwrap();
                 Some(val)
@@ -200,7 +200,7 @@ fn gen_filter_func<'ctx>(
                         IntPredicate::SGT,
                         lhs_val,
                         rhs_val,
-                        &format!("val_{}_gt", walker),
+                        &format!("val_{walker}_gt"),
                     )
                     .unwrap();
                 Some(val)
@@ -230,7 +230,7 @@ fn gen_filter_func<'ctx>(
                         IntPredicate::SLE,
                         lhs_val,
                         rhs_val,
-                        &format!("val_{}_lteq", walker),
+                        &format!("val_{walker}_lteq"),
                     )
                     .unwrap();
                 Some(val)
@@ -260,7 +260,7 @@ fn gen_filter_func<'ctx>(
                         IntPredicate::SLT,
                         lhs_val,
                         rhs_val,
-                        &format!("val_{}_lt", walker),
+                        &format!("val_{walker}_lt"),
                     )
                     .unwrap();
                 Some(val)
@@ -290,13 +290,13 @@ fn gen_filter_func<'ctx>(
                         IntPredicate::NE,
                         lhs_val,
                         rhs_val,
-                        &format!("val_{}_neq", walker),
+                        &format!("val_{walker}_neq"),
                     )
                     .unwrap();
                 Some(val)
             }
             _ => {
-                issues.push(format!("unsupported expr condition: {:?}", expr));
+                issues.push(format!("unsupported expr condition: {expr:?}"));
                 None
             }
         },
@@ -309,7 +309,7 @@ fn gen_filter_func<'ctx>(
                 let idp = id_vec.get(1).unwrap();
                 gen_call_fetch_column(func_generator, param_u64ptr, idp, record, issues)
             } else {
-                issues.push(format!("unsupported id: {:?}", id_vec));
+                issues.push(format!("unsupported id: {id_vec:?}"));
                 None
             }
         }
@@ -323,11 +323,11 @@ fn gen_filter_func<'ctx>(
             Some(i64_type.const_int(group.0 as u64, true))
         }
         Expression::String(_str) => {
-            issues.push(format!("unsupported String: {:?}", _str));
+            issues.push(format!("unsupported String: {_str:?}"));
             None
         }
         _ => {
-            issues.push(format!("unsupported expr condition: {:?}", expr));
+            issues.push(format!("unsupported expr condition: {expr:?}"));
             None
         }
     }
@@ -374,7 +374,7 @@ fn gen_call_fetch_column<'ctx>(
             Some(ret)
         }
         _ => {
-            issues.push(format!("unsupported id: {:?}", idp));
+            issues.push(format!("unsupported id: {idp:?}"));
             None
         }
     }

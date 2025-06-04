@@ -59,9 +59,9 @@ fn test_bambootube(c: &mut Criterion) {
     log::info!("thread:{} started", thread::current().name().unwrap());
     if let Some((id1, _id2)) = define_records() {
         if let Some(aggregate_id) = bambootube::def_aggregate(AGGREGATE_SQL, |_data, _size| {}) {
-            log::info!("define aggregate: {}", aggregate_id);
+            log::info!("define aggregate: {aggregate_id}");
             if let Some(mapper_id) = bambootube::def_mapper_bind_aggregate(FILTER_SQL, aggregate_id) {
-                log::info!("define mapper: {}", mapper_id);
+                log::info!("define mapper: {mapper_id}");
             } else {
                 log::warn!("def_mapper_bind_aggregate failed");
                 return;
@@ -95,7 +95,7 @@ fn define_records() -> Option<(u16, u16)> {
         ],
     ) {
         id1 = id;
-        log::info!("defined incoming: {}", id1);
+        log::info!("defined incoming: {id1}");
     } else {
         log::warn!("failed to define incoming record");
         return None;
@@ -114,7 +114,7 @@ fn define_records() -> Option<(u16, u16)> {
         ],
     ) {
         id2 = id;
-        log::info!("defined stream: {}", id2);
+        log::info!("defined stream: {id2}");
     } else {
         log::warn!("failed to define stream record");
         return None;

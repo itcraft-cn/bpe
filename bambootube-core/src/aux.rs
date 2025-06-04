@@ -147,11 +147,11 @@ mod tests {
         let i64v = 1234;
         fill(slice, i64v);
         let fetched: i64 = fetch(slice);
-        log::info!("{},{}", i64v, fetched);
+        log::info!("{i64v},{fetched}");
         let f64v = 1234.5678;
         fill(slice, f64v);
         let fetched: f64 = fetch(slice);
-        log::info!("{},{}", f64v, fetched);
+        log::info!("{f64v},{fetched}");
     }
 
     #[test]
@@ -161,26 +161,26 @@ mod tests {
         let u32v: u32 = 1234;
         fill_ptr(u8_ptr, u32v);
         let fetched: u32 = fetch_ptr(u8_ptr);
-        log::info!("u32 {},{}", u32v, fetched);
+        log::info!("u32 {u32v},{fetched}");
         let i32v: i32 = 1234;
         fill_ptr(u8_ptr, i32v);
         let fetched: i32 = fetch_ptr(u8_ptr);
-        log::info!("i32 {},{}", i32v, fetched);
+        log::info!("i32 {i32v},{fetched}");
         let f32v: f32 = 1234.5678;
         fill_ptr(u8_ptr, f32v);
         let fetched: f32 = fetch_ptr(u8_ptr);
-        log::info!("f32 {},{}", f32v, fetched);
+        log::info!("f32 {f32v},{fetched}");
         let u64v: u64 = 1234;
         fill_ptr(u8_ptr, u64v);
         let fetched: u64 = fetch_ptr(u8_ptr);
-        log::info!("u64 {},{}", u64v, fetched);
+        log::info!("u64 {u64v},{fetched}");
         let i64v: i64 = 1234;
         fill_ptr(u8_ptr, i64v);
         let fetched: i64 = fetch_ptr(u8_ptr);
-        log::info!("i64 {},{}", i64v, fetched);
+        log::info!("i64 {i64v},{fetched}");
         let f64v: f64 = 1234.5678;
         fill_ptr(u8_ptr, f64v);
         let fetched: f64 = fetch_ptr(u8_ptr);
-        log::info!("f64 {},{}", f64v, fetched);
+        log::info!("f64 {f64v},{fetched}");
     }
 }

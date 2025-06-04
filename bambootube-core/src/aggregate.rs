@@ -33,7 +33,7 @@ pub(crate) fn init_aggregate() {
 
 pub(crate) fn define_aggregate(sql: &str, func_holder: FnHolder) -> Option<u16> {
     let options = get_global(unsafe { PTR_PARSE_OPTIONS });
-    if let Some(parsed_sql) = parse_select(sql, &options) {
+    if let Some(parsed_sql) = parse_select(sql, options) {
         let rs = gen_aggregate(&parsed_sql);
         if let Ok(aggregate) = rs {
             let map = get_global_mut::<SimpleU16Map>(unsafe { PTR_AGGREGATE_MAP });
@@ -58,7 +58,7 @@ pub(crate) fn call_aggregate(wrapped: &WrappedAggregate, u8_ptr: *const u8, size
         let aggregate_data_ptr = unsafe { PTR_VAL_DATA_REF } as *mut u8;
         call_with_aggregate_data(aggregate_data_ptr, wrapped, u8_ptr, stream, size);
     } else {
-        log::warn!("failed to find stream by id[{}]", id);
+        log::warn!("failed to find stream by id[{id}]");
     }
 }
 
@@ -134,8 +134,7 @@ fn setup_init_val(
         }
         _ => {
             log::warn!(
-                "expr in top level just support aggregate func, this is not aggregate func:{:?}",
-                executor
+                "expr in top level just support aggregate func, this is not aggregate func:{executor:?}"
             );
             Err(String::from("not aggregate func"))
         }
@@ -224,8 +223,7 @@ fn compute(
         }
         _ => {
             log::warn!(
-                "expr in top level just support aggregate func, this is not aggregate func:{:?}",
-                executor
+                "expr in top level just support aggregate func, this is not aggregate func:{executor:?}"
             );
         }
     }
@@ -335,7 +333,7 @@ fn fetch_arg_val(sub_data: *const u8, executor: &Executor, stream: &Record) -> E
             }
         }
         _ => {
-            log::warn!("just support fetch, here is {:?} executor", executor);
+            log::warn!("just support fetch, here is {executor:?} executor");
             Element::Long(0)
         }
     }

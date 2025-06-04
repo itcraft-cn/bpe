@@ -39,6 +39,6 @@ fn call_def_incoming(name: &str, expected_id: u16) {
         ],
     ) {
         assert_eq!(expected_id, id);
-        log::info!("new id: {}", id);
+        log::info!("new id: {id}");
     }
 }

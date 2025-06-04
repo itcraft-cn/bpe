@@ -63,9 +63,9 @@ fn init_func(sum_store: Arc<AtomicI64>) -> (u16, u16) {
                 func_callback(&sum_store, data, size);
             },
         ) {
-            log::info!("define aggregate: {}", aggregate_id);
+            log::info!("define aggregate: {aggregate_id}");
             if let Some(mapper_id) = def_mapper_bind_aggregate(FILTER_SQL, aggregate_id) {
-                log::info!("define mapper: {}", mapper_id);
+                log::info!("define mapper: {mapper_id}");
                 return (id1, id2);
             } else {
                 log::warn!("def_mapper_bind_aggregate failed");
@@ -94,7 +94,7 @@ fn func_callback(sum_store: &Arc<AtomicI64>, data: *const u8, size: usize) {
         const_val
     );
     let delta = now as f64 - timestamp;
-    log::info!("delta: {}", delta);
+    log::info!("delta: {delta}");
     sum_store.fetch_add((BASE * delta) as i64, Ordering::SeqCst);
 }
 
@@ -126,7 +126,7 @@ fn define_records() -> Option<(u16, u16)> {
         ],
     ) {
         id1 = id;
-        log::info!("defined incoming: {}", id1);
+        log::info!("defined incoming: {id1}");
     } else {
         log::warn!("failed to define incoming record");
         return None;
@@ -145,7 +145,7 @@ fn define_records() -> Option<(u16, u16)> {
         ],
     ) {
         id2 = id;
-        log::info!("defined stream: {}", id2);
+        log::info!("defined stream: {id2}");
     } else {
         log::warn!("failed to define stream record");
         return None;
@@ -158,7 +158,7 @@ fn gen_u8_bytes(id: u16) -> U8Bytes {
     let mut u8array = [0_u8; 512];
     let slice = u8array.as_mut_slice();
     let now = now();
-    //log::info!("now: {}", now);
+    //log::info!("now: {now}");
     fill_u64(&mut slice[0..8], 1);
     fill_u64(&mut slice[8..16], 2);
     fill_u64(&mut slice[16..24], 3);
@@ -166,7 +166,7 @@ fn gen_u8_bytes(id: u16) -> U8Bytes {
     fill_u64(&mut slice[32..40], 5);
     fill_u64(&mut slice[40..48], now);
     //let v = fetch_u64(slice.as_ptr());
-    //log::info!("v: {}", v);
+    //log::info!("v: {v}");
     U8Bytes::new_from_vec(id, 512, Vec::from(u8array))
 }
 

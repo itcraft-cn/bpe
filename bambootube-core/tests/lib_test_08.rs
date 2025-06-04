@@ -36,7 +36,7 @@ fn gen_new_data() {
     ];
     let id = def_incoming("demo", columns).unwrap();
     def_mapper(SQL, |data, size| {
-        log::info!("fetched data: {}", size);
+        log::info!("fetched data: {size}");
         for idx in 0..size {
             unsafe {
                 let v1 = fetch_ptr::<i64>(data.add(idx * 512));
@@ -44,7 +44,7 @@ fn gen_new_data() {
                 let v3 = fetch_ptr::<f64>(data.add(idx * 512 + 16));
                 let v4 = fetch_ptr::<f64>(data.add(idx * 512 + 24));
                 let v5 = fetch_ptr::<f64>(data.add(idx * 512 + 32));
-                log::info!("{}/{}/{}/{}/{}", v1, v2, v3, v4, v5);
+                log::info!("{v1}/{v2}/{v3}/{v4}/{v5}");
             }
         }
     });

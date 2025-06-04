@@ -75,7 +75,7 @@ impl FuncGenerator<'_> {
     where
         T: UnsafeFunctionPointer,
     {
-        log::info!("try to compile func: {}", name);
+        log::info!("try to compile func: {name}");
         unsafe {
             let rs = self.execution_engine.get_function(name);
             if let Ok(func) = rs {

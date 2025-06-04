@@ -205,7 +205,7 @@ impl Record {
         let key = String::from(name);
         let name_map = get_global_mut::<HashMap<String, u16>>(unsafe { PTR_NAME_MAP });
         if name_map.contains_key(&key) {
-            log::warn!("Record name {} already exists", name);
+            log::warn!("Record name {name} already exists");
             None
         } else {
             name_map.insert(key, id);

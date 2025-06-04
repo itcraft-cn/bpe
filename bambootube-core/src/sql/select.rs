@@ -47,7 +47,7 @@ fn parse_select_statement(select_stat: Select<'_>) -> Option<ParsedSql> {
             }
         } else {
             for issue in issues {
-                log::warn!("hit issue: [{}]", issue);
+                log::warn!("hit issue: [{issue}]");
             }
             None
         }
@@ -63,7 +63,7 @@ fn fetch_record(records: &Vec<u16>) -> Option<&Record> {
     } else if records.len() != 1 {
         log::warn!("not support multi record select, skipping");
         for record in records {
-            log::warn!("record id in sql:{}", record);
+            log::warn!("record id in sql:{record}");
         }
         None
     } else {
@@ -120,7 +120,7 @@ fn parse_tab_ref(tab: &TableReference<'_>, tab_ref_vec: &mut Vec<u16>) -> Option
             if let Some(record_id) = Record::fetch_record_id(name) {
                 tab_ref_vec.push(record_id);
             } else {
-                return Some(format!("record define: [{}] is not found", name));
+                return Some(format!("record define: [{name}] is not found"));
             }
         }
         TableReference::Query {
@@ -151,12 +151,12 @@ fn parse_select_filter<'ctx>(
     let rs_filters_func =
         gen_select_filter_func(func_generator, &select_stat.where_, record, issues);
     if let Ok(filters_func) = rs_filters_func {
-        log::info!("the filter func: {:#?}", filters_func);
+        log::info!("the filter func: {filters_func:#?}");
         Some(filters_func)
     } else {
         log::warn!("{}", rs_filters_func.err().unwrap());
         for issue in &*issues {
-            log::warn!("issue: {:#?}", issue);
+            log::warn!("issue: {issue:#?}");
         }
         None
     }
@@ -343,12 +343,11 @@ fn fetch_record_id(record_id: u16, id_part: &IdentifierPart<'_>) -> Result<u16, 
                     Ok(id)
                 } else {
                     Err(format!(
-                        "record [{}] is not match the target record in sql query",
-                        name
+                        "record [{name}] is not match the target record in sql query"
                     ))
                 }
             } else {
-                Err(format!("record [{}] is not found", name))
+                Err(format!("record [{name}] is not found"))
             }
         }
         IdentifierPart::Star(_) => Err(String::from("star is not supported")),
@@ -362,7 +361,7 @@ fn fetch_field_id(record_id: u16, id_part: &IdentifierPart<'_>) -> Result<u16, S
             if let Some(id) = Record::fetch_column_id(record_id, name) {
                 Ok(*id)
             } else {
-                Err(format!("field [{}] is not found", name))
+                Err(format!("field [{name}] is not found"))
             }
         }
         IdentifierPart::Star(_) => Err(String::from("star is not supported")),

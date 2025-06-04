@@ -17,7 +17,7 @@ fn test_new_proc() {
         ],
     ) {
         assert_eq!(1, id);
-        log::info!("new id: {}", id);
+        log::info!("new id: {id}");
     }
     stop();
 }

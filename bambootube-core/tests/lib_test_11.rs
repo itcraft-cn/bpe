@@ -25,7 +25,7 @@ fn test_new_proc() {
     start();
     if let Some((id1, _id2)) = define_records() {
         if let Some(aggregate_id) = def_aggregate(AGGREGATE_SQL, |data, size| {
-            log::info!("data len: [{}]", size);
+            log::info!("data len: [{size}]");
             if size == 1 {
                 unsafe {
                     log::info!("sumd:{}", fetch_ptr::<i64>(data.add(8)),);
@@ -54,7 +54,7 @@ fn define_records() -> Option<(u16, u16)> {
         vec![Column::new_double("a"), Column::new_double("b")],
     ) {
         id1 = id;
-        log::info!("defined incoming: {}", id1);
+        log::info!("defined incoming: {id1}");
     } else {
         log::warn!("failed to define incoming record");
         return None;
@@ -64,7 +64,7 @@ fn define_records() -> Option<(u16, u16)> {
         vec![Column::new_double("a"), Column::new_double("b")],
     ) {
         id2 = id;
-        log::info!("defined stream: {}", id2);
+        log::info!("defined stream: {id2}");
     } else {
         log::warn!("failed to define stream record");
         return None;

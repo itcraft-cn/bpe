@@ -46,7 +46,7 @@ pub fn def_stream(name: &str, columns: Vec<Column>) -> Option<u16> {
 pub fn new_data(data: &U8Bytes) -> bool {
     let id = data.id();
     if check_id_in_store(id) {
-        log::warn!("id [{}] is not defined", id);
+        log::warn!("id [{id}] is not defined");
         false
     } else {
         let array = find_or_insert_array(id);
