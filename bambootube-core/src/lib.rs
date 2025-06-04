@@ -4,6 +4,7 @@ pub(crate) mod macros;
 pub(crate) mod agg_func;
 pub(crate) mod aggregate;
 pub(crate) mod aux;
+pub(crate) mod calc_func;
 pub(crate) mod cfg;
 pub(crate) mod consts;
 pub(crate) mod core;

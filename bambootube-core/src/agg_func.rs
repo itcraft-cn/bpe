@@ -1,4 +1,4 @@
-use crate::aux::{bitmap_chk_id, fetch_ptr, fill_ptr, bitmap_set_id};
+use crate::aux::{bitmap_chk_id, bitmap_set_id, fetch_ptr, fill_ptr};
 
 #[inline]
 pub(crate) fn func_key_long(
