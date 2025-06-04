@@ -15,7 +15,7 @@ pub extern "system" fn Java_com_erayt_bambootube4j_BambooTube_start<'local>(
     _class: JClass<'local>,
 ) -> jboolean {
     static START: Once = Once::new();
-    START.call_once(|| bambootube::start());
+    START.call_once(bambootube::start);
     jboolean::from(true)
 }
 
@@ -25,7 +25,7 @@ pub extern "system" fn Java_com_erayt_bambootube4j_BambooTube_stop<'local>(
     _class: JClass<'local>,
 ) {
     static STOP: Once = Once::new();
-    STOP.call_once(|| bambootube::stop());
+    STOP.call_once(bambootube::stop);
 }
 
 #[no_mangle]

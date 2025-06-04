@@ -36,7 +36,7 @@ fn init_func() -> (u16, u16) {
     core_affinity::set_for_current(core_ids[core_ids.len() - 1]);
     log::info!("thread:{} started", thread::current().name().unwrap());
     if let Some((id1, id2)) = define_records() {
-        log::info!("define record: {}/{}", id1, id2);
+        log::info!("define record: {id1}/{id2}");
         if let Some(aggregate_id) = def_aggregate(AGGREGATE_SQL, |_data, _size| {}) {
             log::info!("define aggregate: {aggregate_id}");
             if let Some(mapper_id) = def_mapper_bind_aggregate(FILTER_SQL, aggregate_id) {

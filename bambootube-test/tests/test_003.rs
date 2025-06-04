@@ -55,7 +55,7 @@ fn init_func(sum_store: Arc<AtomicI64>) -> (u16, u16) {
     core_affinity::set_for_current(core_ids[core_ids.len() - 1]);
     log::info!("thread:{} started", thread::current().name().unwrap());
     if let Some((id1, id2)) = define_records() {
-        log::info!("define record: {}/{}", id1, id2);
+        log::info!("define record: {id1}/{id2}");
         if let Some(aggregate_id) = def_aggregate(
             AGGREGATE_SQL,
             #[inline]
@@ -84,15 +84,9 @@ fn func_callback(sum_store: &Arc<AtomicI64>, data: *const u8, size: usize) {
     let timestamp_min = fetch_f64(data.wrapping_add(8));
     let timestamp_sum = fetch_f64(data.wrapping_add(16));
     let const_val = fetch_i64(data.wrapping_add(24));
-    log::info!("data_ptr:{:?}, size: {}", data, size);
-    log::info!("now: {}, timestamp: {}", now, timestamp);
-    log::info!(
-        "{}/{}/{}/{}",
-        timestamp,
-        timestamp_min,
-        timestamp_sum,
-        const_val
-    );
+    log::info!("data_ptr:{data:?}, size: {size}");
+    log::info!("now: {now}, timestamp: {timestamp}");
+    log::info!("{timestamp}/{timestamp_min}/{timestamp_sum}/{const_val}");
     let delta = now as f64 - timestamp;
     log::info!("delta: {delta}");
     sum_store.fetch_add((BASE * delta) as i64, Ordering::SeqCst);
@@ -100,7 +94,7 @@ fn func_callback(sum_store: &Arc<AtomicI64>, data: *const u8, size: usize) {
 
 fn gen_new_data(u8data: &mut U8Bytes) {
     update_now(u8data);
-    let ret = new_data(&u8data);
+    let ret = new_data(u8data);
     if ret {
         log::debug!("send success");
     } else {

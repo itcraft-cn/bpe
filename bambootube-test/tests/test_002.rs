@@ -52,7 +52,7 @@ fn init_func(sum_store: Arc<AtomicI64>) -> (u16, u16) {
     core_affinity::set_for_current(core_ids[core_ids.len() - 1]);
     log::info!("thread:{} started", thread::current().name().unwrap());
     if let Some((id1, id2)) = define_records() {
-        log::info!("define record: {}/{}", id1, id2);
+        log::info!("define record: {id1}/{id2}");
         if let Some(aggregate_id) = def_aggregate(
             AGGREGATE_SQL,
             #[inline]
@@ -87,7 +87,7 @@ fn func_callback(sum_store: &Arc<AtomicI64>, _data: *const u8, _size: usize) {
 
 fn gen_new_data(u8data: &mut U8Bytes) {
     update_now(u8data);
-    let ret = new_data(&u8data);
+    let ret = new_data(u8data);
     if ret {
         log::debug!("send success");
     } else {
