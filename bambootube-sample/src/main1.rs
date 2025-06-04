@@ -13,7 +13,7 @@ use std::{
 };
 
 const BASE: f64 = 1000000f64;
-const LOOP_SIZE: usize = 1000;
+const LOOP_SIZE: usize = 10000000;
 
 const FILTER_SQL: &str = r#"
     SELECT demo.f, demo.a, demo.b, demo.c, _sub(_add(demo.d, demo.d), demo.e)
@@ -32,21 +32,17 @@ pub fn main() {
     start();
     let sum_store = Arc::new(AtomicI64::new(0));
     let sum_clone = Arc::clone(&sum_store);
-    let (id1, id2) = init_func(sum_clone);
-    if id1 == 0 || id2 == 0 {
-        log::warn!("init failed");
-    } else {
-        let mut u8data = gen_u8_bytes(id1);
-        exec_with_time_it(move || gen_new_data(&mut u8data));
-        let sum = sum_store.load(Ordering::SeqCst);
-        log::info!(
-            "sum: {}s({}ns), latency: {}s({}ns)",
-            sum as f64 / BASE / 1_000_000_000f64,
-            sum,
-            (sum as f64 / BASE / LOOP_SIZE as f64) / 1_000_000_000f64,
-            sum as f64 / BASE / LOOP_SIZE as f64
-        );
-    }
+    let (id1, _id2) = init_func(sum_clone);
+    let mut u8data = gen_u8_bytes(id1);
+    exec_with_time_it(move || gen_new_data(&mut u8data));
+    let sum = sum_store.load(Ordering::SeqCst);
+    log::info!(
+        "sum: {}s({}ns), latency: {}s({}ns)",
+        sum as f64 / BASE / 1_000_000_000f64,
+        sum,
+        (sum as f64 / BASE / LOOP_SIZE as f64) / 1_000_000_000f64,
+        sum as f64 / BASE / LOOP_SIZE as f64
+    );
     stop();
 }
 
@@ -78,23 +74,13 @@ fn init_func(sum_store: Arc<AtomicI64>) -> (u16, u16) {
 }
 
 #[inline]
-fn func_callback(sum_store: &Arc<AtomicI64>, data: *const u8, size: usize) {
+fn func_callback(sum_store: &Arc<AtomicI64>, _data: *const u8, _size: usize) {
     let now = now();
-    let timestamp = fetch_f64(data);
-    let timestamp_min = fetch_f64(data.wrapping_add(8));
-    let timestamp_sum = fetch_f64(data.wrapping_add(16));
-    let const_val = fetch_f64(data.wrapping_add(24));
-    log::info!("data_ptr:{:?}, size: {}", data, size);
-    log::info!("now: {}, timestamp: {}", now, timestamp);
-    log::info!(
-        "{}/{}/{}/{}",
-        timestamp,
-        timestamp_min,
-        timestamp_sum,
-        const_val
-    );
+    let timestamp = fetch_f64(_data);
+    //log::info!("data_ptr:{:?}, size: {}", _data, _size);
+    //log::info!("now: {}, timestamp: {}", now, timestamp);
     let delta = now as f64 - timestamp;
-    log::info!("delta: {}", delta);
+    //log::info!("delta: {}", delta);
     sum_store.fetch_add((BASE * delta) as i64, Ordering::SeqCst);
 }
 
