@@ -1,4 +1,4 @@
-use crate::aux::{check_id, fetch_ptr, fill_ptr, set_id};
+use crate::aux::{bitmap_chk_id, fetch_ptr, fill_ptr, bitmap_set_id};
 
 #[inline]
 pub(crate) fn func_key_long(
@@ -8,9 +8,9 @@ pub(crate) fn func_key_long(
     offset: usize,
     v: &i64,
 ) {
-    if check_id(field_ref.as_slice(), idx as u16) {
+    if bitmap_chk_id(field_ref.as_slice(), idx as u16) {
         fill_ptr(unsafe { aggregate_data_ptr.add(offset) }, *v);
-        set_id(field_ref.as_mut_slice(), idx as u16);
+        bitmap_set_id(field_ref.as_mut_slice(), idx as u16);
     }
 }
 #[inline]
@@ -21,9 +21,9 @@ pub(crate) fn func_key_double(
     offset: usize,
     v: &f64,
 ) {
-    if check_id(field_ref.as_slice(), idx as u16) {
+    if bitmap_chk_id(field_ref.as_slice(), idx as u16) {
         fill_ptr(unsafe { aggregate_data_ptr.add(offset) }, *v);
-        set_id(field_ref.as_mut_slice(), idx as u16);
+        bitmap_set_id(field_ref.as_mut_slice(), idx as u16);
     }
 }
 

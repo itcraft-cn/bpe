@@ -34,13 +34,13 @@ where
 }
 
 #[inline]
-pub(crate) fn check_id(array: &[u8], id: u16) -> bool {
+pub(crate) fn bitmap_chk_id(array: &[u8], id: u16) -> bool {
     let (idx, bit) = fetch_idx_bit(id);
     array[idx as usize] & (1 << bit) == 0
 }
 
 #[inline]
-pub(crate) fn set_id(array: &mut [u8], id: u16) {
+pub(crate) fn bitmap_set_id(array: &mut [u8], id: u16) {
     let (idx, bit) = fetch_idx_bit(id);
     array[idx as usize] |= 1 << bit;
 }

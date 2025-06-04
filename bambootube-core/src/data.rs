@@ -1,5 +1,5 @@
 use crate::{
-    aux::{check_id, set_id, SimpleU16Map},
+    aux::{bitmap_chk_id, bitmap_set_id, SimpleU16Map},
     consts::U8_DATA_MAX_SIZE,
     id::next_record_id,
 };
@@ -210,7 +210,7 @@ impl Record {
         } else {
             name_map.insert(key, id);
             let id_store = get_global_mut::<[u8; 8192]>(unsafe { PTR_ID_STORE });
-            set_id(id_store.as_mut_slice(), id);
+            bitmap_set_id(id_store.as_mut_slice(), id);
             Some(id)
         }
     }
@@ -264,7 +264,7 @@ impl Record {
 
 pub(crate) fn check_id_in_store(id: u16) -> bool {
     let id_store = get_global_mut::<[u8; 8192]>(unsafe { PTR_ID_STORE });
-    check_id(id_store.as_slice(), id)
+    bitmap_chk_id(id_store.as_slice(), id)
 }
 
 pub(crate) fn init_data() {
