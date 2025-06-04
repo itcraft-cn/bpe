@@ -281,9 +281,6 @@ fn parse_expr<'ctx>(
         Expression::Bool(v, _) => {
             expr_entity_vec.push(ExprEntity::Val(ValType::Bool(*v)));
         }
-        Expression::String(v) => {
-            expr_entity_vec.push(ExprEntity::Val(ValType::Str(v.value.to_string())));
-        }
         Expression::Integer(v) => {
             expr_entity_vec.push(ExprEntity::Val(ValType::Int(v.0 as i64)));
         }

@@ -22,8 +22,7 @@ const FILTER_SQL: &str = r#"
     LIMIT 10
     "#;
 const AGGREGATE_SQL: &str = r#"
-    select _maxd(stream.a), _mind(stream.a), _sumd(stream.a),
-           _avg(stream.a)
+    select _maxd(stream.a), _mind(stream.a), _avg(stream.a), 1
     from stream
     "#;
 
@@ -83,7 +82,7 @@ fn func_callback(sum_store: &Arc<AtomicI64>, data: *const u8, size: usize) {
     let timestamp = fetch_f64(data);
     let timestamp_min = fetch_f64(data.wrapping_add(8));
     let timestamp_sum = fetch_f64(data.wrapping_add(16));
-    let const_val = fetch_f64(data.wrapping_add(24));
+    let const_val = fetch_i64(data.wrapping_add(24));
     log::info!("data_ptr:{:?}, size: {}", data, size);
     log::info!("now: {}, timestamp: {}", now, timestamp);
     log::info!(
@@ -122,7 +121,7 @@ fn define_records() -> Option<(u16, u16)> {
             Column::new_long("f"),
             Column::new_long("g"),
             Column::new_long("h"),
-            Column::new_string("i", 448),
+            Column::new_long("i"),
         ],
     ) {
         id1 = id;
@@ -137,7 +136,7 @@ fn define_records() -> Option<(u16, u16)> {
             Column::new_long("a"),
             Column::new_long("b"),
             Column::new_long("c"),
-            Column::new_double("d"),
+            Column::new_long("d"),
             Column::new_double("e"),
             Column::new_double("f"),
             Column::new_double("g"),
@@ -211,11 +210,11 @@ pub(crate) fn fill_u64(slice: &mut [u8], data: u64) {
     unsafe { *p_u64 = data };
 }
 
-// #[inline]
-// pub(crate) fn fetch_u64(p_val: *const u8) -> u64 {
-//     let p_u64 = p_val as *const u64;
-//     unsafe { *p_u64 }
-// }
+#[inline]
+pub(crate) fn fetch_i64(p_val: *const u8) -> i64 {
+    let p_i64 = p_val as *const i64;
+    unsafe { *p_i64 }
+}
 
 #[inline]
 pub(crate) fn fetch_f64(p_val: *const u8) -> f64 {

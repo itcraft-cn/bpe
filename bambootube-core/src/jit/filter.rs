@@ -352,7 +352,6 @@ fn gen_call_fetch_column<'ctx>(
                 ColumnType::Long => func_generator.module.get_function("fetch_i64"),
                 // TODO: support float
                 ColumnType::Double => func_generator.module.get_function("fetch_i64"),
-                ColumnType::Str(_) => todo!(),
             }
             .unwrap();
             let call_site_value = func_generator

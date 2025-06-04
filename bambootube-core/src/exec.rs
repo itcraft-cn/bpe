@@ -1,7 +1,7 @@
 use crate::{
     error::ParseSqlError,
-    func::{Executor, Func, Executors},
-    sql::base::ExprEntity,
+    func::{Executor, Executors, Func},
+    sql::base::{ExprEntity, ValType},
 };
 use std::str::FromStr;
 
@@ -26,6 +26,11 @@ fn conv_as_executor(
     record_id_array: &Vec<u16>,
 ) -> Result<Executor, ParseSqlError> {
     let fetcher = match entity {
+        ExprEntity::Val(val) => match val {
+            ValType::Bool(b) => Executor::ConstLong(if *b { 1 } else { 0 }),
+            ValType::Int(i) => Executor::ConstLong(*i),
+            ValType::Float(f) => Executor::ConstDouble(*f),
+        },
         ExprEntity::Field(field_id) => {
             Executor::Fetch(*record_id_array.first().unwrap(), *field_id)
         }
@@ -52,12 +57,6 @@ fn conv_as_executor(
                 log::warn!("{}", err_msg);
                 return Err(ParseSqlError::new(err_msg));
             }
-        }
-        _ => {
-            return Err(ParseSqlError::new(format!(
-                "cannot hit this case: {:?}",
-                entity
-            )));
         }
     };
     Ok(fetcher)

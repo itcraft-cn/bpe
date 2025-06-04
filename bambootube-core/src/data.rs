@@ -78,14 +78,12 @@ fn copy(len: usize, bytes: &mut [u8; U8_DATA_MAX_SIZE], slice: &[u8]) {
 pub enum ColumnType {
     Long,
     Double,
-    Str(usize),
 }
 impl ColumnType {
-    fn by_idx(type_idx: u16, size: usize) -> ColumnType {
+    fn by_idx(type_idx: u16, _size: usize) -> ColumnType {
         match type_idx {
             0 => ColumnType::Long,
             1 => ColumnType::Double,
-            2 => ColumnType::Str(size),
             _ => ColumnType::Long,
         }
     }
@@ -112,15 +110,6 @@ impl Column {
         Column {
             name: String::from(name),
             data_type: ColumnType::Double,
-            idx: 0,
-            offset: 0,
-        }
-    }
-
-    pub fn new_string(name: &str, len: usize) -> Column {
-        Column {
-            name: String::from(name),
-            data_type: ColumnType::Str(len),
             idx: 0,
             offset: 0,
         }
@@ -166,7 +155,6 @@ impl Column {
             offset += match column.data_type {
                 ColumnType::Long => 8,
                 ColumnType::Double => 8,
-                ColumnType::Str(len) => len,
             };
             target.push(column);
         }

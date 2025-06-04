@@ -68,7 +68,6 @@ pub(crate) enum ExprEntity {
 #[derive(Debug, Clone)]
 pub(crate) enum ValType {
     Bool(bool),
-    Str(String),
     Int(i64),
     Float(f64),
 }

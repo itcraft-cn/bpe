@@ -46,6 +46,8 @@ impl Executors {
 
 #[derive(Debug, Clone)]
 pub(crate) enum Executor {
+    ConstLong(i64),
+    ConstDouble(f64),
     Fetch(u16, u16),
     Compute(Func, Executors),
 }
@@ -59,6 +61,8 @@ impl Executor {
         sub_data_ptr: *const u8,
     ) -> Element {
         match self {
+            Executor::ConstLong(v) => Element::Long(*v),
+            Executor::ConstDouble(v) => Element::Double(*v),
             Executor::Fetch(_, field_id) => {
                 fetch_val(sub_data_ptr, id, u64ptr, record, position, *field_id)
             }
@@ -73,9 +77,9 @@ impl Executor {
 pub(crate) fn fetch_val(
     sub_data_ptr: *const u8,
     _id: u16,
-    u64ptr: u64,
+    _u64ptr: u64,
     record: &Record,
-    position: usize,
+    _position: usize,
     idx: u16,
 ) -> Element {
     let column = record.column(idx);
@@ -83,10 +87,6 @@ pub(crate) fn fetch_val(
         ColumnType::Long => Element::Long(fetch_ptr(unsafe { sub_data_ptr.add(column.offset()) })),
         ColumnType::Double => {
             Element::Double(fetch_ptr(unsafe { sub_data_ptr.add(column.offset()) }))
-        }
-        ColumnType::Str(len) => {
-            let offset = column.offset();
-            Element::Str(u64ptr, position + offset, *len)
         }
     }
 }

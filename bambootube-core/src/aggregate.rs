@@ -13,10 +13,7 @@ use crate::{
     },
 };
 use globalvar::{def_global_ptr, get_global, get_global_mut};
-use std::{
-    alloc::{self, Layout},
-    ptr,
-};
+use std::alloc::{self, Layout};
 
 static mut PTR_AGGREGATE_MAP: u64 = 0;
 static mut PTR_PARSE_OPTIONS: u64 = 0;
@@ -128,6 +125,8 @@ fn setup_init_val(
 ) -> Result<(), String> {
     let offset = stream.column((idx + 1) as u16).offset();
     match executor {
+        Executor::ConstLong(_) => Ok(()),
+        Executor::ConstDouble(_) => Ok(()),
         Executor::Compute(func, _) => {
             init_for_some_func(func, aggregate_data_ptr, offset);
             Ok(())
@@ -195,6 +194,12 @@ fn compute(
 ) {
     let offset = stream.column((idx + 1) as u16).offset();
     match executor {
+        Executor::ConstLong(v) => {
+            fill_ptr(unsafe { aggregate_data_ptr.add(offset) }, *v);
+        }
+        Executor::ConstDouble(v) => {
+            fill_ptr(unsafe { aggregate_data_ptr.add(offset) }, *v);
+        }
         Executor::Compute(func, executors) => {
             if executors.executor_size() != 1 {
                 log::warn!(
@@ -243,17 +248,6 @@ fn choose_func(
             Element::Double(v) => {
                 func_key_double(idx, aggregate_data_ptr, field_ref, offset, v);
             }
-            Element::Str(u64ptr, str_offset, len) => {
-                func_key_str(
-                    idx,
-                    aggregate_data_ptr,
-                    field_ref,
-                    offset,
-                    u64ptr,
-                    str_offset,
-                    len,
-                );
-            }
         },
         Func::MaxL => match &element {
             Element::Long(v) => {
@@ -294,9 +288,6 @@ fn choose_func(
             Element::Double(v) => {
                 func_maxd_double(aggregate_data_ptr, offset, v);
             }
-            _ => {
-                log::warn!("unsupported function: {:?}-{:?}", func, &element);
-            }
         },
         Func::MinD => match &element {
             Element::Long(v) => {
@@ -304,9 +295,6 @@ fn choose_func(
             }
             Element::Double(v) => {
                 func_mind_double(aggregate_data_ptr, offset, v);
-            }
-            _ => {
-                log::warn!("unsupported function: {:?}-{:?}", func, &element);
             }
         },
         Func::SumD => match &element {
@@ -316,9 +304,6 @@ fn choose_func(
             Element::Double(v) => {
                 func_sumd_double(aggregate_data_ptr, offset, v);
             }
-            _ => {
-                log::warn!("unsupported function: {:?}-{:?}", func, &element);
-            }
         },
         Func::Avg => match &element {
             Element::Long(v) => {
@@ -326,9 +311,6 @@ fn choose_func(
             }
             Element::Double(v) => {
                 func_avg_double(aggregate_data_ptr, offset, v, data_idx);
-            }
-            _ => {
-                log::warn!("unsupported function: {:?}-{:?}", func, &element);
             }
         },
         _ => {
@@ -365,43 +347,31 @@ fn func_key_double(
         set_id(field_ref.as_mut_slice(), idx as u16);
     }
 }
-#[inline]
-fn func_key_str(
-    idx: usize,
 
-    aggregate_data_ptr: *mut u8,
-    field_ref: &mut [u8; 8],
-    offset: usize,
-    u64ptr: &u64,
-    str_offset: &usize,
-    len: &usize,
-) {
-    if check_id(field_ref.as_slice(), idx as u16) {
-        let ptr_slice = (*u64ptr + *str_offset as u64) as *const u8;
-        unsafe { ptr::copy_nonoverlapping(ptr_slice, aggregate_data_ptr.add(offset), *len) };
-        set_id(field_ref.as_mut_slice(), idx as u16);
-    }
-}
 #[inline]
 fn func_max_long(aggregate_data_ptr: *mut u8, offset: usize, v: &i64) {
     let max: i64 = fetch_ptr(unsafe { aggregate_data_ptr.add(offset) });
     fill_ptr(unsafe { aggregate_data_ptr.add(offset) }, max.max(*v));
 }
+
 #[inline]
 fn func_min_long(aggregate_data_ptr: *mut u8, offset: usize, v: &i64) {
     let min: i64 = fetch_ptr(unsafe { aggregate_data_ptr.add(offset) });
     fill_ptr(unsafe { aggregate_data_ptr.add(offset) }, min.min(*v));
 }
+
 #[inline]
 fn func_sum_long(aggregate_data_ptr: *mut u8, offset: usize, v: &i64) {
     let sum: i64 = fetch_ptr(unsafe { aggregate_data_ptr.add(offset) });
     fill_ptr(unsafe { aggregate_data_ptr.add(offset) }, sum + *v);
 }
+
 #[inline]
 fn func_count_long(aggregate_data_ptr: *mut u8, offset: usize) {
     let count: i64 = fetch_ptr(unsafe { aggregate_data_ptr.add(offset) });
     fill_ptr(unsafe { aggregate_data_ptr.add(offset) }, count + 1);
 }
+
 #[inline]
 fn func_maxd_long(aggregate_data_ptr: *mut u8, offset: usize, v: &i64) {
     let max: f64 = fetch_ptr(unsafe { aggregate_data_ptr.add(offset) });
@@ -410,6 +380,7 @@ fn func_maxd_long(aggregate_data_ptr: *mut u8, offset: usize, v: &i64) {
         max.max(*v as f64),
     );
 }
+
 #[inline]
 fn func_mind_long(aggregate_data_ptr: *mut u8, offset: usize, v: &i64) {
     let min: f64 = fetch_ptr(unsafe { aggregate_data_ptr.add(offset) });
@@ -418,11 +389,13 @@ fn func_mind_long(aggregate_data_ptr: *mut u8, offset: usize, v: &i64) {
         min.min(*v as f64),
     );
 }
+
 #[inline]
 fn func_sumd_long(aggregate_data_ptr: *mut u8, offset: usize, v: &i64) {
     let sum: f64 = fetch_ptr(unsafe { aggregate_data_ptr.add(offset) });
     fill_ptr(unsafe { aggregate_data_ptr.add(offset) }, sum + *v as f64);
 }
+
 #[inline]
 fn func_avg_long(aggregate_data_ptr: *mut u8, offset: usize, v: &i64, data_idx: usize) {
     let avg: f64 = fetch_ptr(unsafe { aggregate_data_ptr.add(offset) });
@@ -431,21 +404,25 @@ fn func_avg_long(aggregate_data_ptr: *mut u8, offset: usize, v: &i64, data_idx: 
         (avg * (data_idx as f64) + (*v as f64)) / ((data_idx + 1) as f64),
     );
 }
+
 #[inline]
 fn func_maxd_double(aggregate_data_ptr: *mut u8, offset: usize, v: &f64) {
     let max: f64 = fetch_ptr(unsafe { aggregate_data_ptr.add(offset) });
     fill_ptr(unsafe { aggregate_data_ptr.add(offset) }, max.max(*v));
 }
+
 #[inline]
 fn func_mind_double(aggregate_data_ptr: *mut u8, offset: usize, v: &f64) {
     let min: f64 = fetch_ptr(unsafe { aggregate_data_ptr.add(offset) });
     fill_ptr(unsafe { aggregate_data_ptr.add(offset) }, min.min(*v));
 }
+
 #[inline]
 fn func_sumd_double(aggregate_data_ptr: *mut u8, offset: usize, v: &f64) {
     let sum: f64 = fetch_ptr(unsafe { aggregate_data_ptr.add(offset) });
     fill_ptr(unsafe { aggregate_data_ptr.add(offset) }, sum + *v);
 }
+
 #[inline]
 fn func_avg_double(aggregate_data_ptr: *mut u8, offset: usize, v: &f64, data_idx: usize) {
     let avg: f64 = fetch_ptr(unsafe { aggregate_data_ptr.add(offset) });
@@ -460,7 +437,6 @@ fn fetch_arg_val(sub_data: *const u8, executor: &Executor, stream: &Record) -> E
         Executor::Fetch(_record_id, field_id) => {
             let column = stream.column(*field_id);
             let column_type = column.data_type();
-            let offset = column.offset();
             match column_type {
                 ColumnType::Long => {
                     Element::Long(unsafe { fetch_ptr(sub_data.add(column.offset())) })
@@ -468,7 +444,6 @@ fn fetch_arg_val(sub_data: *const u8, executor: &Executor, stream: &Record) -> E
                 ColumnType::Double => {
                     Element::Double(unsafe { fetch_ptr(sub_data.add(column.offset())) })
                 }
-                ColumnType::Str(len) => Element::Str(sub_data as u64, offset, *len),
             }
         }
         _ => {
