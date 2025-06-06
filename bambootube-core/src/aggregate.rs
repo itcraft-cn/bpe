@@ -6,7 +6,8 @@ use crate::{
     element::Element,
     error::ParseSqlError,
     exec::create_executor,
-    func::{Executor, FnHolder, Func},
+    fndef::{callback, CallbackParams, FnHolder},
+    func::{Executor, Func},
     id::next_aggregate_id,
     sql::{
         base::{parse_options, ParsedSql},
@@ -18,14 +19,12 @@ use std::alloc::{self, Layout};
 
 static mut PTR_AGGREGATE_MAP: u64 = 0;
 static mut PTR_PARSE_OPTIONS: u64 = 0;
-static mut PTR_FIELD_REF: u64 = 0;
 static mut PTR_VAL_DATA_REF: u64 = 0;
 
 pub(crate) fn init_aggregate() {
     unsafe {
         PTR_AGGREGATE_MAP = def_global_ptr(SimpleU16Map::new());
         PTR_PARSE_OPTIONS = def_global_ptr(parse_options());
-        PTR_FIELD_REF = def_global_ptr([0_u8; 8]);
         PTR_VAL_DATA_REF =
             alloc::alloc(Layout::from_size_align(U8_DATA_MAX_SIZE, 1).unwrap()) as u64;
     }
@@ -52,11 +51,11 @@ pub(crate) fn define_aggregate(sql: &str, func_holder: FnHolder) -> Option<u16> 
 }
 
 #[inline]
-pub(crate) fn call_aggregate(wrapped: &WrappedAggregate, u8_ptr: *const u8, size: usize) {
+pub(crate) fn call_aggregate(wrapped: &WrappedAggregate, param: CallbackParams) {
     let id = wrapped.aggregate().stream_id();
     if let Some(stream) = Record::get_record(id) {
         let aggregate_data_ptr = unsafe { PTR_VAL_DATA_REF } as *mut u8;
-        call_with_aggregate_data(aggregate_data_ptr, wrapped, u8_ptr, stream, size);
+        call_with_aggregate_data(aggregate_data_ptr, wrapped, stream, param);
     } else {
         log::warn!("failed to find stream by id[{id}]");
     }
@@ -66,22 +65,22 @@ pub(crate) fn call_aggregate(wrapped: &WrappedAggregate, u8_ptr: *const u8, size
 fn call_with_aggregate_data(
     aggregate_data_ptr: *mut u8,
     wrapped: &WrappedAggregate,
-    u8_ptr: *const u8,
     stream: &Record,
-    size: usize,
+    param: CallbackParams,
 ) {
     if init_data(aggregate_data_ptr, wrapped, stream) {
-        compute_data(aggregate_data_ptr, u8_ptr, wrapped, stream, size);
-        callback(wrapped, aggregate_data_ptr, 1);
+        compute_data(aggregate_data_ptr, wrapped, stream, param);
+        callback(
+            &wrapped.fn_holder,
+            CallbackParams::new(aggregate_data_ptr, 1, 0, 1, 1),
+        );
     }
 }
 
 #[inline]
 fn init_data(aggregate_data_ptr: *mut u8, wrapped: &WrappedAggregate, stream: &Record) -> bool {
-    let field_ref = get_global_mut::<[u8; 8]>(unsafe { PTR_FIELD_REF });
-    field_ref.fill(0_u8);
-    for (idx, executor) in wrapped.aggregate().executors().iter().enumerate() {
-        let rs = setup_init_val(aggregate_data_ptr, idx, executor, stream);
+    for (col_idx, executor) in wrapped.aggregate().executors().iter().enumerate() {
+        let rs = setup_init_val(aggregate_data_ptr, col_idx, executor, stream);
         if rs.is_err() {
             log::warn!("hit error: {:?}", rs.err());
             return false;
@@ -91,40 +90,13 @@ fn init_data(aggregate_data_ptr: *mut u8, wrapped: &WrappedAggregate, stream: &R
 }
 
 #[inline]
-fn compute_data(
-    aggregate_data_ptr: *mut u8,
-    u8_ptr: *const u8,
-    wrapped: &WrappedAggregate,
-    stream: &Record,
-    size: usize,
-) {
-    for data_idx in 0..size {
-        loop_compute(
-            aggregate_data_ptr,
-            unsafe { u8_ptr.add(data_idx * U8_DATA_MAX_SIZE) },
-            data_idx,
-            wrapped,
-            stream,
-        );
-    }
-}
-
-fn callback(wrapped: &WrappedAggregate, aggregate_data_ptr: *mut u8, size: usize) {
-    match &wrapped.fn_holder {
-        FnHolder::Func(f) => f(aggregate_data_ptr, size),
-        FnHolder::FfiFunc(f) => f.callback(aggregate_data_ptr, size),
-        FnHolder::Lambda(f) => f(aggregate_data_ptr, size),
-    }
-}
-
-#[inline]
 fn setup_init_val(
     aggregate_data_ptr: *mut u8,
-    idx: usize,
+    col_idx: usize,
     executor: &Executor,
     stream: &Record,
 ) -> Result<(), String> {
-    let offset = stream.column((idx + 1) as u16).offset();
+    let offset = stream.column((col_idx + 1) as u16).offset();
     match executor {
         Executor::ConstLong(_) => Ok(()),
         Executor::ConstDouble(_) => Ok(()),
@@ -161,65 +133,124 @@ fn init_for_some_func(func: &Func, aggregate_data_ptr: *mut u8, offset: usize) {
 }
 
 #[inline]
-fn loop_compute(
+fn compute_data(
     aggregate_data_ptr: *mut u8,
-    sub_data: *const u8,
-    data_idx: usize,
     wrapped: &WrappedAggregate,
     stream: &Record,
+    param: CallbackParams,
 ) {
-    let field_ref = get_global_mut::<[u8; 8]>(unsafe { PTR_FIELD_REF });
-    for (idx, executor) in wrapped.aggregate().executors().iter().enumerate() {
+    // log::info!("u8_ptr: {:?}, offset: {}", u8_ptr as u64, param.offset());
+    let wrapped_agg_param = WrappedAggParam::new(aggregate_data_ptr, stream, &param);
+    for (col_idx, executor) in wrapped.aggregate().executors().iter().enumerate() {
+        let offset = stream.column((col_idx + 1) as u16).offset();
+        match executor {
+            Executor::ConstLong(v) => {
+                fill_ptr(unsafe { aggregate_data_ptr.add(offset) }, *v);
+            }
+            Executor::ConstDouble(v) => {
+                fill_ptr(unsafe { aggregate_data_ptr.add(offset) }, *v);
+            }
+            Executor::Compute(func, executors) => {
+                let executor_size = executors.executor_size();
+                if executor_size != 1 {
+                    log::warn!("aggregate func[{func:?}] just support one argument, here is {executor_size:?} executors");
+                    return;
+                }
+                match func {
+                    Func::FirstL => {
+                        let sub_executor = executors.index_of(0);
+                        let element = fetch_arg_val(param.u8_ptr(), sub_executor, stream);
+                        // log::info!("{sub_executor:?}, {element:?}");
+                        // log::info!("first ptr: {}", param.u8_ptr() as u64);
+                        call_once_compute(&wrapped_agg_param, func, element, offset);
+                        // for i in 0..param.size() {
+                        //     let sub_executor = executors.index_of(0);
+                        //     let element = fetch_arg_val(
+                        //         unsafe { param.u8_ptr().add(i * param.step()) },
+                        //         sub_executor,
+                        //         stream,
+                        //     );
+                        //     log::info!("{sub_executor:?}, {element:?}");
+                        //     log::info!(
+                        //         "loop first ptr: {}",
+                        //         param.u8_ptr() as u64 + (i * param.step()) as u64
+                        //     );
+                        //     call_once_compute(&wrapped_agg_param, func, element, offset)
+                        // }
+                    }
+                    Func::FirstD => {
+                        call_once_compute(&wrapped_agg_param, func, Element::Double(0_f64), offset)
+                    }
+                    Func::LastL => {
+                        let sub_executor = executors.index_of(0);
+                        let last = param.size() - 1;
+                        let sub_data = unsafe { param.u8_ptr().add(last * param.step()) };
+                        let element = fetch_arg_val(sub_data, sub_executor, stream);
+                        // log::info!("{sub_executor:?}, {element:?}");
+                        // log::info!(
+                        //     "last ptr: {}|{}|{}",
+                        //     param.u8_ptr() as u64,
+                        //     sub_data as u64,
+                        //     sub_data as u64 - param.u8_ptr() as u64
+                        // );
+                        call_once_compute(&wrapped_agg_param, func, element, offset)
+                    }
+                    Func::LastD => {
+                        call_once_compute(&wrapped_agg_param, func, Element::Double(0_f64), offset)
+                    }
+                    _ => loop_compute(aggregate_data_ptr, stream, col_idx, executor, &param),
+                }
+            }
+            _ => {}
+        }
+    }
+}
+
+fn call_once_compute(
+    wrapped_agg_param: &WrappedAggParam,
+    func: &Func,
+    element: Element,
+    offset: usize,
+) {
+    choose_func(func, element, wrapped_agg_param, offset, 0);
+}
+
+fn loop_compute(
+    aggregate_data_ptr: *mut u8,
+    stream: &Record,
+    col_idx: usize,
+    executor: &Executor,
+    param: &CallbackParams,
+) {
+    let u8_ptr = param.u8_ptr();
+    let size = param.size();
+    let wrapped_agg_param = WrappedAggParam::new(aggregate_data_ptr, stream, param);
+    for data_idx in 0..size {
         compute(
-            idx,
+            col_idx,
+            &wrapped_agg_param,
             executor,
-            aggregate_data_ptr,
-            field_ref,
-            sub_data,
+            unsafe { u8_ptr.add(data_idx * param.step()) },
             data_idx,
-            stream,
         );
     }
 }
 
 #[inline]
 fn compute(
-    idx: usize,
+    col_idx: usize,
+    wrapped_agg_param: &WrappedAggParam,
     executor: &Executor,
-    aggregate_data_ptr: *mut u8,
-    field_ref: &mut [u8; 8],
     sub_data: *const u8,
     data_idx: usize,
-    stream: &Record,
 ) {
-    let offset = stream.column((idx + 1) as u16).offset();
+    let stream = wrapped_agg_param.stream();
+    let offset = stream.column((col_idx + 1) as u16).offset();
     match executor {
-        Executor::ConstLong(v) => {
-            fill_ptr(unsafe { aggregate_data_ptr.add(offset) }, *v);
-        }
-        Executor::ConstDouble(v) => {
-            fill_ptr(unsafe { aggregate_data_ptr.add(offset) }, *v);
-        }
         Executor::Compute(func, executors) => {
-            if executors.executor_size() != 1 {
-                log::warn!(
-                    "aggregate func[{:?}] just support one argument, here is {:?} executors",
-                    func,
-                    executors.executor_size()
-                );
-                return;
-            }
             let sub_executor = executors.index_of(0);
             let element = fetch_arg_val(sub_data, sub_executor, stream);
-            choose_func(
-                func,
-                element,
-                field_ref,
-                idx,
-                aggregate_data_ptr,
-                offset,
-                data_idx,
-            );
+            choose_func(func, element, wrapped_agg_param, offset, data_idx);
         }
         _ => {
             log::warn!(
@@ -233,21 +264,12 @@ fn compute(
 fn choose_func(
     func: &Func,
     element: Element,
-    field_ref: &mut [u8; 8],
-    idx: usize,
-    aggregate_data_ptr: *mut u8,
+    wrapped_agg_param: &WrappedAggParam,
     offset: usize,
     data_idx: usize,
 ) {
+    let aggregate_data_ptr = wrapped_agg_param.aggregate_data_ptr();
     match func {
-        Func::Key => match &element {
-            Element::Long(v) => {
-                agg_func::func_key_long(idx, aggregate_data_ptr, field_ref, offset, v);
-            }
-            Element::Double(v) => {
-                agg_func::func_key_double(idx, aggregate_data_ptr, field_ref, offset, v);
-            }
-        },
         Func::MaxL => match &element {
             Element::Long(v) => {
                 agg_func::func_max_long(aggregate_data_ptr, offset, v);
@@ -312,6 +334,49 @@ fn choose_func(
                 agg_func::func_avg_double(aggregate_data_ptr, offset, v, data_idx);
             }
         },
+        Func::FirstL => match &element {
+            Element::Long(v) => {
+                agg_func::func_first_long(aggregate_data_ptr, offset, v);
+            }
+            _ => {
+                log::warn!("unsupported function: {:?}-{:?}", func, &element);
+            }
+        },
+        Func::FirstD => {
+            let u8_ptr = wrapped_agg_param.u8_ptr();
+            let adjusted = unsafe { u8_ptr.add(offset) };
+            let v = match &element {
+                Element::Long(_) => {
+                    let v: i64 = fetch_ptr(adjusted);
+                    v as f64
+                }
+                Element::Double(_) => fetch_ptr(adjusted),
+            };
+            agg_func::func_first_double(aggregate_data_ptr, offset, &v);
+        }
+        Func::LastL => match &element {
+            Element::Long(v) => {
+                agg_func::func_last_long(aggregate_data_ptr, offset, v);
+            }
+            _ => {
+                log::warn!("unsupported function: {:?}-{:?}", func, &element);
+            }
+        },
+        Func::LastD => {
+            let u8_ptr = wrapped_agg_param.u8_ptr();
+            let last = wrapped_agg_param.size() - 1;
+            let step = wrapped_agg_param.step();
+            let adjusted = unsafe { u8_ptr.add(last * step + offset) };
+            let v = match &element {
+                Element::Long(_) => {
+                    let v: i64 = fetch_ptr(adjusted);
+                    v as f64
+                }
+                Element::Double(_) => fetch_ptr(adjusted),
+            };
+            log::info!("last_double: {v}");
+            agg_func::func_last_double(aggregate_data_ptr, offset, &v);
+        }
         _ => {
             log::warn!("unsupported function: {:?}-{:?}", func, &element);
         }
@@ -325,7 +390,10 @@ fn fetch_arg_val(sub_data: *const u8, executor: &Executor, stream: &Record) -> E
             let column_type = column.data_type();
             match column_type {
                 ColumnType::Long => {
-                    Element::Long(unsafe { fetch_ptr(sub_data.add(column.offset())) })
+                    // Element::Long(unsafe { fetch_ptr(sub_data.add(column.offset())) })
+                    let ptr = unsafe { sub_data.add(column.offset()) };
+                    log::info!("fetch ptr: {}", ptr as u64);
+                    Element::Long(fetch_ptr(ptr))
                 }
                 ColumnType::Double => {
                     Element::Double(unsafe { fetch_ptr(sub_data.add(column.offset())) })
@@ -406,5 +474,48 @@ impl WrappedAggregate {
     }
     fn aggregate(&self) -> &Aggregate {
         &self.aggregate
+    }
+}
+
+struct WrappedAggParam<'a> {
+    aggregate_data_ptr: *mut u8,
+    stream: &'a Record,
+    param: &'a CallbackParams,
+}
+impl<'a> WrappedAggParam<'a> {
+    fn new(aggregate_data_ptr: *mut u8, stream: &'a Record, param: &'a CallbackParams) -> Self {
+        WrappedAggParam {
+            aggregate_data_ptr,
+            stream,
+            param,
+        }
+    }
+
+    fn aggregate_data_ptr(&self) -> *mut u8 {
+        self.aggregate_data_ptr
+    }
+
+    fn stream(&self) -> &'a Record {
+        self.stream
+    }
+
+    fn u8_ptr(&self) -> *const u8 {
+        self.param.u8_ptr()
+    }
+
+    fn _mask(&self) -> usize {
+        self.param.mask()
+    }
+
+    fn _base_offset(&self) -> usize {
+        self.param.offset()
+    }
+
+    fn size(&self) -> usize {
+        self.param.size()
+    }
+
+    fn step(&self) -> usize {
+        self.param.step()
     }
 }

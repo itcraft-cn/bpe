@@ -5,6 +5,8 @@ use std::{
     time::{Duration, SystemTime, UNIX_EPOCH},
 };
 
+use crate::consts::FIELD_SIZE;
+
 const U16_FULL_VAL: u32 = u16::MAX as u32 + 1;
 
 #[inline]
@@ -47,8 +49,8 @@ pub(crate) fn bitmap_set_id(array: &mut [u8], id: u16) {
 
 #[inline]
 fn fetch_idx_bit(id: u16) -> (u16, u16) {
-    let idx = id / 8;
-    let bit = id % 8;
+    let idx = id / (FIELD_SIZE as u16);
+    let bit = id % (FIELD_SIZE as u16);
     (idx, bit)
 }
 
@@ -136,13 +138,13 @@ impl SimpleU16Entry {
 #[cfg(test)]
 mod tests {
     use super::{fetch, fetch_ptr, fill, fill_ptr};
-    use crate::utest::base::test_init;
+    use crate::{consts::FIELD_SIZE, utest::base::test_init};
     use std::alloc::{self, Layout};
 
     #[test]
     fn test() {
         test_init();
-        let mut array = [0_u8; 8];
+        let mut array = [0_u8; FIELD_SIZE];
         let slice = array.as_mut_slice();
         let i64v = 1234;
         fill(slice, i64v);

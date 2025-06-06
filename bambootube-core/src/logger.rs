@@ -19,8 +19,8 @@ use log4rs::{
 };
 use std::{env, path::PathBuf, sync::Once};
 
-const PATTERN_STDOUT: &str = "[{d}][{h({l})}][{I}|{h({T})}][{t}\\(L{L}\\)] {m}{n}";
-const PATTERN_FILE: &str = "[{d}][{l}][{I}|{T}][{t}\\(L{L}\\)] {m}{n}";
+const PATTERN_STDOUT: &str = "[{d}][{h({l})}][{h({T})}][{t}\\(L{L}\\)] {m}{n}";
+const PATTERN_FILE: &str = "[{d}][{l}][{T}][{t}\\(L{L}\\)] {m}{n}";
 
 const LOG_NAME: &str = "bambootube.log";
 

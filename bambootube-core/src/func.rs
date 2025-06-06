@@ -3,7 +3,6 @@ use crate::{
     calc_func,
     data::{ColumnType, Record},
     element::Element,
-    ffi::FfiFunc,
 };
 use std::{
     alloc::{alloc, Layout},
@@ -56,7 +55,7 @@ impl Executor {
     pub(crate) fn fetch(
         &self,
         id: u16,
-        u64ptr: u64,
+        v_ptr: u64,
         record: &Record,
         position: usize,
         sub_data_ptr: *const u8,
@@ -65,10 +64,10 @@ impl Executor {
             Executor::ConstLong(v) => Element::Long(*v),
             Executor::ConstDouble(v) => Element::Double(*v),
             Executor::Fetch(_, field_id) => {
-                fetch_val(sub_data_ptr, id, u64ptr, record, position, *field_id)
+                fetch_val(sub_data_ptr, id, v_ptr, record, position, *field_id)
             }
             Executor::Compute(f, executors) => {
-                compute_func(sub_data_ptr, id, u64ptr, record, position, f, executors)
+                compute_func(sub_data_ptr, id, v_ptr, record, position, f, executors)
             }
         }
     }
@@ -78,7 +77,7 @@ impl Executor {
 pub(crate) fn fetch_val(
     sub_data_ptr: *const u8,
     _id: u16,
-    _u64ptr: u64,
+    _v_ptr: u64,
     record: &Record,
     _position: usize,
     idx: u16,
@@ -95,18 +94,18 @@ pub(crate) fn fetch_val(
 pub(crate) fn compute_func(
     sub_data_ptr: *const u8,
     id: u16,
-    u64ptr: u64,
+    v_ptr: u64,
     record: &Record,
     position: usize,
     f: &Func,
     executors: &Executors,
 ) -> Element {
     match f {
-        Func::Add => calc_func::add(sub_data_ptr, id, u64ptr, record, position, executors),
-        Func::Sub => calc_func::sub(sub_data_ptr, id, u64ptr, record, position, executors),
-        Func::Mul => calc_func::mul(sub_data_ptr, id, u64ptr, record, position, executors),
-        Func::Div => calc_func::div(sub_data_ptr, id, u64ptr, record, position, executors),
-        Func::Mod => calc_func::mod_(sub_data_ptr, id, u64ptr, record, position, executors),
+        Func::Add => calc_func::add(sub_data_ptr, id, v_ptr, record, position, executors),
+        Func::Sub => calc_func::sub(sub_data_ptr, id, v_ptr, record, position, executors),
+        Func::Mul => calc_func::mul(sub_data_ptr, id, v_ptr, record, position, executors),
+        Func::Div => calc_func::div(sub_data_ptr, id, v_ptr, record, position, executors),
+        Func::Mod => calc_func::mod_(sub_data_ptr, id, v_ptr, record, position, executors),
         _ => Element::Long(0),
     }
 }
@@ -126,8 +125,6 @@ pub(crate) enum Func {
     Mod,
     // aggregate func
     #[strum(ascii_case_insensitive)]
-    Key,
-    #[strum(ascii_case_insensitive)]
     MinL,
     #[strum(ascii_case_insensitive)]
     MaxL,
@@ -143,13 +140,12 @@ pub(crate) enum Func {
     SumD,
     #[strum(ascii_case_insensitive)]
     Avg,
-}
-
-pub(crate) type NormalFunc = Box<dyn Fn(*const u8, usize) + Send + 'static>;
-pub(crate) type LambdaFunc = Box<dyn Fn(*const u8, usize) + 'static>;
-
-pub(crate) enum FnHolder {
-    Func(NormalFunc),
-    FfiFunc(Box<dyn FfiFunc>),
-    Lambda(LambdaFunc),
+    #[strum(ascii_case_insensitive)]
+    FirstL,
+    #[strum(ascii_case_insensitive)]
+    FirstD,
+    #[strum(ascii_case_insensitive)]
+    LastL,
+    #[strum(ascii_case_insensitive)]
+    LastD,
 }

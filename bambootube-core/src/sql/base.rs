@@ -77,20 +77,32 @@ pub(crate) struct ParsedSql {
     records: Vec<u16>,
     filter: JitFunction<'static, FilterFunc>,
     limit: usize,
+    fetch_asc: bool,
     fields: Vec<ExprEntity>,
 }
 impl ParsedSql {
     pub(crate) fn new(
         records: Vec<u16>,
         filter: JitFunction<'static, FilterFunc>,
-        limit: usize,
+        limit: isize,
         fields: Vec<ExprEntity>,
     ) -> ParsedSql {
-        ParsedSql {
-            records,
-            filter,
-            limit,
-            fields,
+        if limit >= 0 {
+            ParsedSql {
+                records,
+                filter,
+                limit: limit as usize,
+                fetch_asc: true,
+                fields,
+            }
+        } else {
+            ParsedSql {
+                records,
+                filter,
+                limit: (0 - limit) as usize,
+                fetch_asc: false,
+                fields,
+            }
         }
     }
 
@@ -100,6 +112,10 @@ impl ParsedSql {
 
     pub(crate) fn filter(&self) -> &JitFunction<'static, FilterFunc> {
         &self.filter
+    }
+
+    pub(crate) fn fetch_asc(&self) -> bool {
+        self.fetch_asc
     }
 
     pub(crate) fn limit(&self) -> usize {

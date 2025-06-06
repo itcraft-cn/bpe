@@ -3,7 +3,7 @@ use crate::{
     cfg::load_config,
     data::{check_id_in_store, init_data, Column, Record, RecordType, U8Bytes},
     ffi::FfiFunc,
-    func::FnHolder,
+    fndef::{CallbackParams, FnHolder},
     jit::base::init_func_generator,
     logger::init_logger,
     mapper::{call_mapper, define_mapper, init_mapper},
@@ -63,7 +63,7 @@ fn process_data(array: &mut WrappedArray, data: &U8Bytes) {
 
 pub fn def_mapper<F>(sql: &str, func: F) -> Option<u16>
 where
-    F: Fn(*const u8, usize) + Send + 'static,
+    F: Fn(CallbackParams) + Send + 'static,
 {
     define_mapper(sql, FnHolder::Func(Box::new(func)))
 }
@@ -71,7 +71,7 @@ where
 pub fn def_mapper_bind_aggregate(sql: &str, aggregate_id: u16) -> Option<u16> {
     let opt_aggregate = search_aggregate(aggregate_id);
     if let Some(wrapped) = opt_aggregate {
-        let f = move |u8_ptr: *const u8, size: usize| call_aggregate(wrapped, u8_ptr, size);
+        let f = move |param: CallbackParams| call_aggregate(wrapped, param);
         define_mapper(sql, FnHolder::Lambda(Box::new(f)))
     } else {
         None
@@ -84,7 +84,7 @@ pub fn def_mapper_ffi(sql: &str, ffi: Box<dyn FfiFunc>) -> Option<u16> {
 
 pub fn def_aggregate<F>(sql: &str, func: F) -> Option<u16>
 where
-    F: Fn(*const u8, usize) + Send + 'static,
+    F: Fn(CallbackParams) + Send + 'static,
 {
     define_aggregate(sql, FnHolder::Func(Box::new(func)))
 }

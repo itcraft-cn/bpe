@@ -1,6 +1,5 @@
 use bambootube::{
-    def_aggregate, def_incoming, def_mapper_bind_aggregate, def_stream, new_data, start, stop,
-    CallbackParams, Column, U8Bytes,
+    def_aggregate, def_incoming, def_mapper_bind_aggregate, def_stream, new_data, start, stop, CallbackParams, Column, U8Bytes
 };
 use std::{
     env, ptr,
@@ -13,16 +12,18 @@ use std::{
 };
 
 const BASE: f64 = 1000000f64;
-const LOOP_SIZE: usize = 20;
+const LOOP_SIZE: usize = 1000;
 
 const FILTER_SQL: &str = r#"
-    SELECT demo.f, demo.a, demo.b, demo.c, _sub(_add(demo.d, demo.c), demo.e)
+    SELECT demo.f, demo.a, demo.b, demo.c, _sub(_add(demo.d, demo.d), demo.e)
     FROM demo
     WHERE (demo.a = 1 AND demo.b = 2) OR (demo.a = 3 AND demo.b = 4)
     LIMIT 10
     "#;
 const AGGREGATE_SQL: &str = r#"
-    select _firstl(stream.a), _lastl(stream.a) from stream
+    select _firstl(stream.a), _lastl(stream.a), _minl(stream.a), _maxl(stream.a),
+           _firstd(stream.a), _lastd(stream.a), _mind(stream.a), _maxd(stream.a)
+    from stream
     "#;
 
 pub fn main() {
@@ -57,7 +58,9 @@ fn init_func(sum_store: Arc<AtomicI64>) -> (u16, u16) {
         if let Some(aggregate_id) = def_aggregate(
             AGGREGATE_SQL,
             #[inline]
-            move |param| func_callback(&sum_store, param),
+            move |param| {
+                func_callback(&sum_store, param);
+            },
         ) {
             log::info!("define aggregate: {aggregate_id}");
             if let Some(mapper_id) = def_mapper_bind_aggregate(FILTER_SQL, aggregate_id) {
@@ -77,10 +80,21 @@ fn init_func(sum_store: Arc<AtomicI64>) -> (u16, u16) {
 fn func_callback(sum_store: &Arc<AtomicI64>, param: CallbackParams) {
     let data = param.u8_ptr();
     let now = now();
-    let timestamp_first = fetch_i64(data);
-    let timestamp_last = fetch_i64(unsafe { data.add(8) });
-    log::info!("long: now->{now}, first->{timestamp_first}, last->{timestamp_last}");
-    let delta = now as f64 - timestamp_first as f64;
+    let timestamp_first_1 = fetch_i64(data);
+    let timestamp_last_1 = fetch_i64(data.wrapping_add(8));
+    let timestamp_min_1 = fetch_i64(data.wrapping_add(16));
+    let timestamp_max_1 = fetch_i64(data.wrapping_add(24));
+    // let timestamp_first_2 = fetch_f64(data.wrapping_add(32));
+    // let timestamp_last_2 = fetch_f64(data.wrapping_add(40));
+    // let timestamp_min_2 = fetch_f64(data.wrapping_add(48));
+    // let timestamp_max_2 = fetch_f64(data.wrapping_add(56));
+    log::info!(
+        "long:   {now}, {timestamp_first_1}, {timestamp_last_1}, {timestamp_min_1}, {timestamp_max_1}"
+    );
+    // log::info!(
+    //     "double: {timestamp_first_2}, {timestamp_last_2}, {timestamp_min_2}, {timestamp_max_2}"
+    // );
+    let delta = now as f64 - timestamp_last_1 as f64;
     sum_store.fetch_add((BASE * delta) as i64, Ordering::SeqCst);
 }
 
@@ -144,13 +158,13 @@ fn gen_u8_bytes(id: u16) -> U8Bytes {
     let mut u8array = [0_u8; 512];
     let slice = u8array.as_mut_slice();
     let now = now();
-    // log::info!("now: {now}");
-    fill_i64(&mut slice[0..8], 1);
-    fill_i64(&mut slice[8..16], 2);
-    fill_i64(&mut slice[16..24], 3);
-    fill_i64(&mut slice[24..32], 4);
-    fill_i64(&mut slice[32..40], 5);
-    fill_i64(&mut slice[40..48], now as i64);
+    //log::info!("now: {now}");
+    fill_u64(&mut slice[0..8], 1);
+    fill_u64(&mut slice[8..16], 2);
+    fill_u64(&mut slice[16..24], 3);
+    fill_u64(&mut slice[24..32], 4);
+    fill_u64(&mut slice[32..40], 5);
+    fill_u64(&mut slice[40..48], now);
     //let v = fetch_u64(slice.as_ptr());
     //log::info!("v: {v}");
     U8Bytes::new_from_vec(id, 512, Vec::from(u8array))
@@ -159,8 +173,7 @@ fn gen_u8_bytes(id: u16) -> U8Bytes {
 #[inline]
 fn update_now(u8data: &mut U8Bytes) {
     let now = now();
-    log::info!("now: {now}");
-    fill_i64(&mut u8data.bytes_mut()[40..48], now as i64);
+    fill_u64(&mut u8data.bytes_mut()[40..48], now);
 }
 
 #[inline]
@@ -192,10 +205,10 @@ where
 }
 
 #[inline]
-pub(crate) fn fill_i64(slice: &mut [u8], data: i64) {
+pub(crate) fn fill_u64(slice: &mut [u8], data: u64) {
     let p_val = ptr::addr_of!(*slice);
-    let p_i64 = p_val as *mut i64;
-    unsafe { *p_i64 = data };
+    let p_u64 = p_val as *mut u64;
+    unsafe { *p_u64 = data };
 }
 
 #[inline]

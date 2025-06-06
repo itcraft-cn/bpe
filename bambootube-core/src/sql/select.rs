@@ -1,5 +1,5 @@
 use crate::{
-    consts::DEFALUT_SELECT_SIZE,
+    consts::DEFAULT_SELECT_SIZE,
     data::Record,
     jit::{base::FuncGenerator, filter::gen_select_filter_func},
     sql::base::{parse_sql, ExprEntity, FilterFunc, ParsedSql, ValType},
@@ -7,6 +7,7 @@ use crate::{
 use inkwell::execution_engine::JitFunction;
 use sql_parse::{
     Expression, IdentifierPart, ParseOptions, Select, SelectExpr, Statement, TableReference,
+    UnaryOperator,
 };
 use std::ops::Range;
 
@@ -151,7 +152,7 @@ fn parse_select_filter<'ctx>(
     let rs_filters_func =
         gen_select_filter_func(func_generator, &select_stat.where_, record, issues);
     if let Ok(filters_func) = rs_filters_func {
-        log::info!("the filter func: {filters_func:#?}");
+        // log::info!("the filter func: {filters_func:#?}");
         Some(filters_func)
     } else {
         log::warn!("{}", rs_filters_func.err().unwrap());
@@ -165,18 +166,26 @@ fn parse_select_filter<'ctx>(
 fn parse_select_limitor(
     limit: &Option<(Range<usize>, Option<Expression<'_>>, Expression<'_>)>,
     issues: &mut Vec<String>,
-) -> usize {
+) -> isize {
     if let Some(limit_part) = limit {
         if limit_part.1.is_some() {
             issues.push(String::from("offset is not supported"));
             return 0;
         }
         match &limit_part.2 {
-            Expression::Integer(v) => v.0 as usize,
-            _ => DEFALUT_SELECT_SIZE,
+            Expression::Integer(v) => v.0 as isize,
+            Expression::Unary {
+                op: UnaryOperator::Minus,
+                operand,
+                ..
+            } => match operand.as_ref() {
+                Expression::Integer(v) => (0 - v.0) as isize,
+                _ => 0 - DEFAULT_SELECT_SIZE,
+            },
+            _ => DEFAULT_SELECT_SIZE,
         }
     } else {
-        DEFALUT_SELECT_SIZE
+        DEFAULT_SELECT_SIZE
     }
 }
 

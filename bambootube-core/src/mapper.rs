@@ -1,10 +1,10 @@
 use crate::{
     aux::{SimpleU16Entry, SimpleU16Map},
-    consts::U8_DATA_MAX_SIZE,
     data::Record,
     error::ParseSqlError,
     exec::create_executor,
-    func::{Executors, FnHolder},
+    fndef::{callback, CallbackParams, FnHolder},
+    func::Executors,
     id::next_mapper_id,
     sql::{
         base::{parse_options, FilterFunc, ParsedSql},
@@ -15,6 +15,9 @@ use crate::{
 use globalvar::{def_global_ptr, get_global, get_global_mut};
 use inkwell::execution_engine::JitFunction;
 use std::alloc::{self, Layout};
+
+const OPERATOR_INC: fn(usize) -> usize = |v| v + 1;
+const OPERATOR_DEC: fn(usize) -> usize = |v| v - 1;
 
 static mut PTR_MAPPER_MAP: u64 = 0;
 static mut PTR_PARSE_OPTIONS: u64 = 0;
@@ -117,7 +120,14 @@ fn invoke(
 ) {
     let u8_ptr = unsafe { PTR_VAL_DATA_REF } as *mut u8;
     let size = loop_filter(array, mapper, id, record, u8_ptr);
-    callback(fn_holder, u8_ptr, size);
+    let mask = array.mask();
+    let offset = (array.walker() - 1) & mask;
+    let step = array.step();
+    // log::info!("mapper===>last offset: {offset}, size: {size}");
+    callback(
+        fn_holder,
+        CallbackParams::new(u8_ptr, mask, offset, size, step),
+    );
 }
 
 fn loop_filter(
@@ -127,43 +137,52 @@ fn loop_filter(
     record: &Record,
     u8_ptr: *mut u8,
 ) -> usize {
-    let mut idx = 0;
-    let walker = array.walker() + array.size();
+    let walker = array.walker();
     let mask = array.mask();
-    let max_idx = array.records() - 1;
-    let u64ptr = array.u64ptr();
+    let first_idx = array.first_idx();
+    let last_idx = array.last_idx();
+    let step = array.step();
+    let v_ptr = array.u64ptr();
     let mut n = 0;
     let mut offset = 0;
+    let limit = mapper.limit();
+    let asc = mapper.fetch_asc();
+    let mut idx_wrapper = if asc {
+        Idx::new(last_idx, first_idx, OPERATOR_DEC)
+    } else {
+        Idx::new(first_idx, last_idx, OPERATOR_INC)
+    };
+    // log::info!("mapper===>{first_idx}/{last_idx}/{asc}");
     loop {
-        let position = (walker - U8_DATA_MAX_SIZE - idx * U8_DATA_MAX_SIZE) & mask;
+        let position = ((walker - 1 - idx_wrapper.idx()) * step) & mask;
         let sub_data_ptr = array.sub_data(position);
-        if unsafe { mapper.filter().call(u64ptr) } {
-            //log::info!("position: {position}");
+        let v_sub_ptr = sub_data_ptr as u64;
+        // let v_u8_ptr = u8_ptr as u64;
+        // let delta = v_sub_ptr - v_ptr;
+        // log::info!("mapper===>position: {n}--->{offset}|{position}|{v_ptr}|{v_sub_ptr}|{delta}");
+        // log::info!(
+        //     "mapper===>position: {n}--->{offset}|{v_u8_ptr}|{}",
+        //     v_u8_ptr + offset as u64
+        // );
+        if unsafe { mapper.filter().call(v_sub_ptr) } {
             let adjusted = unsafe { u8_ptr.add(offset) };
-            mapper.fetch(id, u64ptr, record, position, sub_data_ptr, adjusted);
+            mapper.fetch(id, v_ptr, record, position, sub_data_ptr, adjusted);
             n += 1;
-            offset += n * U8_DATA_MAX_SIZE;
-            if n == mapper.limit() {
-                //log::info!("quit, hit limit: {n}");
+            offset += n * step;
+            if n == limit {
+                // log::info!("mapper===>quit, hit limit: {n}");
                 break;
             }
-        }
-        if idx == max_idx {
-            //log::info!("quit, max idx: {idx}");
-            break;
         } else {
-            idx += 1;
+            // log::info!("mapper===>quit, filter[{v_sub_ptr}] false");
+        }
+        if idx_wrapper.judge_or_step() {
+            // let max_idx = array.last_idx();
+            // log::info!("mapper===>quit, max idx: {}/{}", idx_wrapper.idx(), max_idx);
+            break;
         }
     }
     n
-}
-
-fn callback(fn_holder: &FnHolder, u8_ptr: *mut u8, size: usize) {
-    match fn_holder {
-        FnHolder::Func(f) => f(u8_ptr, size),
-        FnHolder::FfiFunc(ffi) => ffi.callback(u8_ptr, size),
-        FnHolder::Lambda(f) => f(u8_ptr, size),
-    }
 }
 
 #[derive(Debug)]
@@ -188,7 +207,7 @@ impl Mapper {
     fn fetch(
         &self,
         id: u16,
-        u64ptr: u64,
+        v_ptr: u64,
         record: &Record,
         position: usize,
         sub_data_ptr: *const u8,
@@ -201,7 +220,8 @@ impl Mapper {
         let mut i = 0;
         loop {
             let executor = executors.index_of(i);
-            val = executor.fetch(id, u64ptr, record, position, sub_data_ptr);
+            val = executor.fetch(id, v_ptr, record, position, sub_data_ptr);
+            // log::info!("mapper data: {executor:?}, {val:?}");
             let val_len = val.len();
             val.copy_to_target(target as *mut u8, offset);
             offset += val_len;
@@ -219,6 +239,10 @@ impl Mapper {
     fn limit(&self) -> usize {
         self.parsed_sql.limit()
     }
+
+    fn fetch_asc(&self) -> bool {
+        self.parsed_sql.fetch_asc()
+    }
 }
 
 pub(crate) struct WrappedMapper {
@@ -228,5 +252,34 @@ pub(crate) struct WrappedMapper {
 impl WrappedMapper {
     fn new(mapper: Mapper, fn_holder: FnHolder) -> Self {
         WrappedMapper { mapper, fn_holder }
+    }
+}
+
+struct Idx {
+    idx: usize,
+    stop_val: usize,
+    operator: fn(usize) -> usize,
+}
+impl Idx {
+    fn new(init_val: usize, stop_val: usize, operator: fn(usize) -> usize) -> Self {
+        Self {
+            idx: init_val,
+            stop_val,
+            operator,
+        }
+    }
+
+    fn idx(&self) -> usize {
+        self.idx
+    }
+
+    fn judge_or_step(&mut self) -> bool {
+        // log::info!("idx===>{}/{}", self.idx, self.stop_val);
+        if self.idx == self.stop_val {
+            true
+        } else {
+            self.idx = (self.operator)(self.idx);
+            false
+        }
     }
 }
