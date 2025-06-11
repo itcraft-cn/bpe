@@ -44,19 +44,19 @@ RUSTFLAGS=$RUSTFLAGS $CARGO_CMD
 
 if [ $FULL_BUILD -eq 1 ]; then
     # Build java
-    cd bambootube4j
+    cd bbpe4j
     mvnd package -Dmaven.test.skip=true
     cd ..
     
     # Build python wrapper
-    cd bambootube-py-wrapper
+    cd bbpe-py-wrapper
     source bin/activate
     RUSTFLAGS=$RUSTFLAGS $MATURIN_CMD
     deactivate
     cd ..
     
     # install to python sample
-    whl_file_name=$(ls target/wheels/bambootube4py-*)
+    whl_file_name=$(ls target/wheels/bbpe4py-*)
     cd pysample
     source bin/activate
     pip install ../$whl_file_name --force-reinstall
