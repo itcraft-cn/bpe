@@ -19,8 +19,9 @@ use log4rs::{
 };
 use std::{env, path::PathBuf, sync::Once};
 
-const PATTERN_STDOUT: &str = "[{d}][{h({l})}][{h({T})}][{t}\\(L{L}\\)] {m}{n}";
-const PATTERN_FILE: &str = "[{d}][{l}][{T}][{t}\\(L{L}\\)] {m}{n}";
+// date time format: https://docs.rs/chrono/latest/chrono/format/strftime/index.html
+const PATTERN_STDOUT: &str = "[{d(%H:%M:%S.%9f)}][{h({l})}][{h({T})}][{t}\\(L{L}\\)] {m}{n}";
+const PATTERN_FILE: &str = "[{d(%H:%M:%S.%9f)}][{l}][{T}][{t}\\(L{L}\\)] {m}{n}";
 
 const LOG_NAME: &str = "bbpe.log";
 
