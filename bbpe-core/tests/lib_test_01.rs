@@ -22,8 +22,8 @@ fn test_sql_parse() {
     start();
     call_def_incoming("demo1", 1);
     call_def_incoming("demo2", 2);
-    def_mapper(SQL1, |_ptr, _size| {});
-    def_mapper(SQL2, |_ptr, _size| {});
+    def_mapper(SQL1, |_params| {});
+    def_mapper(SQL2, |_params| {});
     stop();
 }
 
@@ -32,9 +32,9 @@ fn call_def_incoming(name: &str, expected_id: u16) {
         name,
         vec![
             Column::new_long("a"),
-            Column::new_double("b"),
+            Column::new_long("b"),
             Column::new_long("c"),
-            Column::new_double("d"),
+            Column::new_long("d"),
             Column::new_long("e"),
         ],
     ) {

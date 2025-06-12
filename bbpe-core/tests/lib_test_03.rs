@@ -16,7 +16,7 @@ const SQL: &str = r#"
 fn test_new_proc() {
     test_log::setup_bbpe_home();
     start();
-    def_mapper(SQL, |_vec, _size| {});
+    def_mapper(SQL, |_params| {});
     gen_new_data();
     stop();
 }

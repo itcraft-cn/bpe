@@ -35,7 +35,9 @@ fn gen_new_data() {
         Column::new_double("e"),
     ];
     let id = def_incoming("demo", columns).unwrap();
-    def_mapper(SQL, |data, size| {
+    def_mapper(SQL, |params| {
+        let data = params.u8_ptr();
+        let size = params.size();
         log::info!("fetched data: {size}");
         for idx in 0..size {
             unsafe {

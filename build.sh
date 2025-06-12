@@ -57,7 +57,7 @@ if [ $FULL_BUILD -eq 1 ]; then
     
     # install to python sample
     whl_file_name=$(ls target/wheels/bbpe4py-*)
-    cd pysample
+    cd bbpe-py-sample
     source bin/activate
     pip install ../$whl_file_name --force-reinstall
     deactivate

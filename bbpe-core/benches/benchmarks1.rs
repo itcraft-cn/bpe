@@ -1,8 +1,8 @@
 mod bench_aux;
 mod bench_log;
 
-use criterion::{criterion_group, criterion_main, Bencher, Criterion};
 use bbpe::{Column, U8Bytes};
+use criterion::{criterion_group, criterion_main, Bencher, Criterion};
 use std::{ptr, thread, time::Duration};
 
 const FILTER_SQL: &str = r#"
@@ -52,7 +52,7 @@ fn test_bbpe(c: &mut Criterion) {
     core_affinity::set_for_current(core_ids[core_ids.len() - 1]);
     log::info!("thread:{} started", thread::current().name().unwrap());
     if let Some((id1, _id2)) = define_records() {
-        if let Some(mapper_id) = bbpe::def_mapper(FILTER_SQL, |_data, _size| {}) {
+        if let Some(mapper_id) = bbpe::def_mapper(FILTER_SQL, |_params| {}) {
             log::info!("define mapper: {mapper_id}");
         } else {
             log::warn!("def_mapper failed");

@@ -15,7 +15,7 @@ const FILTER_SQL: &str = r#"
     select demo.a, demo.b from demo limit 10
     "#;
 const AGGREGATE_SQL: &str = r#"
-    select _key(stream.a), _sumd(stream.b) from stream
+    select _sumd(stream.b) from stream
     "#;
 
 #[test]
@@ -24,7 +24,9 @@ fn test_new_proc() {
     init_logger();
     start();
     if let Some((id1, _id2)) = define_records() {
-        if let Some(aggregate_id) = def_aggregate(AGGREGATE_SQL, |data, size| {
+        if let Some(aggregate_id) = def_aggregate(AGGREGATE_SQL, |params| {
+            let data = params.u8_ptr();
+            let size = params.size();
             log::info!("data len: [{size}]");
             if size == 1 {
                 log::info!("sumd:{}", fetch_ptr::<f64>(unsafe { data.add(8) }),);

@@ -1,4 +1,4 @@
-use bbpe::{Column, FfiFunc, U8Bytes};
+use bbpe::{CallbackParams, Column, FfiFunc, U8Bytes};
 use jni::{
     objects::{
         GlobalRef, JByteArray, JClass, JIntArray, JObject, JObjectArray, JPrimitiveArray, JString,
@@ -221,7 +221,9 @@ struct JavaFfiFunc {
     callback: GlobalRef,
 }
 impl FfiFunc for JavaFfiFunc {
-    fn callback(&self, data_ptr: *const u8, size: usize) {
+    fn callback(&self, params: CallbackParams) {
+        let data_ptr = params.u8_ptr();
+        let size = params.size();
         let rs = self.vm.get_env();
         if let Ok(mut env) = rs {
             let data = unsafe {

@@ -18,7 +18,9 @@ fn test_new_proc() {
     init_logger();
     start();
     if let Some(id) = define_records() {
-        if let Some(id) = def_mapper(FILTER_SQL, |data, size| {
+        if let Some(id) = def_mapper(FILTER_SQL, |params| {
+            let data = params.u8_ptr();
+            let size = params.size();
             log::info!("fetched data: {size}");
             for idx in 0..size {
                 unsafe {

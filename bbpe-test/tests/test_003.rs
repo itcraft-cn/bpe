@@ -59,8 +59,8 @@ fn init_func(sum_store: Arc<AtomicI64>) -> (u16, u16) {
         if let Some(aggregate_id) = def_aggregate(
             AGGREGATE_SQL,
             #[inline]
-            move |data, size| {
-                func_callback(&sum_store, data, size);
+            move |params| {
+                func_callback(&sum_store, params.u8_ptr(), params.size());
             },
         ) {
             log::info!("define aggregate: {aggregate_id}");

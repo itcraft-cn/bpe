@@ -1,7 +1,6 @@
-use std::slice;
-
-use bbpe::{Column, FfiFunc, U8Bytes};
+use bbpe::{CallbackParams, Column, FfiFunc, U8Bytes};
 use pyo3::prelude::*;
+use std::slice;
 
 #[pyfunction]
 #[allow(dead_code)]
@@ -141,7 +140,9 @@ struct PythonFfiFunc {
     callback: PyObject,
 }
 impl FfiFunc for PythonFfiFunc {
-    fn callback(&self, data_ptr: *const u8, size: usize) {
+    fn callback(&self, params: CallbackParams) {
+        let data_ptr = params.u8_ptr();
+        let size = params.size();
         Python::with_gil(|py| {
             let data = unsafe {
                 let array_ptr = data_ptr as *const [u8; 512];

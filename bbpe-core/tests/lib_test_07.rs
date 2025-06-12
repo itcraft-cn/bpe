@@ -27,7 +27,9 @@ fn test_new_proc() {
     init_logger();
     start();
     if let Some((id1, _id2)) = define_records() {
-        if let Some(aggregate_id) = def_aggregate(AGGREGATE_SQL, |data, size| {
+        if let Some(aggregate_id) = def_aggregate(AGGREGATE_SQL, |params| {
+            let data = params.u8_ptr();
+            let size = params.size();
             log::info!("data len: [{size}]");
             if size == 1 {
                 unsafe {

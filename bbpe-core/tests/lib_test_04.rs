@@ -15,7 +15,7 @@ fn test_new_proc() {
     test_log::setup_bbpe_home();
     start();
     for sql in test_sql_vec {
-        def_mapper(sql, |_vec,_size| {});
+        def_mapper(sql, |_params| {});
     }
     stop();
 }
