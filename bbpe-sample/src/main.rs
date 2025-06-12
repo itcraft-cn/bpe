@@ -13,13 +13,13 @@ use std::{
 };
 
 const BASE: f64 = 1000000f64;
-const LOOP_SIZE: usize = 20;
+const LOOP_SIZE: usize = 12;
 
 const FILTER_SQL: &str = r#"
     SELECT demo.f, demo.a, demo.b, demo.c, _sub(_add(demo.d, demo.c), demo.e)
     FROM demo
     WHERE (demo.a = 1 AND demo.b = 2) OR (demo.a = 3 AND demo.b = 4)
-    LIMIT 10
+    LIMIT -10
     "#;
 const AGGREGATE_SQL: &str = r#"
     select _firstl(stream.a), _lastl(stream.a) from stream

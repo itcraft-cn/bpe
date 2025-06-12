@@ -168,7 +168,7 @@ fn loop_filter(
             let adjusted = unsafe { u8_ptr.add(offset) };
             mapper.fetch(id, v_ptr, record, position, sub_data_ptr, adjusted);
             n += 1;
-            offset += n * step;
+            offset += step;
             if n == limit {
                 // log::info!("mapper===>quit, hit limit: {n}");
                 break;

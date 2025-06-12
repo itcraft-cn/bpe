@@ -179,7 +179,7 @@ fn parse_select_limitor(
                 operand,
                 ..
             } => match operand.as_ref() {
-                Expression::Integer(v) => (0 - v.0) as isize,
+                Expression::Integer(v) => 0 - v.0 as isize,
                 _ => 0 - DEFAULT_SELECT_SIZE,
             },
             _ => DEFAULT_SELECT_SIZE,

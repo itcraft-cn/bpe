@@ -390,10 +390,10 @@ fn fetch_arg_val(sub_data: *const u8, executor: &Executor, stream: &Record) -> E
             let column_type = column.data_type();
             match column_type {
                 ColumnType::Long => {
-                    // Element::Long(unsafe { fetch_ptr(sub_data.add(column.offset())) })
-                    let ptr = unsafe { sub_data.add(column.offset()) };
-                    log::info!("fetch ptr: {}", ptr as u64);
-                    Element::Long(fetch_ptr(ptr))
+                    // let ptr = unsafe { sub_data.add(column.offset()) };
+                    // log::info!("fetch ptr: {}", ptr as u64);
+                    // Element::Long(fetch_ptr(ptr))
+                    Element::Long(unsafe { fetch_ptr(sub_data.add(column.offset())) })
                 }
                 ColumnType::Double => {
                     Element::Double(unsafe { fetch_ptr(sub_data.add(column.offset())) })
