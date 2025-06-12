@@ -1,4 +1,4 @@
-package com.erayt.bbpe4j;
+package cn.itcraft.bbpe4j;
 
 import org.junit.Test;
 import org.slf4j.Logger;
@@ -6,14 +6,15 @@ import org.slf4j.LoggerFactory;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.concurrent.CompletableFuture;
 
 /**
  * @author Helly Guo
  * <p>
  * Created on 10/25/23 2:10 PM
  */
-public class BbpeTest {
-    private static final Logger LOGGER = LoggerFactory.getLogger(BbpeTest.class);
+public class BbpeTest4 {
+    private static final Logger LOGGER = LoggerFactory.getLogger(BbpeTest4.class);
 
     private static final String SQL = "select demo.a, demo.b, demo.c, demo.d from demo limit 10";
 
@@ -43,9 +44,13 @@ public class BbpeTest {
             return;
         }
         JavaBbpe.regConvert(recordId, converter);
+        @SuppressWarnings("rawtypes")
+        CompletableFuture[] futures = new CompletableFuture[100];
         for (int i = 0; i < 100; i++) {
-            JavaBbpe.newData(recordId, new SimpleData(i, i + 1, i + 0.2D, Integer.toHexString(i)));
+            futures[i] = JavaBbpe.newDataAsync(recordId,
+                                               new SimpleData(i, i + 1, i + 0.2D, Integer.toHexString(i)));
         }
+        CompletableFuture.allOf(futures).join();
         JavaBbpe.stop();
     }
 

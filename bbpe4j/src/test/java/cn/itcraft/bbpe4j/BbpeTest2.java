@@ -1,45 +1,27 @@
-package com.erayt.bbpe4j;
+package cn.itcraft.bbpe4j;
 
-import org.openjdk.jmh.annotations.Benchmark;
-import org.openjdk.jmh.annotations.Fork;
-import org.openjdk.jmh.annotations.Measurement;
-import org.openjdk.jmh.annotations.OutputTimeUnit;
-import org.openjdk.jmh.annotations.Scope;
-import org.openjdk.jmh.annotations.Setup;
-import org.openjdk.jmh.annotations.State;
-import org.openjdk.jmh.annotations.TearDown;
-import org.openjdk.jmh.annotations.Threads;
-import org.openjdk.jmh.annotations.Warmup;
+import org.junit.Test;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import java.util.ArrayList;
 import java.util.List;
-import java.util.concurrent.TimeUnit;
 
 /**
  * @author Helly Guo
  * <p>
  * Created on 10/25/23 2:10 PM
  */
-
-@State(Scope.Benchmark)
-@Fork(value = 3, jvmArgsAppend = "-DbbpeLib=/home/helly/code/rust/bbpe/target/release/libbbpe4j.so")
-@Threads(value = 1)
-@Warmup(iterations = 10, time = 1)
-@Measurement(iterations = 5, time = 100, timeUnit = TimeUnit.MILLISECONDS)
-@OutputTimeUnit(TimeUnit.MILLISECONDS)
-public class BbpeBenchmark {
+public class BbpeTest2 {
+    private static final Logger LOGGER = LoggerFactory.getLogger(BbpeTest2.class);
 
     private static final String SQL = "select demo.a, demo.b, demo.c, demo.d from demo limit 10";
     private static final String SQL2 = "select _suml(stream.a), _suml(stream.b), _sumd(stream.c) from stream";
 
-    private static final SimpleData DATA = new SimpleData(1, 2L, 3.45D, "hello");
-
-    private static int targetId;
-
-    @Setup
-    public static void setUp() {
-        JavaBbpe.start();
+    @Test
+    public void test() {
         SimpleDataConverter converter = new SimpleDataConverter();
+        JavaBbpe.start();
         List<ColumnDefine> list = new ArrayList<>();
         list.add(ColumnDefine.createLong("a"));
         list.add(ColumnDefine.createLong("b"));
@@ -52,33 +34,47 @@ public class BbpeBenchmark {
         list2.add(ColumnDefine.createString("d", 16));
         int recordId = JavaBbpe.defIncoming("demo", list);
         if (recordId == -1) {
-            System.exit(1);
+            LOGGER.warn("failed to def record");
+            return;
+        } else {
+            LOGGER.info("recordId={}", recordId);
         }
         int recordId2 = JavaBbpe.defStream("stream", list2);
         if (recordId2 == -1) {
-            System.exit(1);
+            LOGGER.warn("failed to def record");
+            return;
+        } else {
+            LOGGER.info("recordId={}", recordId2);
         }
         int aggregateId = JavaBbpe.defAggregate(SQL2, (data, size) -> {
+            for (int i = 0; i < size; i++) {
+                SimpleData simpleData = converter.convert(data, i * 512);
+                LOGGER.info("{}", simpleData);
+            }
+            LOGGER.info("size={}", size);
         });
         if (aggregateId == -1) {
-            System.exit(1);
+            LOGGER.warn("failed to def aggregate");
+            return;
+        } else {
+            LOGGER.info("aggregateId={}", aggregateId);
         }
         int mapperId = JavaBbpe.defMapperBindAggregate(SQL, aggregateId);
         if (mapperId == -1) {
-            System.exit(1);
+            LOGGER.warn("failed to def mapper");
+            return;
+        } else {
+            LOGGER.info("mapperId={}", mapperId);
         }
         JavaBbpe.regConvert(recordId, converter);
-        targetId = recordId;
-    }
-
-    @TearDown
-    public static void tearDown() {
+        for (int i = 0; i < 100; i++) {
+            JavaBbpe.newData(recordId, newData(i));
+        }
         JavaBbpe.stop();
     }
 
-    @Benchmark
-    public void test() {
-        JavaBbpe.newData(targetId, DATA);
+    private SimpleData newData(int i) {
+        return new SimpleData(i, i + 1, i + 0.2D, Integer.toHexString(i));
     }
-}
 
+}

@@ -1,4 +1,4 @@
-package com.erayt.bbpe4j;
+package cn.itcraft.bbpe4j;
 
 import org.junit.Test;
 import org.slf4j.Logger;

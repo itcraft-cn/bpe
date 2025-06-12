@@ -1,4 +1,4 @@
-package com.erayt.bbpe4j;
+package cn.itcraft.bbpe4j;
 
 import org.junit.Test;
 import org.slf4j.Logger;
@@ -12,8 +12,8 @@ import java.util.List;
  * <p>
  * Created on 10/25/23 2:10 PM
  */
-public class BbpeTest3 {
-    private static final Logger LOGGER = LoggerFactory.getLogger(BbpeTest3.class);
+public class BbpeTest {
+    private static final Logger LOGGER = LoggerFactory.getLogger(BbpeTest.class);
 
     private static final String SQL = "select demo.a, demo.b, demo.c, demo.d from demo limit 10";
 
@@ -44,7 +44,7 @@ public class BbpeTest3 {
         }
         JavaBbpe.regConvert(recordId, converter);
         for (int i = 0; i < 100; i++) {
-            JavaBbpe.newDataSync(recordId, new SimpleData(i, i + 1, i + 0.2D, Integer.toHexString(i)));
+            JavaBbpe.newData(recordId, new SimpleData(i, i + 1, i + 0.2D, Integer.toHexString(i)));
         }
         JavaBbpe.stop();
     }

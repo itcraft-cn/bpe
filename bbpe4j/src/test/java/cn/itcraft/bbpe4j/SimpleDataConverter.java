@@ -1,4 +1,4 @@
-package com.erayt.bbpe4j;
+package cn.itcraft.bbpe4j;
 
 import java.lang.ref.WeakReference;
 
