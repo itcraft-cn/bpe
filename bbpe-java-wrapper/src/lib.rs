@@ -10,7 +10,7 @@ use jni::{
 use std::{slice, sync::Once};
 
 #[no_mangle]
-pub extern "system" fn Java_com_erayt_bbpe4j_BambooTube_start<'local>(
+pub extern "system" fn Java_cn_itcraft_bbpe4j_Bbpe_start<'local>(
     _env: JNIEnv<'local>,
     _class: JClass<'local>,
 ) -> jboolean {
@@ -20,7 +20,7 @@ pub extern "system" fn Java_com_erayt_bbpe4j_BambooTube_start<'local>(
 }
 
 #[no_mangle]
-pub extern "system" fn Java_com_erayt_bbpe4j_BambooTube_stop<'local>(
+pub extern "system" fn Java_cn_itcraft_bbpe4j_Bbpe_stop<'local>(
     _env: JNIEnv<'local>,
     _class: JClass<'local>,
 ) {
@@ -29,7 +29,7 @@ pub extern "system" fn Java_com_erayt_bbpe4j_BambooTube_stop<'local>(
 }
 
 #[no_mangle]
-pub extern "system" fn Java_com_erayt_bbpe4j_BambooTube_defIncoming<'local>(
+pub extern "system" fn Java_cn_itcraft_bbpe4j_Bbpe_defIncoming<'local>(
     mut env: JNIEnv<'local>,
     _class: JClass<'local>,
     j_name: JString<'local>,
@@ -48,7 +48,7 @@ pub extern "system" fn Java_com_erayt_bbpe4j_BambooTube_defIncoming<'local>(
 }
 
 #[no_mangle]
-pub extern "system" fn Java_com_erayt_bbpe4j_BambooTube_defStream<'local>(
+pub extern "system" fn Java_cn_itcraft_bbpe4j_Bbpe_defStream<'local>(
     mut env: JNIEnv<'local>,
     _class: JClass<'local>,
     j_name: JString<'local>,
@@ -110,7 +110,7 @@ where
 }
 
 #[no_mangle]
-pub extern "system" fn Java_com_erayt_bbpe4j_BambooTube_newData<'local>(
+pub extern "system" fn Java_cn_itcraft_bbpe4j_Bbpe_newData<'local>(
     env: JNIEnv<'local>,
     _class: JClass<'local>,
     j_record_id: jint,
@@ -123,7 +123,7 @@ pub extern "system" fn Java_com_erayt_bbpe4j_BambooTube_newData<'local>(
 }
 
 #[no_mangle]
-pub extern "system" fn Java_com_erayt_bbpe4j_BambooTube_defMapper<'local>(
+pub extern "system" fn Java_cn_itcraft_bbpe4j_Bbpe_defMapper<'local>(
     env: JNIEnv<'local>,
     _class: JClass<'local>,
     j_sql: JString<'local>,
@@ -133,7 +133,7 @@ pub extern "system" fn Java_com_erayt_bbpe4j_BambooTube_defMapper<'local>(
 }
 
 #[no_mangle]
-pub extern "system" fn Java_com_erayt_bbpe4j_BambooTube_defMapperBindAggregate<'local>(
+pub extern "system" fn Java_cn_itcraft_bbpe4j_Bbpe_defMapperBindAggregate<'local>(
     env: JNIEnv<'local>,
     _class: JClass<'local>,
     j_sql: JString<'local>,
@@ -154,7 +154,7 @@ pub extern "system" fn Java_com_erayt_bbpe4j_BambooTube_defMapperBindAggregate<'
 }
 
 #[no_mangle]
-pub extern "system" fn Java_com_erayt_bbpe4j_BambooTube_defAggregate<'local>(
+pub extern "system" fn Java_cn_itcraft_bbpe4j_Bbpe_defAggregate<'local>(
     env: JNIEnv<'local>,
     _class: JClass<'local>,
     j_sql: JString<'local>,
