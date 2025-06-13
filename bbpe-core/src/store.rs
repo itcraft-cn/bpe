@@ -119,7 +119,7 @@ impl WrappedArray {
 
     fn write_data(&mut self, base: usize, src_data: &[u8], len: usize) {
         // let src_ptr = src_data.as_ptr();
-        // let data_ptr = unsafe { self.data.add(base) };
+        // let data_ptr = unsafe { self.data.add(base & self.mask) };
         // log::info!(
         //     "write_data: {}/{}/{}/{}/{len}",
         //     src_ptr as u64,
@@ -128,7 +128,9 @@ impl WrappedArray {
         //     base
         // );
         // unsafe { ptr::copy_nonoverlapping(src_ptr, data_ptr, len) };
-        unsafe { ptr::copy_nonoverlapping(src_data.as_ptr(), self.data.add(base), len) };
+        unsafe {
+            ptr::copy_nonoverlapping(src_data.as_ptr(), self.data.add(base & self.mask), len)
+        };
         self.update_walker();
     }
 

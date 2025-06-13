@@ -13,7 +13,7 @@ use std::{
 };
 
 const BASE: f64 = 1000000f64;
-const LOOP_SIZE: usize = 100000;
+const LOOP_SIZE: usize = 10000000;
 
 const FILTER_SQL: &str = r#"
     SELECT demo.f, demo.a, demo.b, demo.c, _sub(_add(demo.d, demo.d), demo.e)
@@ -84,15 +84,8 @@ fn func_callback(sum_store: &Arc<AtomicI64>, param: CallbackParams) {
     // let timestamp_last_1 = fetch_i64(data.wrapping_add(8));
     // let timestamp_min_1 = fetch_i64(data.wrapping_add(16));
     // let timestamp_max_1 = fetch_i64(data.wrapping_add(24));
-    // let timestamp_first_2 = fetch_f64(data.wrapping_add(32));
-    // let timestamp_last_2 = fetch_f64(data.wrapping_add(40));
-    // let timestamp_min_2 = fetch_f64(data.wrapping_add(48));
-    // let timestamp_max_2 = fetch_f64(data.wrapping_add(56));
     // log::info!(
     //     "long:   {now}, {timestamp_first_1}, {timestamp_last_1}, {timestamp_min_1}, {timestamp_max_1}"
-    // );
-    // log::info!(
-    //     "double: {timestamp_first_2}, {timestamp_last_2}, {timestamp_min_2}, {timestamp_max_2}"
     // );
     let delta = now as f64 - timestamp_first_1 as f64;
     sum_store.fetch_add((BASE * delta) as i64, Ordering::SeqCst);
@@ -189,8 +182,8 @@ where
     F: FnMut(),
 {
     let start = SystemTime::now();
-    for n in 1..=LOOP_SIZE {
-        log::info!("n: {n}");
+    for _n in 1..=LOOP_SIZE {
+        // log::info!("n: {_n}");
         f();
     }
     let end = SystemTime::now();
