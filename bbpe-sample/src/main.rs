@@ -12,8 +12,8 @@ use std::{
     time::{Duration, SystemTime},
 };
 
-const BASE: f64 = 1000000f64;
 const LOOP_SIZE: usize = 10000000;
+const LOOP_SIZE_F64: f64 = LOOP_SIZE as f64;
 
 const FILTER_SQL: &str = r#"
     SELECT demo.f, demo.a, demo.b, demo.c, _sub(_add(demo.d, demo.d), demo.e)
@@ -38,13 +38,7 @@ pub fn main() {
         let mut u8data = gen_u8_bytes(id1);
         exec_with_time_it(move || gen_new_data(&mut u8data));
         let sum = sum_store.load(Ordering::SeqCst);
-        log::info!(
-            "sum: {}s({}ns), latency: {}s({}ns)",
-            sum as f64 / BASE / 1_000_000_000f64,
-            sum,
-            (sum as f64 / BASE / LOOP_SIZE as f64) / 1_000_000_000f64,
-            sum as f64 / BASE / LOOP_SIZE as f64
-        );
+        log::info!("sum: {sum}");
     }
     stop();
 }
@@ -77,18 +71,8 @@ fn init_func(sum_store: Arc<AtomicI64>) -> (u16, u16) {
 }
 
 #[inline]
-fn func_callback(sum_store: &Arc<AtomicI64>, param: CallbackParams) {
-    let data = param.u8_ptr();
-    let now = now();
-    let timestamp_first_1 = fetch_i64(data);
-    // let timestamp_last_1 = fetch_i64(data.wrapping_add(8));
-    // let timestamp_min_1 = fetch_i64(data.wrapping_add(16));
-    // let timestamp_max_1 = fetch_i64(data.wrapping_add(24));
-    // log::info!(
-    //     "long:   {now}, {timestamp_first_1}, {timestamp_last_1}, {timestamp_min_1}, {timestamp_max_1}"
-    // );
-    let delta = now as f64 - timestamp_first_1 as f64;
-    sum_store.fetch_add((BASE * delta) as i64, Ordering::SeqCst);
+fn func_callback(sum_store: &Arc<AtomicI64>, _param: CallbackParams) {
+    sum_store.fetch_add(1, Ordering::SeqCst);
 }
 
 fn gen_new_data(u8data: &mut U8Bytes) {
@@ -190,11 +174,12 @@ where
     let duration = end
         .duration_since(start)
         .unwrap_or_else(|_e| Duration::new(0, 0));
+    log::info!("cost time: {duration:?}");
+    log::info!("cost time: {:?}ms", duration.as_millis());
+    log::info!("cost time: {:?}ns", duration.as_nanos());
     log::info!(
-        "cost time: {:?}ms / {:?}ns, use {:?}ns per operation",
-        duration.as_millis(),
-        duration.as_nanos(),
-        1_f64 * (duration.as_nanos() as f64) / (LOOP_SIZE as f64)
+        "cost time: {:?}ns per operation",
+        duration.as_nanos() as f64 / LOOP_SIZE_F64
     );
 }
 
@@ -205,11 +190,11 @@ pub(crate) fn fill_u64(slice: &mut [u8], data: u64) {
     unsafe { *p_u64 = data };
 }
 
-#[inline]
-pub(crate) fn fetch_i64(p_val: *const u8) -> i64 {
-    let p_i64 = p_val as *const i64;
-    unsafe { *p_i64 }
-}
+// #[inline]
+// pub(crate) fn fetch_i64(p_val: *const u8) -> i64 {
+//     let p_i64 = p_val as *const i64;
+//     unsafe { *p_i64 }
+// }
 
 // #[inline]
 // pub(crate) fn fetch_f64(p_val: *const u8) -> f64 {

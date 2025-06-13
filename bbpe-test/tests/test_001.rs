@@ -8,6 +8,7 @@ use std::{
 };
 
 const LOOP_SIZE: usize = 1000;
+const LOOP_SIZE_F64: f64 = LOOP_SIZE as f64;
 
 const FILTER_SQL: &str = r#"
     SELECT demo.a, demo.b, demo.c, _sub(_add(demo.d, demo.d), demo.e)
@@ -130,11 +131,12 @@ where
     let duration = end
         .duration_since(start)
         .unwrap_or_else(|_e| Duration::new(0, 0));
+    log::info!("cost time: {duration:?}");
+    log::info!("cost time: {:?}ms", duration.as_millis());
+    log::info!("cost time: {:?}ns", duration.as_nanos());
     log::info!(
-        "cost time: {:?}ms / {:?}ns, use {:?}ns per operation",
-        duration.as_millis(),
-        duration.as_nanos(),
-        1_f64 * (duration.as_nanos() as f64) / (LOOP_SIZE as f64)
+        "cost time: {:?}ns per operation",
+        duration.as_nanos() as f64 / LOOP_SIZE_F64
     );
 }
 
