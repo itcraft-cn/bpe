@@ -8,6 +8,7 @@ import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.TimeoutException;
+import java.util.concurrent.atomic.AtomicBoolean;
 
 public class JavaBbpe {
     private static final Logger LOGGER = LoggerFactory.getLogger(JavaBbpe.class);
@@ -17,14 +18,26 @@ public class JavaBbpe {
 
     private static final long TIMEOUT = 5000L;
 
+    private static final AtomicBoolean INIT = new AtomicBoolean(false);
     private static final JavaBbpeThread JAVA_BAMBOOTUBE_THREAD = new JavaBbpeThread();
 
     public static boolean start() {
-        JAVA_BAMBOOTUBE_THREAD.start();
-        return Bbpe.start();
+        synchronized (INIT) {
+            if (INIT.compareAndSet(false, true)) {
+                JAVA_BAMBOOTUBE_THREAD.start();
+                Thread thread = new Thread(JavaBbpe::stop0, "bbpe-shutdown-hook");
+                Runtime.getRuntime().addShutdownHook(thread);
+                return Bbpe.start();
+            } else {
+                return true;
+            }
+        }
     }
 
     public static void stop() {
+    }
+
+    private static void stop0() {
         JAVA_BAMBOOTUBE_THREAD.stop(TIMEOUT);
         Bbpe.stop();
     }

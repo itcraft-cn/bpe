@@ -15,7 +15,7 @@ import java.util.List;
 public class BbpeTest3 {
     private static final Logger LOGGER = LoggerFactory.getLogger(BbpeTest3.class);
 
-    private static final String SQL = "select demo.a, demo.b, demo.c, demo.d from demo limit 10";
+    private static final String SQL = "select demo3.a, demo3.b, demo3.c, demo3.d from demo3 limit 10";
 
     @Test
     public void test() {
@@ -26,7 +26,7 @@ public class BbpeTest3 {
         list.add(ColumnDefine.createLong("b"));
         list.add(ColumnDefine.createDouble("c"));
         list.add(ColumnDefine.createString("d", 16));
-        int recordId = JavaBbpe.defIncoming("demo", list);
+        int recordId = JavaBbpe.defIncoming("demo3", list);
         if (recordId == -1) {
             LOGGER.warn("failed to def record");
             return;

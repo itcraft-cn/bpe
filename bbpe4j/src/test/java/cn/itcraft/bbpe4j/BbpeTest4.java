@@ -16,7 +16,7 @@ import java.util.concurrent.CompletableFuture;
 public class BbpeTest4 {
     private static final Logger LOGGER = LoggerFactory.getLogger(BbpeTest4.class);
 
-    private static final String SQL = "select demo.a, demo.b, demo.c, demo.d from demo limit 10";
+    private static final String SQL = "select demo4.a, demo4.b, demo4.c, demo4.d from demo4 limit 10";
 
     @Test
     public void test() {
@@ -27,7 +27,7 @@ public class BbpeTest4 {
         list.add(ColumnDefine.createLong("b"));
         list.add(ColumnDefine.createDouble("c"));
         list.add(ColumnDefine.createString("d", 16));
-        int recordId = JavaBbpe.defIncoming("demo", list);
+        int recordId = JavaBbpe.defIncoming("demo4", list);
         if (recordId == -1) {
             LOGGER.warn("failed to def record");
             return;

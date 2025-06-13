@@ -15,8 +15,8 @@ import java.util.List;
 public class BbpeTest2 {
     private static final Logger LOGGER = LoggerFactory.getLogger(BbpeTest2.class);
 
-    private static final String SQL = "select demo.a, demo.b, demo.c, demo.d from demo limit 10";
-    private static final String SQL2 = "select _suml(stream.a), _suml(stream.b), _sumd(stream.c) from stream";
+    private static final String SQL = "select demo2.a, demo2.b, demo2.c, demo2.d from demo2 limit 10";
+    private static final String SQL2 = "select _suml(stream.a), _suml(stream.b), _sumd(stream.c) from stream2";
 
     @Test
     public void test() {
@@ -32,14 +32,14 @@ public class BbpeTest2 {
         list2.add(ColumnDefine.createLong("b"));
         list2.add(ColumnDefine.createDouble("c"));
         list2.add(ColumnDefine.createString("d", 16));
-        int recordId = JavaBbpe.defIncoming("demo", list);
+        int recordId = JavaBbpe.defIncoming("demo2", list);
         if (recordId == -1) {
             LOGGER.warn("failed to def record");
             return;
         } else {
             LOGGER.info("recordId={}", recordId);
         }
-        int recordId2 = JavaBbpe.defStream("stream", list2);
+        int recordId2 = JavaBbpe.defStream("stream2", list2);
         if (recordId2 == -1) {
             LOGGER.warn("failed to def record");
             return;
