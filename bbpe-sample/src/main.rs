@@ -167,7 +167,6 @@ where
 {
     let start = SystemTime::now();
     for _n in 1..=LOOP_SIZE {
-        // log::info!("n: {_n}");
         f();
     }
     let end = SystemTime::now();
@@ -189,15 +188,3 @@ pub(crate) fn fill_u64(slice: &mut [u8], data: u64) {
     let p_u64 = p_val as *mut u64;
     unsafe { *p_u64 = data };
 }
-
-// #[inline]
-// pub(crate) fn fetch_i64(p_val: *const u8) -> i64 {
-//     let p_i64 = p_val as *const i64;
-//     unsafe { *p_i64 }
-// }
-
-// #[inline]
-// pub(crate) fn fetch_f64(p_val: *const u8) -> f64 {
-//     let p_f64 = p_val as *const f64;
-//     unsafe { *p_f64 }
-// }

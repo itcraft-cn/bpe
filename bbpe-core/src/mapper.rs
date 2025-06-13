@@ -123,7 +123,6 @@ fn invoke(
     let mask = array.mask();
     let offset = (array.walker() - 1) & mask;
     let step = array.step();
-    // log::info!("mapper===>last offset: {offset}, size: {size}");
     callback(
         fn_holder,
         CallbackParams::new(u8_ptr, mask, offset, size, step),
@@ -152,33 +151,20 @@ fn loop_filter(
     } else {
         Idx::new(first_idx, last_idx, OPERATOR_INC)
     };
-    // log::info!("mapper===>{first_idx}/{last_idx}/{asc}");
     loop {
         let position = ((walker - 1 - idx_wrapper.idx()) * step) & mask;
         let sub_data_ptr = array.sub_data(position);
         let v_sub_ptr = sub_data_ptr as u64;
-        // let v_u8_ptr = u8_ptr as u64;
-        // let delta = v_sub_ptr - v_ptr;
-        // log::info!("mapper===>position: {n}--->{offset}|{position}|{v_ptr}|{v_sub_ptr}|{delta}");
-        // log::info!(
-        //     "mapper===>position: {n}--->{offset}|{v_u8_ptr}|{}",
-        //     v_u8_ptr + offset as u64
-        // );
         if unsafe { mapper.filter().call(v_sub_ptr) } {
             let adjusted = unsafe { u8_ptr.add(offset) };
             mapper.fetch(id, v_ptr, record, position, sub_data_ptr, adjusted);
             n += 1;
             offset += step;
             if n == limit {
-                // log::info!("mapper===>quit, hit limit: {n}");
                 break;
             }
-        } else {
-            // log::info!("mapper===>quit, filter[{v_sub_ptr}] false");
         }
         if idx_wrapper.judge_or_step() {
-            // let max_idx = array.last_idx();
-            // log::info!("mapper===>quit, max idx: {}/{}", idx_wrapper.idx(), max_idx);
             break;
         }
     }
@@ -221,7 +207,6 @@ impl Mapper {
         loop {
             let executor = executors.index_of(i);
             val = executor.fetch(id, v_ptr, record, position, sub_data_ptr);
-            // log::info!("mapper data: {executor:?}, {val:?}");
             let val_len = val.len();
             val.copy_to_target(target as *mut u8, offset);
             offset += val_len;
@@ -274,7 +259,6 @@ impl Idx {
     }
 
     fn judge_or_step(&mut self) -> bool {
-        // log::info!("idx===>{}/{}", self.idx, self.stop_val);
         if self.idx == self.stop_val {
             true
         } else {

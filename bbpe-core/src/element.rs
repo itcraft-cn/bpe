@@ -18,10 +18,6 @@ impl Element {
             Element::Long(val) => fill_ptr(adjusted, *val),
             Element::Double(val) => fill_ptr(adjusted, *val),
         };
-        // match self {
-        //     Element::Long(val) => log::info!("copy:ptr->{},{}", adjusted as u64, *val),
-        //     Element::Double(val) => log::info!("copy:ptr->{},{}", adjusted as u64, *val),
-        // };
     }
     pub(crate) fn _is_computed(&self) -> bool {
         match self {

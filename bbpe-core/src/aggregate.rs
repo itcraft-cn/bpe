@@ -139,7 +139,6 @@ fn compute_data(
     stream: &Record,
     param: CallbackParams,
 ) {
-    // log::info!("u8_ptr: {:?}, offset: {}", u8_ptr as u64, param.offset());
     let wrapped_agg_param = WrappedAggParam::new(aggregate_data_ptr, stream, &param);
     for (col_idx, executor) in wrapped.aggregate().executors().iter().enumerate() {
         let offset = stream.column((col_idx + 1) as u16).offset();
@@ -160,23 +159,7 @@ fn compute_data(
                     Func::FirstL => {
                         let sub_executor = executors.index_of(0);
                         let element = fetch_arg_val(param.u8_ptr(), sub_executor, stream);
-                        // log::info!("{sub_executor:?}, {element:?}");
-                        // log::info!("first ptr: {}", param.u8_ptr() as u64);
                         call_once_compute(&wrapped_agg_param, func, element, offset);
-                        // for i in 0..param.size() {
-                        //     let sub_executor = executors.index_of(0);
-                        //     let element = fetch_arg_val(
-                        //         unsafe { param.u8_ptr().add(i * param.step()) },
-                        //         sub_executor,
-                        //         stream,
-                        //     );
-                        //     log::info!("{sub_executor:?}, {element:?}");
-                        //     log::info!(
-                        //         "loop first ptr: {}",
-                        //         param.u8_ptr() as u64 + (i * param.step()) as u64
-                        //     );
-                        //     call_once_compute(&wrapped_agg_param, func, element, offset)
-                        // }
                     }
                     Func::FirstD => {
                         call_once_compute(&wrapped_agg_param, func, Element::Double(0_f64), offset)
@@ -186,13 +169,6 @@ fn compute_data(
                         let last = param.size() - 1;
                         let sub_data = unsafe { param.u8_ptr().add(last * param.step()) };
                         let element = fetch_arg_val(sub_data, sub_executor, stream);
-                        // log::info!("{sub_executor:?}, {element:?}");
-                        // log::info!(
-                        //     "last ptr: {}|{}|{}",
-                        //     param.u8_ptr() as u64,
-                        //     sub_data as u64,
-                        //     sub_data as u64 - param.u8_ptr() as u64
-                        // );
                         call_once_compute(&wrapped_agg_param, func, element, offset)
                     }
                     Func::LastD => {
@@ -390,9 +366,6 @@ fn fetch_arg_val(sub_data: *const u8, executor: &Executor, stream: &Record) -> E
             let column_type = column.data_type();
             match column_type {
                 ColumnType::Long => {
-                    // let ptr = unsafe { sub_data.add(column.offset()) };
-                    // log::info!("fetch ptr: {}", ptr as u64);
-                    // Element::Long(fetch_ptr(ptr))
                     Element::Long(unsafe { fetch_ptr(sub_data.add(column.offset())) })
                 }
                 ColumnType::Double => {

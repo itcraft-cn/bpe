@@ -96,11 +96,6 @@ pub(crate) fn init_func_generator() {
 
 unsafe extern "C" fn fetch_column_u64(data_ptr: u64, record_id: u16, column_id: u16) -> u64 {
     if let Some(column) = Record::get_column(record_id, column_id) {
-        // let column_offset = column.offset();
-        // log::info!("fetch u64: {data_ptr}/{record_id}/{column_id}/{column_offset}");
-        // let v: u64 = fetch_ptr(unsafe { (data_ptr as *const u8).add(column_offset) });
-        // log::info!("u64 v={v}");
-        // v
         fetch_ptr(unsafe { (data_ptr as *const u8).add(column.offset()) })
     } else {
         log::warn!("cannot found the column({column_id}) in record({record_id})");
@@ -110,11 +105,6 @@ unsafe extern "C" fn fetch_column_u64(data_ptr: u64, record_id: u16, column_id: 
 
 unsafe extern "C" fn fetch_column_i64(data_ptr: u64, record_id: u16, column_id: u16) -> i64 {
     if let Some(column) = Record::get_column(record_id, column_id) {
-        // let column_offset = column.offset();
-        // log::info!("fetch i64: {data_ptr}/{record_id}/{column_id}/{column_offset}");
-        // let v: i64 = fetch_ptr(unsafe { (data_ptr as *const u8).add(column_offset) });
-        // log::info!("i64 v={v}");
-        // v
         fetch_ptr(unsafe { (data_ptr as *const u8).add(column.offset()) })
     } else {
         log::warn!("cannot found the column({column_id}) in record({record_id})");
@@ -124,11 +114,6 @@ unsafe extern "C" fn fetch_column_i64(data_ptr: u64, record_id: u16, column_id: 
 
 unsafe extern "C" fn fetch_column_f64(data_ptr: u64, record_id: u16, column_id: u16) -> f64 {
     if let Some(column) = Record::get_column(record_id, column_id) {
-        // let column_offset = column.offset();
-        // log::info!("fetch f64: {data_ptr}/{record_id}/{column_id}/{column_offset}");
-        // let v: f64 = fetch_ptr(unsafe { (data_ptr as *const u8).add(column_offset) });
-        // log::info!("f64 v={v}");
-        // v
         fetch_ptr(unsafe { (data_ptr as *const u8).add(column.offset()) })
     } else {
         log::warn!("cannot found the column({column_id}) in record({record_id})");

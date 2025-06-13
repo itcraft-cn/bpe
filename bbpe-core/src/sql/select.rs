@@ -152,7 +152,6 @@ fn parse_select_filter<'ctx>(
     let rs_filters_func =
         gen_select_filter_func(func_generator, &select_stat.where_, record, issues);
     if let Ok(filters_func) = rs_filters_func {
-        // log::info!("the filter func: {filters_func:#?}");
         Some(filters_func)
     } else {
         log::warn!("{}", rs_filters_func.err().unwrap());

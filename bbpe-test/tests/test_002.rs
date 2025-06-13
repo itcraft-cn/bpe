@@ -200,12 +200,6 @@ pub(crate) fn fill_u64(slice: &mut [u8], data: u64) {
     unsafe { *p_u64 = data };
 }
 
-// #[inline]
-// pub(crate) fn fetch_u64(p_val: *const u8) -> u64 {
-//     let p_u64 = p_val as *const u64;
-//     unsafe { *p_u64 }
-// }
-
 #[inline]
 pub(crate) fn fetch_f64(p_val: *const u8) -> f64 {
     let p_f64 = p_val as *const f64;

@@ -146,15 +146,12 @@ fn gen_u8_bytes(id: u16) -> U8Bytes {
     let mut u8array = [0_u8; 512];
     let slice = u8array.as_mut_slice();
     let now = now();
-    // log::info!("now: {now}");
     fill_i64(&mut slice[0..8], 1);
     fill_i64(&mut slice[8..16], 2);
     fill_i64(&mut slice[16..24], 3);
     fill_i64(&mut slice[24..32], 4);
     fill_i64(&mut slice[32..40], 5);
     fill_i64(&mut slice[40..48], now as i64);
-    //let v = fetch_u64(slice.as_ptr());
-    //log::info!("v: {v}");
     U8Bytes::new_from_vec(id, 512, Vec::from(u8array))
 }
 
@@ -206,9 +203,3 @@ pub(crate) fn fetch_i64(p_val: *const u8) -> i64 {
     let p_i64 = p_val as *const i64;
     unsafe { *p_i64 }
 }
-
-// #[inline]
-// pub(crate) fn fetch_f64(p_val: *const u8) -> f64 {
-//     let p_f64 = p_val as *const f64;
-//     unsafe { *p_f64 }
-// }

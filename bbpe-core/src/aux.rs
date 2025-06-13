@@ -75,9 +75,6 @@ impl SimpleU16Map {
     pub(crate) fn insert<T>(&mut self, id: u16, value: T) {
         let val = Box::new(value);
         let p_val = Box::leak(val);
-        // let v_ptr = ptr::addr_of_mut!(*p_val) as u64;
-        // log::info!("insert ptr: {v_ptr}");
-        // self.ptr_array[id as usize] = v_ptr;
         self.ptr_array[id as usize] = ptr::addr_of_mut!(*p_val) as u64;
     }
     #[inline]
@@ -95,7 +92,6 @@ impl SimpleU16Map {
         if u64v == 0 {
             None
         } else {
-            // log::info!("{}, mut id: {id}, addr: {u64v}", ptr::addr_of!(self.ptr_array) as u64);
             let p_val = u64v as *mut T;
             unsafe { Some(&mut *p_val) }
         }
@@ -106,7 +102,6 @@ impl SimpleU16Map {
         if u64v == 0 {
             None
         } else {
-            // log::info!("{}, id: {id}, addr: {u64v}", ptr::addr_of!(self.ptr_array) as u64);
             let p_val = u64v as *mut T;
             unsafe { Some(&*p_val) }
         }
@@ -126,7 +121,6 @@ impl SimpleU16Entry {
         match *self {
             SimpleU16Entry::Exist(_) => (),
             SimpleU16Entry::NotExist(id) => {
-                // log::info!("not exist, insert id: {id}");
                 map.insert(id, f());
             }
         }

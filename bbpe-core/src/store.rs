@@ -41,7 +41,6 @@ fn insert_into_slice(array: &mut WrappedArray, data: &U8Bytes) {
     let size = data.data_len();
     let data = data.bytes();
     let base = (array.walker() & array.mask()) * array.step();
-    // log::info!("base:{base}");
     array.write_data(base, &data[0..size], size);
 }
 
@@ -118,16 +117,6 @@ impl WrappedArray {
     }
 
     fn write_data(&mut self, base: usize, src_data: &[u8], len: usize) {
-        // let src_ptr = src_data.as_ptr();
-        // let data_ptr = unsafe { self.data.add(base & self.mask) };
-        // log::info!(
-        //     "write_data: {}/{}/{}/{}/{len}",
-        //     src_ptr as u64,
-        //     data_ptr as u64,
-        //     self.data as u64,
-        //     base
-        // );
-        // unsafe { ptr::copy_nonoverlapping(src_ptr, data_ptr, len) };
         unsafe {
             ptr::copy_nonoverlapping(src_data.as_ptr(), self.data.add(base & self.mask), len)
         };

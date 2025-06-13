@@ -43,7 +43,6 @@ pub(crate) fn gen_select_filter_func<'ctx>(
     let _ = func_generator.builder.build_return(Some(&ret));
     let opt_filter_func = func_generator.compile::<FilterFunc>(func_name);
     if let Some(filter_func) = opt_filter_func {
-        // log::info!("filter func: {filter_func:#?}");
         Ok(filter_func)
     } else {
         Err("failed to compile filter function".to_string())
