@@ -85,5 +85,5 @@ fn fetch_log_path() -> PathBuf {
 }
 
 pub(crate) fn setup_bbpe_home() {
-    env::set_var("BAMBOOTUBE_HOME", env::current_dir().unwrap());
+    env::set_var("BBPE_HOME", env::current_dir().unwrap());
 }

@@ -17,7 +17,7 @@ class XDemo(BbpeRecordCallback):
 class TestBbpe:
     # 函数级开始
     def setup_method(self):
-        os.environ["BAMBOOTUBE_HOME"] = "/home/helly/code/rust/bbpe"
+        os.environ["BBPE_HOME"] = "/home/helly/code/rust/bbpe"
         Bbpe.start()
 
     # 函数级结束

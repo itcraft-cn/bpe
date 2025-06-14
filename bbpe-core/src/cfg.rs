@@ -1,15 +1,15 @@
-use crate::consts::{BAMBOOTUBE_ENV_HOME_KEY, BAMBOOTUBE_FILENAME_CONFIG_TOML};
+use crate::consts::{BBPE_ENV_HOME_KEY, BBPE_FILENAME_CONFIG_TOML};
 use config::{Config, File};
 use hashbrown::HashMap;
 use std::{env, sync::OnceLock};
 
-pub(crate) static WRAPPED_CONFIG: OnceLock<BambooTubeConfig> = OnceLock::new();
+pub(crate) static WRAPPED_CONFIG: OnceLock<BbpeConfig> = OnceLock::new();
 
-pub(crate) struct BambooTubeConfig {
+pub(crate) struct BbpeConfig {
     pub(crate) map: HashMap<String, String>,
 }
 
-impl BambooTubeConfig {
+impl BbpeConfig {
     pub(crate) fn fetch_cfg_str(&self, key: &str) -> Option<&String> {
         self.map.get(key)
     }
@@ -34,7 +34,7 @@ impl BambooTubeConfig {
 pub(crate) fn load_config() {
     WRAPPED_CONFIG.get_or_init(|| {
         let mut map = HashMap::new();
-        let cfg_file = compose_file_name_with_base_dir(BAMBOOTUBE_FILENAME_CONFIG_TOML);
+        let cfg_file = compose_file_name_with_base_dir(BBPE_FILENAME_CONFIG_TOML);
         if let Ok(config) = Config::builder()
             .add_source(File::with_name(cfg_file.as_str()))
             .build()
@@ -47,7 +47,7 @@ pub(crate) fn load_config() {
                 }
             }
         }
-        BambooTubeConfig { map }
+        BbpeConfig { map }
     });
 }
 
@@ -59,7 +59,7 @@ pub(crate) fn compose_file_name_with_base_dir(filename: &str) -> String {
 }
 
 fn fetch_base_dir() -> String {
-    if let Ok(path) = env::var(BAMBOOTUBE_ENV_HOME_KEY) {
+    if let Ok(path) = env::var(BBPE_ENV_HOME_KEY) {
         path
     } else if let Ok(dir) = env::current_dir() {
         format!("{dir:?}")
@@ -68,7 +68,7 @@ fn fetch_base_dir() -> String {
     }
 }
 
-pub(crate) fn get_config() -> &'static BambooTubeConfig {
+pub(crate) fn get_config() -> &'static BbpeConfig {
     let cfg = WRAPPED_CONFIG.get();
     cfg.unwrap()
 }

@@ -139,7 +139,7 @@ fn compute_data(
     stream: &Record,
     param: CallbackParams,
 ) {
-    let wrapped_agg_param = WrappedAggParam::new(aggregate_data_ptr, stream, &param);
+    let wrapped_agg_param = WrappedAggParam::new(aggregate_data_ptr, stream);
     for (col_idx, executor) in wrapped.aggregate().executors().iter().enumerate() {
         let offset = stream.column((col_idx + 1) as u16).offset();
         match executor {
@@ -156,23 +156,17 @@ fn compute_data(
                     return;
                 }
                 match func {
-                    Func::FirstL => {
+                    Func::FirstL | Func::FirstD => {
                         let sub_executor = executors.index_of(0);
                         let element = fetch_arg_val(param.u8_ptr(), sub_executor, stream);
-                        call_once_compute(&wrapped_agg_param, func, element, offset);
+                        call_once_compute(&wrapped_agg_param, func, element, offset)
                     }
-                    Func::FirstD => {
-                        call_once_compute(&wrapped_agg_param, func, Element::Double(0_f64), offset)
-                    }
-                    Func::LastL => {
+                    Func::LastL | Func::LastD => {
                         let sub_executor = executors.index_of(0);
                         let last = param.size() - 1;
                         let sub_data = unsafe { param.u8_ptr().add(last * param.step()) };
                         let element = fetch_arg_val(sub_data, sub_executor, stream);
                         call_once_compute(&wrapped_agg_param, func, element, offset)
-                    }
-                    Func::LastD => {
-                        call_once_compute(&wrapped_agg_param, func, Element::Double(0_f64), offset)
                     }
                     _ => loop_compute(aggregate_data_ptr, stream, col_idx, executor, &param),
                 }
@@ -200,7 +194,7 @@ fn loop_compute(
 ) {
     let u8_ptr = param.u8_ptr();
     let size = param.size();
-    let wrapped_agg_param = WrappedAggParam::new(aggregate_data_ptr, stream, param);
+    let wrapped_agg_param = WrappedAggParam::new(aggregate_data_ptr, stream);
     for data_idx in 0..size {
         compute(
             col_idx,
@@ -319,14 +313,9 @@ fn choose_func(
             }
         },
         Func::FirstD => {
-            let u8_ptr = wrapped_agg_param.u8_ptr();
-            let adjusted = unsafe { u8_ptr.add(offset) };
             let v = match &element {
-                Element::Long(_) => {
-                    let v: i64 = fetch_ptr(adjusted);
-                    v as f64
-                }
-                Element::Double(_) => fetch_ptr(adjusted),
+                Element::Long(v) => *v as f64,
+                Element::Double(v) => *v,
             };
             agg_func::func_first_double(aggregate_data_ptr, offset, &v);
         }
@@ -339,18 +328,10 @@ fn choose_func(
             }
         },
         Func::LastD => {
-            let u8_ptr = wrapped_agg_param.u8_ptr();
-            let last = wrapped_agg_param.size() - 1;
-            let step = wrapped_agg_param.step();
-            let adjusted = unsafe { u8_ptr.add(last * step + offset) };
             let v = match &element {
-                Element::Long(_) => {
-                    let v: i64 = fetch_ptr(adjusted);
-                    v as f64
-                }
-                Element::Double(_) => fetch_ptr(adjusted),
+                Element::Long(v) => *v as f64,
+                Element::Double(v) => *v,
             };
-            log::info!("last_double: {v}");
             agg_func::func_last_double(aggregate_data_ptr, offset, &v);
         }
         _ => {
@@ -453,14 +434,12 @@ impl WrappedAggregate {
 struct WrappedAggParam<'a> {
     aggregate_data_ptr: *mut u8,
     stream: &'a Record,
-    param: &'a CallbackParams,
 }
 impl<'a> WrappedAggParam<'a> {
-    fn new(aggregate_data_ptr: *mut u8, stream: &'a Record, param: &'a CallbackParams) -> Self {
+    fn new(aggregate_data_ptr: *mut u8, stream: &'a Record) -> Self {
         WrappedAggParam {
             aggregate_data_ptr,
             stream,
-            param,
         }
     }
 
@@ -470,25 +449,5 @@ impl<'a> WrappedAggParam<'a> {
 
     fn stream(&self) -> &'a Record {
         self.stream
-    }
-
-    fn u8_ptr(&self) -> *const u8 {
-        self.param.u8_ptr()
-    }
-
-    fn _mask(&self) -> usize {
-        self.param.mask()
-    }
-
-    fn _base_offset(&self) -> usize {
-        self.param.offset()
-    }
-
-    fn size(&self) -> usize {
-        self.param.size()
-    }
-
-    fn step(&self) -> usize {
-        self.param.step()
     }
 }

@@ -12,7 +12,7 @@ use std::{
     time::{Duration, SystemTime},
 };
 
-const LOOP_SIZE: usize = 10000000;
+const LOOP_SIZE: usize = 20;
 const LOOP_SIZE_F64: f64 = LOOP_SIZE as f64;
 
 const FILTER_SQL: &str = r#"
@@ -22,12 +22,13 @@ const FILTER_SQL: &str = r#"
     LIMIT -10
     "#;
 const AGGREGATE_SQL: &str = r#"
-    select _firstl(stream.a), _lastl(stream.a), _minl(stream.a), _maxl(stream.a)
+    select _firstl(stream.a), _lastl(stream.a), _minl(stream.a), _maxl(stream.a),
+           _firstd(stream.a), _lastd(stream.a), _mind(stream.a), _maxd(stream.a)
     from stream
     "#;
 
 pub fn main() {
-    env::set_var("BAMBOOTUBE_HOME", env::current_dir().unwrap());
+    env::set_var("BBPE_HOME", env::current_dir().unwrap());
     start();
     let sum_store = Arc::new(AtomicI64::new(0));
     let sum_clone = Arc::clone(&sum_store);
@@ -73,6 +74,17 @@ fn init_func(sum_store: Arc<AtomicI64>) -> (u16, u16) {
 #[inline]
 fn func_callback(sum_store: &Arc<AtomicI64>, _param: CallbackParams) {
     sum_store.fetch_add(1, Ordering::SeqCst);
+    let ptr = _param.u8_ptr();
+    // let v1 = fetch_i64(ptr);
+    // let v2 = fetch_i64(ptr.wrapping_add(8));
+    // let v3 = fetch_i64(ptr.wrapping_add(16));
+    // let v4 = fetch_i64(ptr.wrapping_add(24));
+    let v5 = fetch_f64(ptr.wrapping_add(32));
+    let v6 = fetch_f64(ptr.wrapping_add(40));
+    let v7 = fetch_f64(ptr.wrapping_add(48));
+    let v8 = fetch_f64(ptr.wrapping_add(56));
+    // log::info!("i64: {v1} {v2} {v3} {v4}");
+    log::info!("f64: {v5} {v6} {v7} {v8}");
 }
 
 fn gen_new_data(u8data: &mut U8Bytes) {
@@ -187,4 +199,16 @@ pub(crate) fn fill_u64(slice: &mut [u8], data: u64) {
     let p_val = ptr::addr_of!(*slice);
     let p_u64 = p_val as *mut u64;
     unsafe { *p_u64 = data };
+}
+
+// #[inline]
+// pub(crate) fn fetch_i64(p_val: *const u8) -> i64 {
+//     let p_i64 = p_val as *const i64;
+//     unsafe { *p_i64 }
+// }
+
+#[inline]
+pub(crate) fn fetch_f64(p_val: *const u8) -> f64 {
+    let p_f64 = p_val as *const f64;
+    unsafe { *p_f64 }
 }

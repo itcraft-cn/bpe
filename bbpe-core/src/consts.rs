@@ -1,6 +1,6 @@
-pub(crate) const BAMBOOTUBE_ENV_HOME_KEY: &str = "BAMBOOTUBE_HOME";
+pub(crate) const BBPE_ENV_HOME_KEY: &str = "BBPE_HOME";
 
-pub(crate) const BAMBOOTUBE_FILENAME_CONFIG_TOML: &str = "cfg/config.toml";
+pub(crate) const BBPE_FILENAME_CONFIG_TOML: &str = "cfg/config.toml";
 
 pub(crate) const DEFAULT_VEC_SIZE: usize = 1048576;
 

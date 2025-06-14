@@ -19,12 +19,12 @@ public class JavaBbpe {
     private static final long TIMEOUT = 5000L;
 
     private static final AtomicBoolean INIT = new AtomicBoolean(false);
-    private static final JavaBbpeThread JAVA_BAMBOOTUBE_THREAD = new JavaBbpeThread();
+    private static final JavaBbpeThread JAVA_BBPE_THREAD = new JavaBbpeThread();
 
     public static boolean start() {
         synchronized (INIT) {
             if (INIT.compareAndSet(false, true)) {
-                JAVA_BAMBOOTUBE_THREAD.start();
+                JAVA_BBPE_THREAD.start();
                 Thread thread = new Thread(JavaBbpe::stop0, "bbpe-shutdown-hook");
                 Runtime.getRuntime().addShutdownHook(thread);
                 return Bbpe.start();
@@ -38,7 +38,7 @@ public class JavaBbpe {
     }
 
     private static void stop0() {
-        JAVA_BAMBOOTUBE_THREAD.stop(TIMEOUT);
+        JAVA_BBPE_THREAD.stop(TIMEOUT);
         Bbpe.stop();
     }
 
@@ -82,7 +82,7 @@ public class JavaBbpe {
 
     public static <T> CompletableFuture<Boolean> newDataAsync(int id, T data) {
         CompletableFuture<Boolean> future = new CompletableFuture<>();
-        JAVA_BAMBOOTUBE_THREAD.fillQueue(new WrappedData<>(future, id, data));
+        JAVA_BBPE_THREAD.fillQueue(new WrappedData<>(future, id, data));
         return future;
     }
 
