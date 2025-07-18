@@ -1,6 +1,6 @@
 [package]
 name = "bbpe4j"
-version = "0.2.0" # updgitver managed
+version = "0.2.0" # managed by updgitver
 edition = "2021"
 authors = ["Guo Zheyong <guozheyong@erayt.com>"]
 exclude = ["tests", "test_data", "benches", "examples", ".vscode"]

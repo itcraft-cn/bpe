@@ -10,7 +10,7 @@ classifiers = [
     "Programming Language :: Python :: Implementation :: CPython",
     "Programming Language :: Python :: Implementation :: PyPy",
 ]
-version = "0.2.0" # updgitver managed
+version = "0.2.0" # managed by updgitver
 
 [tool.maturin]
 features = ["pyo3/extension-module"]

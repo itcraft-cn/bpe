@@ -1,6 +1,6 @@
 [package]
 name = "bbpe-sample"
-version = "0.2.0"
+version = "0.2.0" # managed by updgitver
 edition = "2021"
 authors = ["Guo Zheyong <guozheyong@erayt.com>"]
 exclude = ["tests", "test_data", "benches", "examples", ".vscode"]

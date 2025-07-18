@@ -1,6 +1,6 @@
 [package]
 name = "bbpe"
-version = "0.2.0" # updgitver managed
+version = "0.2.0" # managed by updgitver
 edition = "2021"
 authors = ["Guo Zheyong <guozheyong@erayt.com>"]
 exclude = ["tests", "test_data", "benches", "examples", ".vscode"]
@@ -34,7 +34,7 @@ sql-parse = "0.24.0"
 strum = "0.27.1"
 strum_macros = "0.27.1"
 inkwell = { version = "0.6.0", features = ["llvm14-0"] }
-globalvar = "0.2.0" # updgitver managed
+globalvar = "0.2.0" # managed by updgitver
 
 [dev-dependencies]
 criterion = { version = "0.6.0", features = ["html_reports"] }

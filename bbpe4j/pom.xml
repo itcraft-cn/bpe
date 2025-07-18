@@ -6,7 +6,7 @@
     <modelVersion>4.0.0</modelVersion>
     <groupId>com.erayt.bbpe</groupId>
     <artifactId>bbpe4j</artifactId>
-    <version>0.2.0</version> # updgitver managed
+    <version>0.2.0</version> # managed by updgitver
 
     <properties>
         <java.version>8</java.version>
