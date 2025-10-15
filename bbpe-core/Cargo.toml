@@ -34,7 +34,7 @@ sql-parse = "0.24.0"
 strum = "0.27.1"
 strum_macros = "0.27.1"
 inkwell = { version = "0.6.0", features = ["llvm14-0"] }
-globalvar = "0.2.0" # managed by updgitver
+globalvar = "0.2.0"
 
 [dev-dependencies]
 criterion = { version = "0.6.0", features = ["html_reports"] }

@@ -217,7 +217,7 @@ impl Mapper {
         }
     }
 
-    fn filter(&self) -> &JitFunction<FilterFunc> {
+    fn filter(&self) -> &JitFunction<'_, FilterFunc> {
         self.parsed_sql.filter()
     }
 

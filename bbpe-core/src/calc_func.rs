@@ -8,20 +8,11 @@ pub(crate) fn add(
     position: usize,
     executors: &Executors,
 ) -> Element {
-    if executors.executor_size() != 2 {
-        log::warn!(
-            "Invalid parameters for add function, should be 2, but was {}",
-            executors.executor_size()
-        );
-        return Element::Long(0);
+    if let Some((v1, v2)) = fetch_2_arg(sub_data_ptr, id, v_ptr, record, position, executors) {
+        v1.add(v2)
+    } else {
+        Element::Long(0)
     }
-    let v1 = executors
-        .index_of(0)
-        .fetch(id, v_ptr, record, position, sub_data_ptr);
-    let v2 = executors
-        .index_of(1)
-        .fetch(id, v_ptr, record, position, sub_data_ptr);
-    v1.add(v2)
 }
 
 pub(crate) fn sub(
@@ -32,20 +23,11 @@ pub(crate) fn sub(
     position: usize,
     executors: &Executors,
 ) -> Element {
-    if executors.executor_size() != 2 {
-        log::warn!(
-            "Invalid parameters for add function, should be 2, but was {}",
-            executors.executor_size()
-        );
-        return Element::Long(0);
+    if let Some((v1, v2)) = fetch_2_arg(sub_data_ptr, id, v_ptr, record, position, executors) {
+        v1.sub(v2)
+    } else {
+        Element::Long(0)
     }
-    let v1 = executors
-        .index_of(0)
-        .fetch(id, v_ptr, record, position, sub_data_ptr);
-    let v2 = executors
-        .index_of(1)
-        .fetch(id, v_ptr, record, position, sub_data_ptr);
-    v1.sub(v2)
 }
 
 pub(crate) fn mul(
@@ -56,20 +38,11 @@ pub(crate) fn mul(
     position: usize,
     executors: &Executors,
 ) -> Element {
-    if executors.executor_size() != 2 {
-        log::warn!(
-            "Invalid parameters for add function, should be 2, but was {}",
-            executors.executor_size()
-        );
-        return Element::Long(0);
+    if let Some((v1, v2)) = fetch_2_arg(sub_data_ptr, id, v_ptr, record, position, executors) {
+        v1.mul(v2)
+    } else {
+        Element::Long(0)
     }
-    let v1 = executors
-        .index_of(0)
-        .fetch(id, v_ptr, record, position, sub_data_ptr);
-    let v2 = executors
-        .index_of(1)
-        .fetch(id, v_ptr, record, position, sub_data_ptr);
-    v1.mul(v2)
 }
 
 pub(crate) fn div(
@@ -80,20 +53,11 @@ pub(crate) fn div(
     position: usize,
     executors: &Executors,
 ) -> Element {
-    if executors.executor_size() != 2 {
-        log::warn!(
-            "Invalid parameters for add function, should be 2, but was {}",
-            executors.executor_size()
-        );
-        return Element::Long(0);
+    if let Some((v1, v2)) = fetch_2_arg(sub_data_ptr, id, v_ptr, record, position, executors) {
+        v1.div(v2)
+    } else {
+        Element::Long(0)
     }
-    let v1 = executors
-        .index_of(0)
-        .fetch(id, v_ptr, record, position, sub_data_ptr);
-    let v2 = executors
-        .index_of(1)
-        .fetch(id, v_ptr, record, position, sub_data_ptr);
-    v1.div(v2)
 }
 
 pub(crate) fn mod_(
@@ -104,18 +68,35 @@ pub(crate) fn mod_(
     position: usize,
     executors: &Executors,
 ) -> Element {
+    if let Some((v1, v2)) = fetch_2_arg(sub_data_ptr, id, v_ptr, record, position, executors) {
+        v1.mod_(v2)
+    } else {
+        Element::Long(0)
+    }
+}
+
+fn fetch_2_arg(
+    sub_data_ptr: *const u8,
+    id: u16,
+    v_ptr: u64,
+    record: &Record,
+    position: usize,
+    executors: &Executors,
+) -> Option<(Element, Element)> {
     if executors.executor_size() != 2 {
         log::warn!(
             "Invalid parameters for add function, should be 2, but was {}",
             executors.executor_size()
         );
-        return Element::Long(0);
+        None
+    } else {
+        Some((
+            executors
+                .index_of(0)
+                .fetch(id, v_ptr, record, position, sub_data_ptr),
+            executors
+                .index_of(1)
+                .fetch(id, v_ptr, record, position, sub_data_ptr),
+        ))
     }
-    let v1 = executors
-        .index_of(0)
-        .fetch(id, v_ptr, record, position, sub_data_ptr);
-    let v2 = executors
-        .index_of(1)
-        .fetch(id, v_ptr, record, position, sub_data_ptr);
-    v1.mod_(v2)
 }
