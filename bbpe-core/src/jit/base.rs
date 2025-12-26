@@ -60,13 +60,13 @@ impl FuncGenerator<'_> {
                 &func_generator,
                 "fetch_i64",
                 fn_type,
-                fetch_column_i64 as usize,
+                fetch_column_i64 as *const () as usize,
             );
             reg_rust_fn(
                 &func_generator,
                 "fetch_f64",
                 fn_type,
-                fetch_column_f64 as usize,
+                fetch_column_f64 as *const () as usize,
             );
             func_generator.type_wrapper.replace(ret_val_type);
             func_generator

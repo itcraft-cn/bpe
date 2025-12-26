@@ -41,7 +41,13 @@ pub(crate) fn gen_select_filter_func<'ctx>(
         if let Some(val) = opt_val {
             let ret_val = val.get_field_at_index(0).unwrap().into_int_value();
             let err_val = i64_type.const_int(T_ERR as u64, true);
-            ret = ret_val.const_int_compare(IntPredicate::EQ, err_val);
+            ret = func_generator.builder.build_int_compare(
+                IntPredicate::EQ,
+                ret_val,
+                err_val,
+                "ret_status",
+            ).unwrap();
+            log::info!("filter func ret: {val}/{ret}");
         } else {
             return Err("failed to gen filter function".to_string());
         }
@@ -391,12 +397,11 @@ fn gen_call_fetch_column<'ctx>(
                     "ret",
                 )
                 .unwrap();
-            let ret = call_site_value
-                .try_as_basic_value()
-                .left()
-                .unwrap()
-                .into_struct_value();
-            Some(ret)
+            let val_enum = call_site_value.try_as_basic_value().unwrap_basic();
+            match val_enum {
+                BasicValueEnum::StructValue(struct_value) => Some(struct_value),
+                _ => None,
+            }
         }
         _ => {
             issues.push(format!("unsupported id: {idp:?}"));
