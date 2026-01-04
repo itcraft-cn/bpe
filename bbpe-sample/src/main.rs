@@ -15,7 +15,6 @@ const LOOP_SIZE_F64: f64 = LOOP_SIZE as f64;
 const FILTER_SQL: &str = r#"
     SELECT demo.a, demo.b, demo.c, demo.d
     FROM demo
-    WHERE demo.a >= 1 AND demo.b >= 2 AND demo.c >= 3 AND demo.d >= 4 AND demo.e >= 5
     LIMIT -1
     "#;
 
@@ -38,7 +37,7 @@ pub fn main() {
 
 fn init_func(sum_store: Arc<AtomicI64>) -> u16 {
     let core_ids = core_affinity::get_core_ids().unwrap();
-    core_affinity::set_for_current(core_ids[core_ids.len() - 1]);
+    core_affinity::set_for_current(core_ids[0]);
     log::info!("thread:{} started", thread::current().name().unwrap());
     if let Some(id) = define_record() {
         if let Some(mapper_id) =

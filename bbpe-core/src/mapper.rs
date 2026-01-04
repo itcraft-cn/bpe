@@ -151,11 +151,12 @@ fn loop_filter(
     } else {
         Idx::new(first_idx, last_idx, OPERATOR_INC)
     };
+    let filter = mapper.filter();
     loop {
         let position = ((walker - 1 - idx_wrapper.idx()) * step) & mask;
         let sub_data_ptr = array.sub_data(position);
         let v_sub_ptr = sub_data_ptr as u64;
-        if unsafe { mapper.filter().call(v_sub_ptr) } {
+        if unsafe { filter.call(v_sub_ptr) } {
             let adjusted = unsafe { u8_ptr.add(offset) };
             mapper.fetch(id, v_ptr, record, position, sub_data_ptr, adjusted);
             n += 1;
@@ -240,6 +241,7 @@ impl WrappedMapper {
     }
 }
 
+#[derive(Debug)]
 struct Idx {
     idx: usize,
     stop_val: usize,
