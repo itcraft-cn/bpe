@@ -6,12 +6,37 @@ use crate::{
 use inkwell::{
     builder::Builder,
     execution_engine::JitFunction,
-    types::IntType,
     values::{BasicValueEnum, FunctionValue, IntValue, StructValue},
     FloatPredicate, IntPredicate,
 };
 use sql_parse::{BinaryOperator, Expression, IdentifierPart};
 use std::ops::Range;
+
+type LogicOpFnType<'ctx> =
+    fn(&Builder<'ctx>, IntValue<'ctx>, IntValue<'ctx>, usize) -> IntValue<'ctx>;
+
+#[derive(Debug)]
+struct BinaryExpression<'a> {
+    lhs_val_type: BasicValueEnum<'a>,
+    rhs_val_type: BasicValueEnum<'a>,
+    lhs_ret_val: BasicValueEnum<'a>,
+    rhs_ret_val: BasicValueEnum<'a>,
+}
+impl<'a> BinaryExpression<'a> {
+    fn new(
+        lhs_val_type: BasicValueEnum<'a>,
+        rhs_val_type: BasicValueEnum<'a>,
+        lhs_ret_val: BasicValueEnum<'a>,
+        rhs_ret_val: BasicValueEnum<'a>,
+    ) -> Self {
+        Self {
+            lhs_val_type,
+            rhs_val_type,
+            lhs_ret_val,
+            rhs_ret_val,
+        }
+    }
+}
 
 pub(crate) fn gen_select_filter_func<'ctx>(
     func_generator: &'ctx FuncGenerator<'ctx>,
@@ -64,7 +89,7 @@ pub(crate) fn gen_select_filter_func<'ctx>(
 
 fn gen_filter_func<'ctx>(
     func_generator: &'ctx FuncGenerator<'ctx>,
-    func: &FunctionValue<'ctx>,
+    _func: &FunctionValue<'ctx>,
     param_u64ptr: &IntValue<'ctx>,
     expr: &Expression<'_>,
     record: &Record,
@@ -77,18 +102,35 @@ fn gen_filter_func<'ctx>(
             op_span: _,
             lhs,
             rhs,
-        } => bin_op_calc(
-            func_generator,
-            func,
-            param_u64ptr,
-            expr,
-            record,
-            issues,
-            walker,
-            op,
-            lhs,
-            rhs,
-        ),
+        } => {
+            let lhs_val = gen_filter_func(
+                func_generator,
+                _func,
+                param_u64ptr,
+                lhs,
+                record,
+                issues,
+                walker + 1,
+            )
+            .unwrap();
+            let rhs_val = gen_filter_func(
+                func_generator,
+                _func,
+                param_u64ptr,
+                rhs,
+                record,
+                issues,
+                walker + 2,
+            )
+            .unwrap();
+            let lhs_val_type = lhs_val.get_field_at_index(0).unwrap();
+            let rhs_val_type = rhs_val.get_field_at_index(0).unwrap();
+            let lhs_ret_val = lhs_val.get_field_at_index(1).unwrap();
+            let rhs_ret_val = rhs_val.get_field_at_index(1).unwrap();
+            let bin_exp =
+                BinaryExpression::new(lhs_val_type, rhs_val_type, lhs_ret_val, rhs_ret_val);
+            bin_op_calc(func_generator, expr, issues, walker, op, &bin_exp)
+        }
         Expression::Identifier(id_vec) => {
             let len = id_vec.len();
             if len == 1 {
@@ -138,50 +180,17 @@ fn gen_filter_func<'ctx>(
 
 fn bin_op_calc<'ctx>(
     func_generator: &'ctx FuncGenerator<'ctx>,
-    func: &FunctionValue<'ctx>,
-    param_u64ptr: &IntValue<'ctx>,
     expr: &Expression<'_>,
-    record: &Record,
     issues: &mut Vec<String>,
     walker: usize,
     op: &BinaryOperator,
-    lhs: &Expression<'_>,
-    rhs: &Expression<'_>,
+    bin_exp: &BinaryExpression<'ctx>,
 ) -> Option<StructValue<'ctx>> {
-    let lhs_val = gen_filter_func(
-        func_generator,
-        func,
-        param_u64ptr,
-        lhs,
-        record,
-        issues,
-        walker + 1,
-    )
-    .unwrap();
-    let rhs_val = gen_filter_func(
-        func_generator,
-        func,
-        param_u64ptr,
-        rhs,
-        record,
-        issues,
-        walker + 2,
-    )
-    .unwrap();
-    let i64_type = func_generator.context.i64_type();
-    let lhs_val_type = lhs_val.get_field_at_index(0).unwrap();
-    let rhs_val_type = rhs_val.get_field_at_index(0).unwrap();
-    let lhs_ret_val = lhs_val.get_field_at_index(1).unwrap();
-    let rhs_ret_val = rhs_val.get_field_at_index(1).unwrap();
     match op {
         BinaryOperator::Or => logic_op(
             func_generator,
             walker,
-            i64_type,
-            lhs_val_type,
-            rhs_val_type,
-            lhs_ret_val,
-            rhs_ret_val,
+            bin_exp,
             |builder, v1, v2, walker| {
                 builder
                     .build_or(v1, v2, &format!("val_{walker}_or"))
@@ -191,95 +200,35 @@ fn bin_op_calc<'ctx>(
         BinaryOperator::And => logic_op(
             func_generator,
             walker,
-            i64_type,
-            lhs_val_type,
-            rhs_val_type,
-            lhs_ret_val,
-            rhs_ret_val,
+            bin_exp,
             |builder, v1, v2, walker| {
                 builder
                     .build_and(v1, v2, &format!("val_{walker}_and"))
                     .unwrap()
             },
         ),
-        BinaryOperator::Eq => logic_compare(
-            func_generator,
-            func,
-            walker,
-            i64_type,
-            lhs_val_type,
-            rhs_val_type,
-            lhs_ret_val,
-            rhs_ret_val,
-            IntPredicate::EQ,
-            FloatPredicate::OEQ,
-            "eq",
-        ),
-        BinaryOperator::GtEq => logic_compare(
-            func_generator,
-            func,
-            walker,
-            i64_type,
-            lhs_val_type,
-            rhs_val_type,
-            lhs_ret_val,
-            rhs_ret_val,
-            IntPredicate::SGE,
-            FloatPredicate::OGE,
-            "gteq",
-        ),
-        BinaryOperator::Gt => logic_compare(
-            func_generator,
-            func,
-            walker,
-            i64_type,
-            lhs_val_type,
-            rhs_val_type,
-            lhs_ret_val,
-            rhs_ret_val,
-            IntPredicate::SGT,
-            FloatPredicate::OGT,
-            "gt",
-        ),
-        BinaryOperator::LtEq => logic_compare(
-            func_generator,
-            func,
-            walker,
-            i64_type,
-            lhs_val_type,
-            rhs_val_type,
-            lhs_ret_val,
-            rhs_ret_val,
-            IntPredicate::SLE,
-            FloatPredicate::OLE,
-            "lteq",
-        ),
-        BinaryOperator::Lt => logic_compare(
-            func_generator,
-            func,
-            walker,
-            i64_type,
-            lhs_val_type,
-            rhs_val_type,
-            lhs_ret_val,
-            rhs_ret_val,
-            IntPredicate::SLT,
-            FloatPredicate::OLT,
-            "lt",
-        ),
-        BinaryOperator::Neq => logic_compare(
-            func_generator,
-            func,
-            walker,
-            i64_type,
-            lhs_val_type,
-            rhs_val_type,
-            lhs_ret_val,
-            rhs_ret_val,
-            IntPredicate::NE,
-            FloatPredicate::ONE,
-            "neq",
-        ),
+        BinaryOperator::Eq
+        | BinaryOperator::GtEq
+        | BinaryOperator::Gt
+        | BinaryOperator::LtEq
+        | BinaryOperator::Lt
+        | BinaryOperator::Neq => {
+            let (matched, int_op, float_op, name) = match op {
+                BinaryOperator::Eq => (true, IntPredicate::EQ, FloatPredicate::OEQ, "eq"),
+                BinaryOperator::GtEq => (true, IntPredicate::SGE, FloatPredicate::OGE, "gteq"),
+                BinaryOperator::Gt => (true, IntPredicate::SGT, FloatPredicate::OGT, "gt"),
+                BinaryOperator::LtEq => (true, IntPredicate::SLE, FloatPredicate::OLE, "lteq"),
+                BinaryOperator::Lt => (true, IntPredicate::SLT, FloatPredicate::OLT, "lt"),
+                BinaryOperator::Neq => (true, IntPredicate::NE, FloatPredicate::ONE, "neq"),
+                _ => (false, IntPredicate::EQ, FloatPredicate::OEQ, "!!!op"),
+            };
+            if matched {
+                logic_compare(func_generator, walker, bin_exp, int_op, float_op, name)
+            } else {
+                issues.push(format!("unsupported op: {op:?}"));
+                None
+            }
+        }
         _ => {
             issues.push(format!("unsupported expr condition: {expr:?}"));
             None
@@ -287,21 +236,19 @@ fn bin_op_calc<'ctx>(
     }
 }
 
-type LogicOpFnType<'ctx> =
-    fn(&Builder<'ctx>, IntValue<'ctx>, IntValue<'ctx>, usize) -> IntValue<'ctx>;
-
 fn logic_op<'ctx>(
     func_generator: &'ctx FuncGenerator<'ctx>,
     walker: usize,
-    i64_type: IntType<'ctx>,
-    lhs_val_type: BasicValueEnum<'ctx>,
-    rhs_val_type: BasicValueEnum<'ctx>,
-    lhs_ret_val: BasicValueEnum<'ctx>,
-    rhs_ret_val: BasicValueEnum<'ctx>,
+    bin_exp: &BinaryExpression<'ctx>,
     f: LogicOpFnType<'ctx>,
 ) -> Option<StructValue<'ctx>> {
-    log::info!("{lhs_val_type:?} {rhs_val_type:?}");
-    log::info!("{lhs_ret_val:?} {rhs_ret_val:?}");
+    let (i64_type, lhs_val_type, rhs_val_type, lhs_ret_val, rhs_ret_val) = (
+        func_generator.context.i64_type(),
+        bin_exp.lhs_val_type,
+        bin_exp.rhs_val_type,
+        bin_exp.lhs_ret_val,
+        bin_exp.rhs_ret_val,
+    );
     let (ret_type, ret_val) = match (lhs_val_type, rhs_val_type) {
         (BasicValueEnum::IntValue(_), BasicValueEnum::IntValue(_)) => (
             i64_type.const_int(T_I64 as u64, true),
@@ -323,17 +270,19 @@ fn logic_op<'ctx>(
 
 fn logic_compare<'ctx>(
     func_generator: &'ctx FuncGenerator<'ctx>,
-    _func: &FunctionValue<'ctx>,
     walker: usize,
-    i64_type: IntType<'ctx>,
-    lhs_val_type: BasicValueEnum<'ctx>,
-    rhs_val_type: BasicValueEnum<'ctx>,
-    lhs_ret_val: BasicValueEnum<'ctx>,
-    rhs_ret_val: BasicValueEnum<'ctx>,
+    bin_exp: &BinaryExpression<'ctx>,
     int_op: IntPredicate,
     float_op: FloatPredicate,
     name: &str,
 ) -> Option<StructValue<'ctx>> {
+    let (i64_type, lhs_val_type, rhs_val_type, lhs_ret_val, rhs_ret_val) = (
+        func_generator.context.i64_type(),
+        bin_exp.lhs_val_type,
+        bin_exp.rhs_val_type,
+        bin_exp.lhs_ret_val,
+        bin_exp.rhs_ret_val,
+    );
     let func_name = &format!("val_{walker}_{name}");
     // log::info!("{func_name}, lhs_val_type: {lhs_val_type:?}, rhs_val_type: {rhs_val_type:?}");
     match (lhs_val_type, rhs_val_type) {
