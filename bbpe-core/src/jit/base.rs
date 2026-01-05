@@ -11,6 +11,8 @@ use inkwell::{
 
 static mut PTR_LLVM_CTX_STORE: u64 = 0;
 
+pub const B_TRUE: u64 = 1;
+
 pub const T_ERR: u8 = 0;
 pub const T_I64: u8 = 1;
 pub const T_F64: u8 = 2;

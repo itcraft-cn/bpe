@@ -1,6 +1,6 @@
 use crate::{
     data::{ColumnType, Record},
-    jit::base::{FuncGenerator, T_ERR, T_F64, T_I64},
+    jit::base::{FuncGenerator, B_TRUE, T_ERR, T_F64, T_I64},
     sql::base::FilterFunc,
 };
 use inkwell::{
@@ -72,13 +72,28 @@ pub(crate) fn gen_select_filter_func<'ctx>(
         let context = GenContext::new(func_generator, param_u64ptr);
         let opt_val = parse_exp(&context, &where_part.0, record, issues, 0);
         if let Some(val) = opt_val {
-            let ret_val = val.get_field_at_index(0).unwrap().into_int_value();
+            let type_val = val.get_field_at_index(0).unwrap().into_int_value();
             let err_val = i64_type.const_int(T_ERR as u64, true);
+            let type_check_ret = func_generator
+                .builder
+                .build_int_compare(IntPredicate::EQ, type_val, err_val, "type_check_status")
+                .unwrap();
+            let ret_val = val.get_field_at_index(1).unwrap().into_int_value();
+            let true_val = i64_type.const_int(B_TRUE, true);
+            let val_check_ret = func_generator
+                .builder
+                .build_int_compare(IntPredicate::EQ, ret_val, true_val, "val_check_status")
+                .unwrap();
             ret = func_generator
                 .builder
-                .build_int_compare(IntPredicate::EQ, ret_val, err_val, "ret_status")
+                .build_int_compare(
+                    IntPredicate::NE,
+                    type_check_ret,
+                    val_check_ret,
+                    "ret_status",
+                )
                 .unwrap();
-            // log::info!("filter func ret: {val}/{ret}");
+            log::info!("filter func ret: {val}/{ret}");
         } else {
             return Err("failed to gen filter function".to_string());
         }

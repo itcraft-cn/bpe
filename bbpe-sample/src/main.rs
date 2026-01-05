@@ -9,12 +9,13 @@ use std::{
     time::{Duration, SystemTime},
 };
 
-const LOOP_SIZE: usize = 20;
+const LOOP_SIZE: usize = 5;
 const LOOP_SIZE_F64: f64 = LOOP_SIZE as f64;
 
 const FILTER_SQL: &str = r#"
     SELECT demo.a, demo.b, demo.c, demo.d
     FROM demo
+    WHERE demo.a >= 1
     LIMIT -1
     "#;
 
