@@ -62,7 +62,6 @@ pub(crate) fn gen_select_filter_func<'ctx>(
     let bool_type = func_generator.context.bool_type();
     let fn_type = bool_type.fn_type(&[i64_type.into()], true);
     let func_name = &format!("{}_{}", "record_filter", record.id());
-    log::info!("try to genterator func, named: {func_name}");
     let func = func_generator.module.add_function(func_name, fn_type, None);
     let block = func_generator.context.append_basic_block(func, "entry");
     func_generator.builder.position_at_end(block);
@@ -93,7 +92,6 @@ pub(crate) fn gen_select_filter_func<'ctx>(
                     "ret_status",
                 )
                 .unwrap();
-            log::info!("filter func ret: {val}/{ret}");
         } else {
             return Err("failed to gen filter function".to_string());
         }
@@ -314,10 +312,8 @@ fn logic_compare<'ctx>(
     let l_val = bin_exp.l_val;
     let r_val = bin_exp.r_val;
     let func_name = &format!("val_{walker}_{name}");
-    log::info!("{func_name}, l_val_type: {l_val_type:?}, r_val_type: {r_val_type:?}");
     match (l_val_type, r_val_type) {
         (BasicValueEnum::IntValue(_), BasicValueEnum::IntValue(_)) => {
-            log::info!("{func_name}, int_op: {int_op:?}");
             let ret_type = i64_type.const_int(T_I64 as u64, true);
             let ret_val = context
                 .func_generator
