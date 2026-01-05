@@ -17,23 +17,23 @@ type LogicOpFnType<'ctx> =
 
 #[derive(Debug)]
 struct BinaryExpression<'a> {
-    lhs_val_type: BasicValueEnum<'a>,
-    rhs_val_type: BasicValueEnum<'a>,
-    lhs_ret_val: BasicValueEnum<'a>,
-    rhs_ret_val: BasicValueEnum<'a>,
+    l_val_type: BasicValueEnum<'a>,
+    r_val_type: BasicValueEnum<'a>,
+    l_val: BasicValueEnum<'a>,
+    r_val: BasicValueEnum<'a>,
 }
 impl<'a> BinaryExpression<'a> {
     fn new(
-        lhs_val_type: BasicValueEnum<'a>,
-        rhs_val_type: BasicValueEnum<'a>,
-        lhs_ret_val: BasicValueEnum<'a>,
-        rhs_ret_val: BasicValueEnum<'a>,
+        l_val_type: BasicValueEnum<'a>,
+        r_val_type: BasicValueEnum<'a>,
+        l_val: BasicValueEnum<'a>,
+        r_val: BasicValueEnum<'a>,
     ) -> Self {
         Self {
-            lhs_val_type,
-            rhs_val_type,
-            lhs_ret_val,
-            rhs_ret_val,
+            l_val_type,
+            r_val_type,
+            l_val,
+            r_val,
         }
     }
 }
@@ -108,61 +108,100 @@ fn parse_exp<'ctx>(
             lhs,
             rhs,
         } => {
-            let lhs_val = parse_exp(context, lhs, record, issues, walker + 1).unwrap();
-            let rhs_val = parse_exp(context, rhs, record, issues, walker + 2).unwrap();
-            let lhs_val_type = lhs_val.get_field_at_index(0).unwrap();
-            let rhs_val_type = rhs_val.get_field_at_index(0).unwrap();
-            let lhs_ret_val = lhs_val.get_field_at_index(1).unwrap();
-            let rhs_ret_val = rhs_val.get_field_at_index(1).unwrap();
-            let bin_exp =
-                BinaryExpression::new(lhs_val_type, rhs_val_type, lhs_ret_val, rhs_ret_val);
-            bin_op_calc(context, expr, issues, walker, op, &bin_exp)
-        }
-        Expression::Identifier(id_vec) => {
-            let len = id_vec.len();
-            if len == 1 {
-                let idp = id_vec.first().unwrap();
-                gen_call_fetch_column(context, idp, record, issues)
-            } else if len == 2 {
-                // todo table.column, currently just support column
-                let _tab_id_part = id_vec.first().unwrap();
-                let idp = id_vec.get(1).unwrap();
-                // log::info!("Identifier Vec: {_tab_id_part:?}/{idp:?}");
-                gen_call_fetch_column(context, idp, record, issues)
+            let rs = parse_binary_exp(context, record, issues, walker, lhs, rhs);
+            if let Ok(bin_exp) = rs {
+                bin_op_calc(context, expr, issues, walker, op, &bin_exp)
             } else {
-                issues.push(format!("unsupported id: {id_vec:?}"));
+                issues.push(format!("unsupported expression: {expr:?}, {:?}", rs.err()));
                 None
             }
         }
-        Expression::Integer(group) => {
-            let i8_type = context.func_generator.context.i8_type();
-            let i64_type = context.func_generator.context.i64_type();
-            let data_type = i8_type.const_int(T_I64 as u64, true);
-            let data = i64_type.const_int(group.0, true);
-            let ret_val_type = context.func_generator.get_ret_val_type();
-            Some(ret_val_type.const_named_struct(&[data_type.into(), data.into()]))
-        }
-        Expression::Float(group) => {
-            let i8_type = context.func_generator.context.i8_type();
-            let i64_type = context.func_generator.context.i64_type();
-            let data_type = i8_type.const_int(T_I64 as u64, true);
-            let data = i64_type.const_int(group.0.to_bits(), true);
-            let ret_val_type = context.func_generator.get_ret_val_type();
-            Some(ret_val_type.const_named_struct(&[data_type.into(), data.into()]))
-        }
-        Expression::String(_str) => {
-            issues.push(format!("unsupported String: {_str:?}"));
-            None
-        }
-        Expression::Function(f, expr_vec, _) => {
-            issues.push(format!("unsupported func: {f:?}, expr_vec: {expr_vec:?}"));
-            None
-        }
-        _ => {
-            issues.push(format!("unsupported expr condition: {expr:?}"));
-            None
-        }
+        Expression::Identifier(id_vec) => parse_identifier(context, record, issues, id_vec),
+        Expression::Integer(group) => parse_val(context, T_I64 as u64, group.0),
+        Expression::Float(group) => parse_val(context, T_F64 as u64, group.0.to_bits()),
+        _ => parse_unsupported(expr, issues),
     }
+}
+
+fn parse_binary_exp<'ctx>(
+    context: &GenContext<'ctx>,
+    record: &Record,
+    issues: &mut Vec<String>,
+    walker: usize,
+    lhs: &Expression<'_>,
+    rhs: &Expression<'_>,
+) -> Result<BinaryExpression<'ctx>, String> {
+    let opt_l_ret = parse_exp(context, lhs, record, issues, walker + 1);
+    let opt_r_ret = parse_exp(context, rhs, record, issues, walker + 2);
+    if opt_l_ret.is_some() && opt_r_ret.is_some() {
+        let l_ret = unwrap_opt(opt_l_ret);
+        let r_ret = unwrap_opt(opt_r_ret);
+        let l_val_type = l_ret.get_field_at_index(0).unwrap();
+        let r_val_type = r_ret.get_field_at_index(0).unwrap();
+        let l_val = l_ret.get_field_at_index(1).unwrap();
+        let r_val = r_ret.get_field_at_index(1).unwrap();
+        Ok(BinaryExpression::new(l_val_type, r_val_type, l_val, r_val))
+    } else if opt_l_ret.is_none() {
+        Err("failed to parse left expression".to_string())
+    } else {
+        Err("failed to parse right expression".to_string())
+    }
+}
+
+fn unwrap_opt(opt: Option<StructValue<'_>>) -> StructValue<'_> {
+    match opt {
+        Some(v) => v,
+        _ => panic!(),
+    }
+}
+
+fn parse_identifier<'ctx>(
+    context: &GenContext<'ctx>,
+    record: &Record,
+    issues: &mut Vec<String>,
+    id_vec: &Vec<IdentifierPart<'_>>,
+) -> Option<StructValue<'ctx>> {
+    let len = id_vec.len();
+    if len == 1 {
+        let idp = id_vec.first().unwrap();
+        gen_call_fetch_column(context, idp, record, issues)
+    } else if len == 2 {
+        // todo table.column, currently just support column
+        let _tab_id_part = id_vec.first().unwrap();
+        let idp = id_vec.get(1).unwrap();
+        // log::info!("Identifier Vec: {_tab_id_part:?}/{idp:?}");
+        gen_call_fetch_column(context, idp, record, issues)
+    } else {
+        issues.push(format!("unsupported id: {id_vec:?}"));
+        None
+    }
+}
+
+fn parse_val<'ctx>(
+    context: &GenContext<'ctx>,
+    val_type: u64,
+    val: u64,
+) -> Option<StructValue<'ctx>> {
+    let i64_type = context.func_generator.context.i64_type();
+    let data_type = i64_type.const_int(val_type, true);
+    let data = i64_type.const_int(val, true);
+    let ret_val_type = context.func_generator.get_ret_val_type();
+    Some(ret_val_type.const_named_struct(&[data_type.into(), data.into()]))
+}
+
+fn parse_unsupported<'ctx>(
+    expr: &Expression<'_>,
+    issues: &mut Vec<String>,
+) -> Option<StructValue<'ctx>> {
+    let issue_desc = match expr {
+        Expression::String(str) => format!("unsupported String: {str:?}"),
+        Expression::Function(f, expr_vec, _) => {
+            format!("unsupported func: {f:?}, expr_vec: {expr_vec:?}")
+        }
+        _ => format!("unsupported expr condition: {expr:?}"),
+    };
+    issues.push(issue_desc);
+    None
 }
 
 fn bin_op_calc<'ctx>(
@@ -219,20 +258,20 @@ fn logic_op<'ctx>(
     bin_exp: &BinaryExpression<'ctx>,
     f: LogicOpFnType<'ctx>,
 ) -> Option<StructValue<'ctx>> {
-    let (i64_type, lhs_val_type, rhs_val_type, lhs_ret_val, rhs_ret_val) = (
+    let (i64_type, l_val_type, r_val_type, l_val, r_val) = (
         context.func_generator.context.i64_type(),
-        bin_exp.lhs_val_type,
-        bin_exp.rhs_val_type,
-        bin_exp.lhs_ret_val,
-        bin_exp.rhs_ret_val,
+        bin_exp.l_val_type,
+        bin_exp.r_val_type,
+        bin_exp.l_val,
+        bin_exp.r_val,
     );
-    let (ret_type, ret_val) = match (lhs_val_type, rhs_val_type) {
+    let (ret_type, ret_val) = match (l_val_type, r_val_type) {
         (BasicValueEnum::IntValue(_), BasicValueEnum::IntValue(_)) => (
             i64_type.const_int(T_I64 as u64, true),
             f(
                 &context.func_generator.builder,
-                lhs_ret_val.into_int_value(),
-                rhs_ret_val.into_int_value(),
+                l_val.into_int_value(),
+                r_val.into_int_value(),
                 walker,
             ),
         ),
@@ -254,26 +293,24 @@ fn logic_compare<'ctx>(
     float_op: FloatPredicate,
     name: &str,
 ) -> Option<StructValue<'ctx>> {
-    let (i64_type, lhs_val_type, rhs_val_type, lhs_ret_val, rhs_ret_val) = (
-        context.func_generator.context.i64_type(),
-        bin_exp.lhs_val_type,
-        bin_exp.rhs_val_type,
-        bin_exp.lhs_ret_val,
-        bin_exp.rhs_ret_val,
-    );
+    let i64_type = context.func_generator.context.i64_type();
+    let l_val_type = bin_exp.l_val_type;
+    let r_val_type = bin_exp.r_val_type;
+    let l_val = bin_exp.l_val;
+    let r_val = bin_exp.r_val;
     let func_name = &format!("val_{walker}_{name}");
-    // log::info!("{func_name}, lhs_val_type: {lhs_val_type:?}, rhs_val_type: {rhs_val_type:?}");
-    match (lhs_val_type, rhs_val_type) {
+    log::info!("{func_name}, l_val_type: {l_val_type:?}, r_val_type: {r_val_type:?}");
+    match (l_val_type, r_val_type) {
         (BasicValueEnum::IntValue(_), BasicValueEnum::IntValue(_)) => {
-            // log::info!("{func_name}, int_op: {int_op:?}");
+            log::info!("{func_name}, int_op: {int_op:?}");
             let ret_type = i64_type.const_int(T_I64 as u64, true);
             let ret_val = context
                 .func_generator
                 .builder
                 .build_int_compare(
                     int_op,
-                    lhs_ret_val.into_int_value(),
-                    rhs_ret_val.into_int_value(),
+                    l_val.into_int_value(),
+                    r_val.into_int_value(),
                     func_name,
                 )
                 .unwrap();
@@ -294,8 +331,8 @@ fn logic_compare<'ctx>(
                 .builder
                 .build_float_compare(
                     float_op,
-                    lhs_ret_val.into_float_value(),
-                    rhs_ret_val.into_float_value(),
+                    l_val.into_float_value(),
+                    r_val.into_float_value(),
                     func_name,
                 )
                 .unwrap();
