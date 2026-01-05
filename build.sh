@@ -14,24 +14,24 @@ if [ $CHOOSE -eq 0 ]; then
     echo simple build, debug
     CARGO_CMD="cargo build"
     FULL_BUILD=0
-    RUSTFLAGS='-lLLVM-14 -Zub-checks=no'
+    RUSTFLAGS='-lLLVM-19 -Zub-checks=no'
 elif [ $CHOOSE -eq 1 ]; then
     echo simple build, release
     CARGO_CMD="cargo build --release"
     FULL_BUILD=0
-    RUSTFLAGS='-lLLVM-14'
+    RUSTFLAGS='-lLLVM-19'
 elif [ $CHOOSE -eq 2 ]; then
     echo full build, debug
     CARGO_CMD="cargo build"
     MATURIN_CMD="maturin build"
     FULL_BUILD=1
-    RUSTFLAGS='-lLLVM-14 -Zub-checks=no'
+    RUSTFLAGS='-lLLVM-19 -Zub-checks=no'
 elif [ $CHOOSE -eq 3 ]; then
     echo full build, release
     CARGO_CMD="cargo build --release"
     MATURIN_CMD="maturin build --release"
     FULL_BUILD=1
-    RUSTFLAGS='-lLLVM-14'
+    RUSTFLAGS='-lLLVM-19'
 else
     echo param error, quit
     exit 255
