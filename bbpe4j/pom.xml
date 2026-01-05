@@ -48,7 +48,7 @@
         <dependency>
             <groupId>cn.itcraft</groupId>
             <artifactId>nativeloader</artifactId>
-            <version>0.4</version>
+            <version>0.6</version>
         </dependency>
 
         <!-- test -->
