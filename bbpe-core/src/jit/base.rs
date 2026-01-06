@@ -8,23 +8,28 @@ use inkwell::{
     types::{FunctionType, StructType},
     OptimizationLevel,
 };
+use std::{
+    slice,
+    str::{self, Utf8Error},
+};
 
 static mut PTR_LLVM_CTX_STORE: u64 = 0;
 
 pub const B_TRUE: u64 = 1;
 
-pub const T_ERR: u8 = 0;
-pub const T_I64: u8 = 1;
-pub const T_F64: u8 = 2;
+pub const T_ERR: u64 = 0;
+pub const T_B64: u64 = 1;
+pub const T_I64: u64 = 2;
+pub const T_F64: u64 = 4;
 
 #[repr(C)]
 #[derive(Debug, Clone, Copy)]
 pub struct RetVal {
-    pub data_type: u8,
+    pub data_type: u64,
     pub data: u64,
 }
 impl RetVal {
-    pub fn new(data_type: u8, data: u64) -> Self {
+    pub fn new(data_type: u64, data: u64) -> Self {
         Self { data_type, data }
     }
 }
@@ -53,24 +58,33 @@ impl FuncGenerator<'_> {
             let i64_type = func_generator.context.i64_type();
             let i16_type = func_generator.context.i16_type();
             let i8_type = func_generator.context.i8_type();
-            let ret_val_type = func_generator
+            let fetch_ret_val_type = func_generator
                 .context
                 .struct_type(&[i8_type.into(), i64_type.into()], false);
-            let fn_type =
-                ret_val_type.fn_type(&[i64_type.into(), i16_type.into(), i16_type.into()], false);
+            let fetch_fn_type = fetch_ret_val_type
+                .fn_type(&[i64_type.into(), i16_type.into(), i16_type.into()], false);
+            let log_ret_val_type = func_generator.context.void_type();
+            let log_fn_type = log_ret_val_type
+                .fn_type(&[i64_type.into(), i64_type.into(), i16_type.into()], false);
             reg_rust_fn(
                 &func_generator,
                 "fetch_i64",
-                fn_type,
+                fetch_fn_type,
                 fetch_column_i64 as *const () as usize,
             );
             reg_rust_fn(
                 &func_generator,
                 "fetch_f64",
-                fn_type,
+                fetch_fn_type,
                 fetch_column_f64 as *const () as usize,
             );
-            func_generator.type_wrapper.replace(ret_val_type);
+            reg_rust_fn(
+                &func_generator,
+                "log",
+                log_fn_type,
+                llvm_log as *const () as usize,
+            );
+            func_generator.type_wrapper.replace(fetch_ret_val_type);
             func_generator
         } else {
             panic!("{:?}", rs_engine.err().unwrap());
@@ -121,6 +135,22 @@ unsafe extern "C" fn fetch_column_f64(data_ptr: u64, record_id: u16, column_id: 
         log::warn!("cannot found the column({column_id}) in record({record_id})");
         RetVal::new(T_ERR, 0)
     }
+}
+
+unsafe extern "C" fn llvm_log(data: u64, desc: u64, desc_len: u64) {
+    let ptr = desc as *const u8;
+    if let Ok(msg) = pointer_to_str_safe(ptr, desc_len as usize) {
+        log::info!("|jit|[{msg}]=>[{data}]");
+    } else {
+        log::warn!("cannot convert to string");
+    }
+}
+
+unsafe fn pointer_to_str_safe(ptr: *const u8, len: usize) -> Result<&'static str, Utf8Error> {
+    // 将原始指针转换为字节切片
+    let slice = slice::from_raw_parts(ptr, len);
+    // 验证并转换为 &str
+    str::from_utf8(slice)
 }
 
 fn get_ctx() -> &'static mut Context {

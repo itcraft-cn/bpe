@@ -1,16 +1,24 @@
 use crate::{
+    cfg::get_config,
+    consts::KEY_DEV_MODE,
     data::{ColumnType, Record},
-    jit::base::{FuncGenerator, B_TRUE, T_ERR, T_F64, T_I64},
+    jit::base::{FuncGenerator, B_TRUE, T_B64, T_F64, T_I64},
     sql::base::FilterFunc,
 };
 use inkwell::{
     builder::Builder,
     execution_engine::JitFunction,
-    values::{BasicValueEnum, IntValue, StructValue},
+    values::{BasicValueEnum, FunctionValue, IntValue, StructValue},
     FloatPredicate, IntPredicate,
 };
 use sql_parse::{BinaryOperator, Expression, IdentifierPart};
-use std::ops::Range;
+use std::{
+    ops::Range,
+    sync::{
+        atomic::{AtomicBool, Ordering},
+        Once,
+    },
+};
 
 type LogicOpFnType<'ctx> =
     fn(&Builder<'ctx>, IntValue<'ctx>, IntValue<'ctx>, usize) -> IntValue<'ctx>;
@@ -41,12 +49,18 @@ impl<'a> BinaryExpression<'a> {
 #[derive(Debug)]
 struct GenContext<'ctx> {
     func_generator: &'ctx FuncGenerator<'ctx>,
+    log_func: FunctionValue<'ctx>,
     param_u64ptr: IntValue<'ctx>,
 }
 impl<'ctx> GenContext<'ctx> {
-    fn new(func_generator: &'ctx FuncGenerator<'ctx>, param_u64ptr: IntValue<'ctx>) -> Self {
+    fn new(
+        func_generator: &'ctx FuncGenerator<'ctx>,
+        log_func: FunctionValue<'ctx>,
+        param_u64ptr: IntValue<'ctx>,
+    ) -> Self {
         Self {
             func_generator,
+            log_func,
             param_u64ptr,
         }
     }
@@ -68,14 +82,15 @@ pub(crate) fn gen_select_filter_func<'ctx>(
     let ret;
     if let Some(where_part) = where_ {
         let param_u64ptr = func.get_nth_param(0).unwrap().into_int_value();
-        let context = GenContext::new(func_generator, param_u64ptr);
+        let log_func = func_generator.module.get_function("log").unwrap();
+        let context = GenContext::new(func_generator, log_func, param_u64ptr);
         let opt_val = parse_exp(&context, &where_part.0, record, issues, 0);
         if let Some(val) = opt_val {
             let type_val = val.get_field_at_index(0).unwrap().into_int_value();
-            let err_val = i64_type.const_int(T_ERR as u64, true);
+            let bool_val = i64_type.const_int(T_B64, true);
             let type_check_ret = func_generator
                 .builder
-                .build_int_compare(IntPredicate::EQ, type_val, err_val, "type_check_status")
+                .build_int_compare(IntPredicate::EQ, type_val, bool_val, "type_check_status")
                 .unwrap();
             let ret_val = val.get_field_at_index(1).unwrap().into_int_value();
             let true_val = i64_type.const_int(B_TRUE, true);
@@ -85,18 +100,13 @@ pub(crate) fn gen_select_filter_func<'ctx>(
                 .unwrap();
             ret = func_generator
                 .builder
-                .build_int_compare(
-                    IntPredicate::NE,
-                    type_check_ret,
-                    val_check_ret,
-                    "ret_status",
-                )
+                .build_and(type_check_ret, val_check_ret, "ret_status")
                 .unwrap();
         } else {
             return Err("failed to gen filter function".to_string());
         }
     } else {
-        ret = bool_type.const_int(1, true);
+        ret = bool_type.const_int(T_B64, true);
     }
     let _ = func_generator.builder.build_return(Some(&ret));
     let opt_filter_func = func_generator.compile::<FilterFunc>(func_name);
@@ -130,8 +140,8 @@ fn parse_exp<'ctx>(
             }
         }
         Expression::Identifier(id_vec) => parse_identifier(context, record, issues, id_vec),
-        Expression::Integer(group) => parse_val(context, T_I64 as u64, group.0),
-        Expression::Float(group) => parse_val(context, T_F64 as u64, group.0.to_bits()),
+        Expression::Integer(group) => parse_val(context, T_I64, group.0),
+        Expression::Float(group) => parse_val(context, T_F64, group.0.to_bits()),
         _ => parse_unsupported(expr, issues),
     }
 }
@@ -271,25 +281,11 @@ fn logic_op<'ctx>(
     bin_exp: &BinaryExpression<'ctx>,
     f: LogicOpFnType<'ctx>,
 ) -> Option<StructValue<'ctx>> {
-    let (i64_type, l_val_type, r_val_type, l_val, r_val) = (
-        context.func_generator.context.i64_type(),
-        bin_exp.l_val_type,
-        bin_exp.r_val_type,
-        bin_exp.l_val,
-        bin_exp.r_val,
-    );
-    let (ret_type, ret_val) = match (l_val_type, r_val_type) {
-        (BasicValueEnum::IntValue(_), BasicValueEnum::IntValue(_)) => (
-            i64_type.const_int(T_I64 as u64, true),
-            f(
-                &context.func_generator.builder,
-                l_val.into_int_value(),
-                r_val.into_int_value(),
-                walker,
-            ),
-        ),
-        _ => panic!("not support"),
-    };
+    let i64_type = context.func_generator.context.i64_type();
+    let l_val = bin_exp.l_val.into_int_value();
+    let r_val = bin_exp.r_val.into_int_value();
+    let ret_type = i64_type.const_int(T_B64, true);
+    let ret_val = f(&context.func_generator.builder, l_val, r_val, walker);
     Some(
         context
             .func_generator
@@ -314,7 +310,7 @@ fn logic_compare<'ctx>(
     let func_name = &format!("val_{walker}_{name}");
     match (l_val_type, r_val_type) {
         (BasicValueEnum::IntValue(_), BasicValueEnum::IntValue(_)) => {
-            let ret_type = i64_type.const_int(T_I64 as u64, true);
+            let ret_type = i64_type.const_int(T_I64, true);
             let ret_val = context
                 .func_generator
                 .builder
@@ -336,7 +332,7 @@ fn logic_compare<'ctx>(
         | (BasicValueEnum::FloatValue(_), BasicValueEnum::IntValue(_))
         | (BasicValueEnum::FloatValue(_), BasicValueEnum::FloatValue(_)) => {
             // log::info!("{func_name}, int_op: {float_op:?}");
-            let ret_type = i64_type.const_int(T_F64 as u64, true);
+            let ret_type = i64_type.const_int(T_F64, true);
             let ret_val = context
                 .func_generator
                 .builder
@@ -407,4 +403,32 @@ fn gen_call_fetch_column<'ctx>(
             None
         }
     }
+}
+
+fn call_log<'ctx>(context: &GenContext<'ctx>, val: IntValue<'_>, msg: &str) {
+    static DEV: AtomicBool = AtomicBool::new(false);
+    static STOP: Once = Once::new();
+    STOP.call_once(|| {
+        DEV.store(get_config().fetch_cfg_bool(KEY_DEV_MODE), Ordering::SeqCst);
+    });
+    if DEV.load(Ordering::SeqCst) {
+        actual_call_log(context, val, msg);
+    }
+}
+
+fn actual_call_log<'ctx>(context: &GenContext<'ctx>, val: IntValue<'_>, msg: &str) {
+    let log_func = context.log_func;
+    let desc_msg_ptr = msg.as_ptr();
+    let i64_type = context.func_generator.context.i64_type();
+    let desc_msg_ptr_val = i64_type.const_int(desc_msg_ptr as u64, false);
+    let desc_len = i64_type.const_int(msg.len() as u64, false);
+    let _ = context
+        .func_generator
+        .builder
+        .build_call(
+            log_func,
+            &[val.into(), desc_msg_ptr_val.into(), desc_len.into()],
+            "log",
+        )
+        .unwrap();
 }
