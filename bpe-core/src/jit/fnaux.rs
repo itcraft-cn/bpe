@@ -5,61 +5,76 @@ use crate::{
 };
 use std::{slice, str::Utf8Error};
 
+/// Represents a return value from a JIT function with a type identifier and the actual data.
+/// Used for returning values from column fetch functions.
 #[repr(C)]
 #[derive(Debug, Clone, Copy)]
 pub(crate) struct RetVal {
-    pub(crate) data_type: u64,
-    pub(crate) data: u64,
+    pub(crate) data_type: u64,  // Type identifier (T_I64, T_F64, T_ERR, etc.)
+    pub(crate) data: u64,      // The actual data value
 }
 impl RetVal {
+    /// Creates a new RetVal with the specified type and data.
     pub(crate) fn new(data_type: u64, data: u64) -> Self {
         Self { data_type, data }
     }
 }
 
+/// Fetches an integer value from a column in the specified record.
+/// This function is called from generated LLVM code to access column data.
 pub(crate) unsafe extern "C" fn fetch_column_i64(data_ptr: u64, record_id: u16, column_id: u16) -> RetVal {
     if let Some(column) = Record::get_column(record_id, column_id) {
+        // Calculate the memory address of the column data
         let v: i64 = fetch_ptr(unsafe { (data_ptr as *const u8).add(column.offset()) });
+        // Return the value with type identifier for integer
         RetVal::new(T_I64, v.cast_unsigned())
     } else {
-        log::warn!("cannot found the column({column_id}) in record({record_id})");
-        RetVal::new(T_ERR, 0)
+        log::warn!("cannot found the column({column_id}) in record({record_id})");  // Log warning if column not found
+        RetVal::new(T_ERR, 0)  // Return error value
     }
 }
 
+/// Fetches a float value from a column in the specified record.
+/// This function is called from generated LLVM code to access column data.
 pub(crate) unsafe extern "C" fn fetch_column_f64(data_ptr: u64, record_id: u16, column_id: u16) -> RetVal {
     if let Some(column) = Record::get_column(record_id, column_id) {
+        // Calculate the memory address of the column data
         let v: f64 = fetch_ptr(unsafe { (data_ptr as *const u8).add(column.offset()) });
+        // Return the value with type identifier for float (using bits representation)
         RetVal::new(T_F64, v.to_bits())
     } else {
-        log::warn!("cannot found the column({column_id}) in record({record_id})");
-        RetVal::new(T_ERR, 0)
+        log::warn!("cannot found the column({column_id}) in record({record_id})");  // Log warning if column not found
+        RetVal::new(T_ERR, 0)  // Return error value
     }
 }
 
+/// Converts a value to a float based on its type identifier.
+/// Used for type conversion in generated LLVM code when comparing mixed types.
 pub(crate) unsafe extern "C" fn int2float(val_type: u64, val: u64) -> f64 {
     if val_type == T_I64 {
-        val as f64
+        val as f64  // Convert integer value to float
     } else if val_type == T_F64 {
-        f64::from_bits(val)
+        f64::from_bits(val)  // Reinterpret float bits as float value
     } else {
-        log::warn!("invalid val_type: {val_type}/{val}");
-        panic!("invalid val_type")
+        log::warn!("invalid val_type: {val_type}/{val}");  // Log warning for invalid type
+        panic!("invalid val_type")  // Panic for invalid type
     }
 }
 
+/// Logs a message from generated LLVM code, primarily used for debugging JIT-compiled functions.
 pub(crate) unsafe extern "C" fn llvm_log(data: u64, desc: u64, desc_len: u64) {
-    let ptr = desc as *const u8;
+    let ptr = desc as *const u8;  // Convert description pointer to byte pointer
     if let Ok(msg) = pointer_to_str_safe(ptr, desc_len as usize) {
-        log::info!("|jit|[{msg}]=>[{data}]");
+        log::info!("|jit|[{msg}]=>[{data}]");  // Log the message with data value
     } else {
-        log::warn!("cannot convert to string");
+        log::warn!("cannot convert to string");  // Log warning if string conversion fails
     }
 }
 
+/// Safely converts a raw pointer and length to a string slice, checking for valid UTF-8.
 unsafe fn pointer_to_str_safe(ptr: *const u8, len: usize) -> Result<&'static str, Utf8Error> {
-    // 将原始指针转换为字节切片
+    // Convert raw pointer to byte slice
     let slice = slice::from_raw_parts(ptr, len);
-    // 验证并转换为 &str
+    // Validate and convert to string slice
     str::from_utf8(slice)
 }

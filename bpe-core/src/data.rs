@@ -262,15 +262,21 @@ impl Record {
     }
 }
 
+/// Checks if a record ID is in the store (i.e., has been defined).
+/// Returns true if the ID is not in the store (meaning it's undefined), false otherwise.
 pub(crate) fn check_id_in_store(id: u16) -> bool {
-    let id_store = get_global_mut::<[u8; 8192]>(unsafe { PTR_ID_STORE });
-    bitmap_chk_id(id_store.as_slice(), id)
+    let id_store = get_global_mut::<[u8; 8192]>(unsafe { PTR_ID_STORE });  // Get ID store
+    bitmap_chk_id(id_store.as_slice(), id)  // Check if ID is set in the bitmap
 }
 
+/// Initializes the data system by setting up global pointers for:
+/// - Record map to store record definitions
+/// - Name map to map record names to IDs
+/// - ID store to track which IDs are in use
 pub(crate) fn init_data() {
     unsafe {
-        PTR_RECORD_MAP = def_global_ptr(SimpleU16Map::new());
-        PTR_NAME_MAP = def_global_ptr::<HashMap<String, u16>>(HashMap::new());
-        PTR_ID_STORE = def_global_ptr([0; 8192]);
+        PTR_RECORD_MAP = def_global_ptr(SimpleU16Map::new());              // Initialize record map
+        PTR_NAME_MAP = def_global_ptr::<HashMap<String, u16>>(HashMap::new());  // Initialize name map
+        PTR_ID_STORE = def_global_ptr([0; 8192]);                         // Initialize ID store
     }
 }
