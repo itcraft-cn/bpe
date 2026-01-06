@@ -6,12 +6,10 @@ use inkwell::{
     execution_engine::{ExecutionEngine, JitFunction, UnsafeFunctionPointer},
     module::Module,
     types::{FunctionType, StructType},
+    values::{FunctionValue, IntValue},
     OptimizationLevel,
 };
-use std::{
-    slice,
-    str::{self, Utf8Error},
-};
+use std::{slice, str::Utf8Error};
 
 static mut PTR_LLVM_CTX_STORE: u64 = 0;
 
@@ -111,10 +109,46 @@ impl FuncGenerator<'_> {
     }
 }
 
+#[derive(Debug)]
+pub(crate) struct GenContext<'ctx> {
+    pub(crate) func_generator: &'ctx FuncGenerator<'ctx>,
+    pub(crate) param_u64ptr: IntValue<'ctx>,
+    pub(crate) _log_func: FunctionValue<'ctx>,
+}
+impl<'ctx> GenContext<'ctx> {
+    pub(crate) fn new(
+        func_generator: &'ctx FuncGenerator<'ctx>,
+        param_u64ptr: IntValue<'ctx>,
+        log_func: FunctionValue<'ctx>,
+    ) -> Self {
+        Self {
+            func_generator,
+            param_u64ptr,
+            _log_func: log_func,
+        }
+    }
+}
+
 pub(crate) fn init_func_generator() {
     unsafe {
         PTR_LLVM_CTX_STORE = def_global_ptr(Context::create());
     }
+}
+
+fn get_ctx() -> &'static mut Context {
+    get_global_mut(unsafe { PTR_LLVM_CTX_STORE })
+}
+
+fn reg_rust_fn<'ctx>(
+    func_generator: &FuncGenerator<'ctx>,
+    name: &str,
+    fn_type: FunctionType<'ctx>,
+    fn_addr: usize,
+) {
+    let rust_fn = func_generator.module.add_function(name, fn_type, None);
+    func_generator
+        .execution_engine
+        .add_global_mapping(&rust_fn, fn_addr);
 }
 
 unsafe extern "C" fn fetch_column_i64(data_ptr: u64, record_id: u16, column_id: u16) -> RetVal {
@@ -151,20 +185,4 @@ unsafe fn pointer_to_str_safe(ptr: *const u8, len: usize) -> Result<&'static str
     let slice = slice::from_raw_parts(ptr, len);
     // 验证并转换为 &str
     str::from_utf8(slice)
-}
-
-fn get_ctx() -> &'static mut Context {
-    get_global_mut(unsafe { PTR_LLVM_CTX_STORE })
-}
-
-fn reg_rust_fn<'ctx>(
-    func_generator: &FuncGenerator<'ctx>,
-    name: &str,
-    fn_type: FunctionType<'ctx>,
-    fn_addr: usize,
-) {
-    let rust_fn = func_generator.module.add_function(name, fn_type, None);
-    func_generator
-        .execution_engine
-        .add_global_mapping(&rust_fn, fn_addr);
 }

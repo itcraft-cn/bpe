@@ -1,24 +1,19 @@
 use crate::{
-    cfg::get_config,
-    consts::KEY_DEV_MODE,
     data::{ColumnType, Record},
-    jit::base::{FuncGenerator, B_TRUE, T_B64, T_F64, T_I64},
+    jit::{
+        base::{FuncGenerator, GenContext, B_TRUE, T_B64, T_F64, T_I64},
+        logcall::_call_log,
+    },
     sql::base::FilterFunc,
 };
 use inkwell::{
     builder::Builder,
     execution_engine::JitFunction,
-    values::{BasicValueEnum, FunctionValue, IntValue, StructValue},
+    values::{BasicValueEnum, IntValue, StructValue},
     FloatPredicate, IntPredicate,
 };
 use sql_parse::{BinaryOperator, Expression, IdentifierPart};
-use std::{
-    ops::Range,
-    sync::{
-        atomic::{AtomicBool, Ordering},
-        Once,
-    },
-};
+use std::ops::Range;
 
 type LogicOpFnType<'ctx> =
     fn(&Builder<'ctx>, IntValue<'ctx>, IntValue<'ctx>, usize) -> IntValue<'ctx>;
@@ -46,26 +41,6 @@ impl<'a> BinaryExpression<'a> {
     }
 }
 
-#[derive(Debug)]
-struct GenContext<'ctx> {
-    func_generator: &'ctx FuncGenerator<'ctx>,
-    log_func: FunctionValue<'ctx>,
-    param_u64ptr: IntValue<'ctx>,
-}
-impl<'ctx> GenContext<'ctx> {
-    fn new(
-        func_generator: &'ctx FuncGenerator<'ctx>,
-        log_func: FunctionValue<'ctx>,
-        param_u64ptr: IntValue<'ctx>,
-    ) -> Self {
-        Self {
-            func_generator,
-            log_func,
-            param_u64ptr,
-        }
-    }
-}
-
 pub(crate) fn gen_select_filter_func<'ctx>(
     func_generator: &'ctx FuncGenerator<'ctx>,
     where_: &Option<(Expression<'_>, Range<usize>)>,
@@ -83,7 +58,7 @@ pub(crate) fn gen_select_filter_func<'ctx>(
     if let Some(where_part) = where_ {
         let param_u64ptr = func.get_nth_param(0).unwrap().into_int_value();
         let log_func = func_generator.module.get_function("log").unwrap();
-        let context = GenContext::new(func_generator, log_func, param_u64ptr);
+        let context = GenContext::new(func_generator, param_u64ptr, log_func);
         let opt_val = parse_exp(&context, &where_part.0, record, issues, 0);
         if let Some(val) = opt_val {
             let type_val = val.get_field_at_index(0).unwrap().into_int_value();
@@ -403,32 +378,4 @@ fn gen_call_fetch_column<'ctx>(
             None
         }
     }
-}
-
-fn call_log<'ctx>(context: &GenContext<'ctx>, val: IntValue<'_>, msg: &str) {
-    static DEV: AtomicBool = AtomicBool::new(false);
-    static STOP: Once = Once::new();
-    STOP.call_once(|| {
-        DEV.store(get_config().fetch_cfg_bool(KEY_DEV_MODE), Ordering::SeqCst);
-    });
-    if DEV.load(Ordering::SeqCst) {
-        actual_call_log(context, val, msg);
-    }
-}
-
-fn actual_call_log<'ctx>(context: &GenContext<'ctx>, val: IntValue<'_>, msg: &str) {
-    let log_func = context.log_func;
-    let desc_msg_ptr = msg.as_ptr();
-    let i64_type = context.func_generator.context.i64_type();
-    let desc_msg_ptr_val = i64_type.const_int(desc_msg_ptr as u64, false);
-    let desc_len = i64_type.const_int(msg.len() as u64, false);
-    let _ = context
-        .func_generator
-        .builder
-        .build_call(
-            log_func,
-            &[val.into(), desc_msg_ptr_val.into(), desc_len.into()],
-            "log",
-        )
-        .unwrap();
 }
