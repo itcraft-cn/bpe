@@ -7,8 +7,10 @@ use crate::{
     sql::base::FilterFunc,
 };
 use inkwell::{
+    basic_block::BasicBlock,
     builder::Builder,
     execution_engine::JitFunction,
+    types::IntType,
     values::{BasicValueEnum, IntValue, StructValue},
     FloatPredicate, IntPredicate,
 };
@@ -288,7 +290,7 @@ fn logic_compare<'ctx>(
     walker: &mut AtomicU64,
     bin_exp: &BinaryExpression<'ctx>,
     int_op: IntPredicate,
-    _float_op: FloatPredicate,
+    float_op: FloatPredicate,
     name: &str,
 ) -> Option<StructValue<'ctx>> {
     let w = walker.fetch_add(1, Ordering::SeqCst);
@@ -296,31 +298,12 @@ fn logic_compare<'ctx>(
     let i64_type = context.func_generator.context.i64_type();
     let l_val_type = bin_exp.l_val_type.into_int_value();
     let r_val_type = bin_exp.r_val_type.into_int_value();
-    let l_val = bin_exp.l_val.into_int_value();
-    let r_val = bin_exp.r_val.into_int_value();
     _call_log(context, l_val_type, "left val type");
-    _call_log(context, l_val, "left val");
     _call_log(context, r_val_type, "right val type");
-    _call_log(context, r_val, "right val");
 
     log::info!("logic_compare: {w}/{name}/{func_name}");
     let t_f64 = i64_type.const_int(T_F64, true);
-
-    let l_float = context
-        .func_generator
-        .builder
-        .build_int_compare(IntPredicate::EQ, l_val_type, t_f64, "is_l_float")
-        .unwrap();
-    let r_float = context
-        .func_generator
-        .builder
-        .build_int_compare(IntPredicate::EQ, r_val_type, t_f64, "is_r_float")
-        .unwrap();
-    let is_float = context
-        .func_generator
-        .builder
-        .build_or(l_float, r_float, "is_float")
-        .unwrap();
+    let is_float = check_is_float_cmp(context, l_val_type, r_val_type, t_f64);
 
     // Get the current function to append basic blocks to
     let current_func = context
@@ -351,11 +334,85 @@ fn logic_compare<'ctx>(
         .build_conditional_branch(is_float, float_cmp_block, int_cmp_block)
         .unwrap();
 
+    let float_result = build_float_cmp(
+        context,
+        float_op,
+        i64_type,
+        bin_exp,
+        float_cmp_block,
+        merge_block,
+    );
+
+    let int_result = build_int_cmp(
+        context,
+        int_op,
+        i64_type,
+        bin_exp,
+        int_cmp_block,
+        merge_block,
+    );
+
+    // Position builder at merge block to create PHI node
+    context.func_generator.builder.position_at_end(merge_block);
+
+    let ret_type = i64_type.const_int(T_B64, true);
+    let ret_val = ret_phi_val(
+        context,
+        func_name,
+        i64_type,
+        float_cmp_block,
+        int_cmp_block,
+        float_result,
+        int_result,
+    );
+    Some(
+        context
+            .func_generator
+            .get_ret_val_type()
+            .const_named_struct(&[ret_type.into(), ret_val.into()]),
+    )
+}
+
+fn check_is_float_cmp<'ctx>(
+    context: &GenContext<'ctx>,
+    l_val_type: IntValue<'ctx>,
+    r_val_type: IntValue<'ctx>,
+    t_f64: IntValue<'ctx>,
+) -> IntValue<'ctx> {
+    let l_float = context
+        .func_generator
+        .builder
+        .build_int_compare(IntPredicate::EQ, l_val_type, t_f64, "is_l_float")
+        .unwrap();
+    let r_float = context
+        .func_generator
+        .builder
+        .build_int_compare(IntPredicate::EQ, r_val_type, t_f64, "is_r_float")
+        .unwrap();
+    context
+        .func_generator
+        .builder
+        .build_or(l_float, r_float, "is_float")
+        .unwrap()
+}
+
+fn build_float_cmp<'ctx>(
+    context: &GenContext<'ctx>,
+    _float_op: FloatPredicate,
+    i64_type: IntType<'ctx>,
+    bin_exp: &BinaryExpression<'ctx>,
+    float_cmp_block: BasicBlock<'ctx>,
+    merge_block: BasicBlock<'ctx>,
+) -> IntValue<'ctx> {
     // Float comparison block
     context
         .func_generator
         .builder
         .position_at_end(float_cmp_block);
+    let l_val = bin_exp.l_val.into_int_value();
+    let r_val = bin_exp.r_val.into_int_value();
+    _call_log(context, l_val, "left val");
+    _call_log(context, r_val, "right val");
     // float comp
     let float_result_int = i64_type.const_int(T_B64, true);
     let float_result = context
@@ -368,12 +425,24 @@ fn logic_compare<'ctx>(
         .builder
         .build_unconditional_branch(merge_block)
         .unwrap();
+    float_result
+}
 
+fn build_int_cmp<'ctx>(
+    context: &GenContext<'ctx>,
+    int_op: IntPredicate,
+    i64_type: IntType<'ctx>,
+    bin_exp: &BinaryExpression<'ctx>,
+    int_cmp_block: BasicBlock<'ctx>,
+    merge_block: BasicBlock<'ctx>,
+) -> IntValue<'ctx> {
     // Int comparison block
     context
         .func_generator
         .builder
         .position_at_end(int_cmp_block);
+    let l_val = bin_exp.l_val.into_int_value();
+    let r_val = bin_exp.r_val.into_int_value();
     // int comp
     let int_result_int = context
         .func_generator
@@ -390,13 +459,18 @@ fn logic_compare<'ctx>(
         .builder
         .build_unconditional_branch(merge_block)
         .unwrap();
+    int_result
+}
 
-    // Position builder at merge block to create PHI node
-    context
-        .func_generator
-        .builder
-        .position_at_end(merge_block);
-
+fn ret_phi_val<'ctx>(
+    context: &GenContext<'ctx>,
+    func_name: &String,
+    i64_type: IntType<'ctx>,
+    float_cmp_block: BasicBlock<'ctx>,
+    int_cmp_block: BasicBlock<'ctx>,
+    float_result: IntValue<'ctx>,
+    int_result: IntValue<'ctx>,
+) -> IntValue<'ctx> {
     // Create PHI node to merge results from both paths
     let phi = context
         .func_generator
@@ -407,15 +481,7 @@ fn logic_compare<'ctx>(
         (&float_result, float_cmp_block),
         (&int_result, int_cmp_block),
     ]);
-
-    let ret_type = i64_type.const_int(T_B64, true);
-    let ret_val = phi.as_basic_value().into_int_value();
-    Some(
-        context
-            .func_generator
-            .get_ret_val_type()
-            .const_named_struct(&[ret_type.into(), ret_val.into()]),
-    )
+    phi.as_basic_value().into_int_value()
 }
 
 fn gen_call_fetch_column<'ctx>(
