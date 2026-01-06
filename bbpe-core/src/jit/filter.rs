@@ -1,9 +1,8 @@
 use crate::{
     data::{ColumnType, Record},
     jit::{
-        base::{
-            BinaryExpression, FuncGenerator, GenContext, LogicOpFnType, B_TRUE, T_B64, T_F64, T_I64,
-        },
+        base::{BinaryExpression, FuncGenerator, GenContext, LogicOpFnType},
+        consts::{B_TRUE, T_B64, T_F64, T_I64},
     },
     sql::base::FilterFunc,
 };

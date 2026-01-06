@@ -1,4 +1,4 @@
-use crate::{aux::fetch_ptr, data::Record};
+use crate::jit::fnaux::{fetch_column_f64, fetch_column_i64, int2float, llvm_log};
 use globalvar::{def_global_ptr, get_global_mut};
 use inkwell::{
     builder::Builder,
@@ -9,16 +9,9 @@ use inkwell::{
     values::{BasicValueEnum, FunctionValue, IntValue},
     OptimizationLevel,
 };
-use std::{slice, str::Utf8Error, sync::atomic::AtomicU64};
+use std::sync::atomic::AtomicU64;
 
 static mut PTR_LLVM_CTX_STORE: u64 = 0;
-
-pub const B_TRUE: u64 = 1;
-
-pub const T_ERR: u64 = 0;
-pub const T_B64: u64 = 1;
-pub const T_I64: u64 = 2;
-pub const T_F64: u64 = 4;
 
 pub(crate) type LogicOpFnType<'ctx> =
     fn(&Builder<'ctx>, IntValue<'ctx>, IntValue<'ctx>, &mut AtomicU64) -> IntValue<'ctx>;
@@ -43,18 +36,6 @@ impl<'a> BinaryExpression<'a> {
             l_val,
             r_val,
         }
-    }
-}
-
-#[repr(C)]
-#[derive(Debug, Clone, Copy)]
-pub(crate) struct RetVal {
-    pub(crate) data_type: u64,
-    pub(crate) data: u64,
-}
-impl RetVal {
-    pub(crate) fn new(data_type: u64, data: u64) -> Self {
-        Self { data_type, data }
     }
 }
 
@@ -185,51 +166,4 @@ fn reg_rust_fn<'ctx>(
     func_generator
         .execution_engine
         .add_global_mapping(&rust_fn, fn_addr);
-}
-
-unsafe extern "C" fn fetch_column_i64(data_ptr: u64, record_id: u16, column_id: u16) -> RetVal {
-    if let Some(column) = Record::get_column(record_id, column_id) {
-        let v: i64 = fetch_ptr(unsafe { (data_ptr as *const u8).add(column.offset()) });
-        RetVal::new(T_I64, v.cast_unsigned())
-    } else {
-        log::warn!("cannot found the column({column_id}) in record({record_id})");
-        RetVal::new(T_ERR, 0)
-    }
-}
-
-unsafe extern "C" fn fetch_column_f64(data_ptr: u64, record_id: u16, column_id: u16) -> RetVal {
-    if let Some(column) = Record::get_column(record_id, column_id) {
-        let v: f64 = fetch_ptr(unsafe { (data_ptr as *const u8).add(column.offset()) });
-        RetVal::new(T_F64, v.to_bits())
-    } else {
-        log::warn!("cannot found the column({column_id}) in record({record_id})");
-        RetVal::new(T_ERR, 0)
-    }
-}
-
-unsafe extern "C" fn int2float(val_type: u64, val: u64) -> f64 {
-    if val_type == T_I64 {
-        val as f64
-    } else if val_type == T_F64 {
-        f64::from_bits(val)
-    } else {
-        log::warn!("invalid val_type: {val_type}/{val}");
-        panic!("invalid val_type")
-    }
-}
-
-unsafe extern "C" fn llvm_log(data: u64, desc: u64, desc_len: u64) {
-    let ptr = desc as *const u8;
-    if let Ok(msg) = pointer_to_str_safe(ptr, desc_len as usize) {
-        log::info!("|jit|[{msg}]=>[{data}]");
-    } else {
-        log::warn!("cannot convert to string");
-    }
-}
-
-unsafe fn pointer_to_str_safe(ptr: *const u8, len: usize) -> Result<&'static str, Utf8Error> {
-    // 将原始指针转换为字节切片
-    let slice = slice::from_raw_parts(ptr, len);
-    // 验证并转换为 &str
-    str::from_utf8(slice)
 }
