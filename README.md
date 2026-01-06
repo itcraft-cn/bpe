@@ -1,38 +1,38 @@
-# Bamboo Pipe Engine (BBPE)
+# Bamboo Pipe Engine (BPE)
 
-A high-performance streaming data processing engine written in Rust with multi-language support. BBPE provides real-time Complex Event Processing (CEP) capabilities with SQL-based query interfaces and JIT compilation.
+A high-performance streaming data processing engine written in Rust with multi-language support. BPE provides real-time Complex Event Processing (CEP) capabilities with SQL-based query interfaces and JIT compilation.
 
 ## Overview
 
-BBPE (Bamboo Pipe Engine) is a streaming data processing system that enables real-time analysis of data streams using SQL-like queries. The engine is built with performance in mind, using LLVM-based JIT compilation for optimal execution speed.
+BPE (Bamboo Pipe Engine) is a streaming data processing system that enables real-time analysis of data streams using SQL-like queries. The engine is built with performance in mind, using LLVM-based JIT compilation for optimal execution speed.
 
 ## Architecture
 
-The BBPE project consists of multiple interconnected modules:
+The BPE project consists of multiple interconnected modules:
 
 ### Core Components
 
-1. **bbpe-core** - The main Rust library providing the core streaming data processing engine
+1. **bpe-core** - The main Rust library providing the core streaming data processing engine
    - Real-time stream processing capabilities
    - SQL-based query interface with JIT compilation
    - Memory-efficient circular buffer storage
    - Aggregate functions (sum, count, avg, min, max, first, last)
 
-2. **bbpe-java-wrapper (bbpe4j)** - Java JNI wrapper for BBPE
+2. **bpe-java-wrapper (bpe4j)** - Java JNI wrapper for BPE
    - Provides Java bindings to the Rust core
    - Uses JNI for cross-language communication
    - Maven-based build system
 
-3. **bbpe-py-wrapper (bbpe4py)** - Python wrapper using PyO3
+3. **bpe-py-wrapper (bpe4py)** - Python wrapper using PyO3
    - Python bindings via PyO3
    - Wheel distribution for easy installation
    - Supports Python 3.7+
 
-4. **bbpe-sample** - Example usage of the core library
-   - Sample implementations demonstrating BBPE capabilities
+4. **bpe-sample** - Example usage of the core library
+   - Sample implementations demonstrating BPE capabilities
    - Usage examples and patterns
 
-5. **bbpe-test** - Test suite for the core library
+5. **bpe-test** - Test suite for the core library
    - Unit tests and integration tests
    - Validation of core functionality
 
@@ -53,7 +53,7 @@ The BBPE project consists of multiple interconnected modules:
 - Cross-platform compatibility
 
 ### Configuration
-- Environment variable support (`BBPE_HOME`)
+- Environment variable support (`BPE_HOME`)
 - TOML-based configuration (`cfg/config.toml`)
 - Runtime-configurable parameters:
   - Vector size (default: 1MB)
@@ -82,36 +82,36 @@ The project supports multiple build modes through the build script:
 
 ### Rust
 ```rust
-use bbpe;
+use bpe;
 
 // Initialize the engine
-bbpe::start();
+bpe::start();
 
 // Define incoming data schema
-let incoming_id = bbpe::def_incoming("sensor_data", vec![
-    bbpe::Column::new_long("id"),
-    bbpe::Column::new_double("temperature"),
+let incoming_id = bpe::def_incoming("sensor_data", vec![
+    bpe::Column::new_long("id"),
+    bpe::Column::new_double("temperature"),
 ]);
 
 // Define stream schema
-let stream_id = bbpe::def_stream("high_temp_alert", vec![
-    bbpe::Column::new_long("id"),
-    bbpe::Column::new_double("temperature"),
+let stream_id = bpe::def_stream("high_temp_alert", vec![
+    bpe::Column::new_long("id"),
+    bpe::Column::new_double("temperature"),
 ]);
 
 // Define processing mapper with SQL
-let mapper_id = bbpe::def_mapper("SELECT id, temperature FROM sensor_data WHERE temperature > 30.0", 
+let mapper_id = bpe::def_mapper("SELECT id, temperature FROM sensor_data WHERE temperature > 30.0", 
     |params| {
         // Process the filtered data
         println!("High temperature detected!");
     });
 
 // Send data to the engine
-let data = bbpe::U8Bytes::new_from_vec(incoming_id.unwrap(), 16, vec![/* data bytes */]);
-bbpe::new_data(&data);
+let data = bpe::U8Bytes::new_from_vec(incoming_id.unwrap(), 16, vec![/* data bytes */]);
+bpe::new_data(&data);
 
 // Clean up
-bbpe::stop();
+bpe::stop();
 ```
 
 ### Configuration File (cfg/config.toml)

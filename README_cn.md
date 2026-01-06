@@ -1,38 +1,38 @@
-# Bamboo Pipe Engine (BBPE)
+# Bamboo Pipe Engine (BPE)
 
-一个用Rust编写的高性能流数据处理引擎，支持多语言。BBPE提供基于SQL查询接口的实时复杂事件处理(CEP)功能和JIT编译。
+一个用Rust编写的高性能流数据处理引擎，支持多语言。BPE提供基于SQL查询接口的实时复杂事件处理(CEP)功能和JIT编译。
 
 ## 概述
 
-BBPE (Bamboo Pipe Engine) 是一个流数据处理系统，使用类SQL查询实现数据流的实时分析。该引擎以性能为设计重点，使用基于LLVM的JIT编译实现最佳执行速度。
+BPE (Bamboo Pipe Engine) 是一个流数据处理系统，使用类SQL查询实现数据流的实时分析。该引擎以性能为设计重点，使用基于LLVM的JIT编译实现最佳执行速度。
 
 ## 架构
 
-BBPE项目由多个互连模块组成：
+BPE项目由多个互连模块组成：
 
 ### 核心组件
 
-1. **bbpe-core** - 提供核心流数据处理引擎的主要Rust库
+1. **bpe-core** - 提供核心流数据处理引擎的主要Rust库
    - 实时流处理能力
    - 带JIT编译的基于SQL的查询接口
    - 内存高效的环形缓冲区存储
    - 聚合函数(SUM, COUNT, AVG, MIN, MAX, FIRST, LAST)
 
-2. **bbpe-java-wrapper (bbpe4j)** - BBPE的Java JNI包装器
+2. **bpe-java-wrapper (bpe4j)** - BPE的Java JNI包装器
    - 为Rust核心提供Java绑定
    - 使用JNI进行跨语言通信
    - 基于Maven的构建系统
 
-3. **bbpe-py-wrapper (bbpe4py)** - 使用PyO3的Python包装器
+3. **bpe-py-wrapper (bpe4py)** - 使用PyO3的Python包装器
    - 通过PyO3提供Python绑定
    - Wheel分发便于安装
    - 支持Python 3.7+
 
-4. **bbpe-sample** - 核心库的使用示例
-   - 演示BBPE功能的示例实现
+4. **bpe-sample** - 核心库的使用示例
+   - 演示BPE功能的示例实现
    - 使用示例和模式
 
-5. **bbpe-test** - 核心库的测试套件
+5. **bpe-test** - 核心库的测试套件
    - 单元测试和集成测试
    - 核心功能验证
 
@@ -53,7 +53,7 @@ BBPE项目由多个互连模块组成：
 - 跨平台兼容性
 
 ### 配置
-- 环境变量支持(`BBPE_HOME`)
+- 环境变量支持(`BPE_HOME`)
 - 基于TOML的配置(`cfg/config.toml`)
 - 运行时可配置参数:
   - 向量大小(默认: 1MB)
@@ -82,36 +82,36 @@ BBPE项目由多个互连模块组成：
 
 ### Rust
 ```rust
-use bbpe;
+use bpe;
 
 // 初始化引擎
-bbpe::start();
+bpe::start();
 
 // 定义传入数据模式
-let incoming_id = bbpe::def_incoming("sensor_data", vec![
-    bbpe::Column::new_long("id"),
-    bbpe::Column::new_double("temperature"),
+let incoming_id = bpe::def_incoming("sensor_data", vec![
+    bpe::Column::new_long("id"),
+    bpe::Column::new_double("temperature"),
 ]);
 
 // 定义流模式
-let stream_id = bbpe::def_stream("high_temp_alert", vec![
-    bbpe::Column::new_long("id"),
-    bbpe::Column::new_double("temperature"),
+let stream_id = bpe::def_stream("high_temp_alert", vec![
+    bpe::Column::new_long("id"),
+    bpe::Column::new_double("temperature"),
 ]);
 
 // 使用SQL定义处理映射器
-let mapper_id = bbpe::def_mapper("SELECT id, temperature FROM sensor_data WHERE temperature > 30.0", 
+let mapper_id = bpe::def_mapper("SELECT id, temperature FROM sensor_data WHERE temperature > 30.0", 
     |params| {
         // 处理过滤后的数据
         println!("检测到高温!");
     });
 
 // 向引擎发送数据
-let data = bbpe::U8Bytes::new_from_vec(incoming_id.unwrap(), 16, vec![/* 数据字节 */]);
-bbpe::new_data(&data);
+let data = bpe::U8Bytes::new_from_vec(incoming_id.unwrap(), 16, vec![/* 数据字节 */]);
+bpe::new_data(&data);
 
 // 清理
-bbpe::stop();
+bpe::stop();
 ```
 
 ### 配置文件 (cfg/config.toml)

@@ -44,20 +44,20 @@ RUSTFLAGS=$RUSTFLAGS $CARGO_CMD
 
 if [ $FULL_BUILD -eq 1 ]; then
     # Build java
-    cd bbpe4j
+    cd bpe4j
     mvnd package -Dmaven.test.skip=true
     cd ..
     
     # Build python wrapper
-    cd bbpe-py-wrapper
+    cd bpe-py-wrapper
     source bin/activate
     RUSTFLAGS=$RUSTFLAGS $MATURIN_CMD
     deactivate
     cd ..
     
     # install to python sample
-    whl_file_name=$(ls target/wheels/bbpe4py-*)
-    cd bbpe-py-sample
+    whl_file_name=$(ls target/wheels/bpe4py-*)
+    cd bpe-py-sample
     source bin/activate
     pip install ../$whl_file_name --force-reinstall
     deactivate
