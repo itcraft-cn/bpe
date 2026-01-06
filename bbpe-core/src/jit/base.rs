@@ -61,6 +61,8 @@ impl FuncGenerator<'_> {
                 .struct_type(&[i8_type.into(), i64_type.into()], false);
             let fetch_fn_type = fetch_ret_val_type
                 .fn_type(&[i64_type.into(), i16_type.into(), i16_type.into()], false);
+            let i2f_ret_val_type = func_generator.context.f64_type();
+            let i2f_fn_type = i2f_ret_val_type.fn_type(&[i64_type.into(), i64_type.into()], false);
             let log_ret_val_type = func_generator.context.void_type();
             let log_fn_type = log_ret_val_type
                 .fn_type(&[i64_type.into(), i64_type.into(), i16_type.into()], false);
@@ -75,6 +77,12 @@ impl FuncGenerator<'_> {
                 "fetch_f64",
                 fetch_fn_type,
                 fetch_column_f64 as *const () as usize,
+            );
+            reg_rust_fn(
+                &func_generator,
+                "i2f",
+                i2f_fn_type,
+                int2float as *const () as usize,
             );
             reg_rust_fn(
                 &func_generator,
@@ -113,17 +121,20 @@ impl FuncGenerator<'_> {
 pub(crate) struct GenContext<'ctx> {
     pub(crate) func_generator: &'ctx FuncGenerator<'ctx>,
     pub(crate) param_u64ptr: IntValue<'ctx>,
+    pub(crate) i2f_func: FunctionValue<'ctx>,
     pub(crate) _log_func: FunctionValue<'ctx>,
 }
 impl<'ctx> GenContext<'ctx> {
     pub(crate) fn new(
         func_generator: &'ctx FuncGenerator<'ctx>,
         param_u64ptr: IntValue<'ctx>,
+        i2f_func: FunctionValue<'ctx>,
         log_func: FunctionValue<'ctx>,
     ) -> Self {
         Self {
             func_generator,
             param_u64ptr,
+            i2f_func,
             _log_func: log_func,
         }
     }
@@ -168,6 +179,17 @@ unsafe extern "C" fn fetch_column_f64(data_ptr: u64, record_id: u16, column_id: 
     } else {
         log::warn!("cannot found the column({column_id}) in record({record_id})");
         RetVal::new(T_ERR, 0)
+    }
+}
+
+unsafe extern "C" fn int2float(val_type: u64, val: u64) -> f64 {
+    if val_type == T_I64 {
+        val as f64
+    } else if val_type == T_F64 {
+        f64::from_bits(val)
+    } else {
+        log::warn!("invalid val_type: {val_type}/{val}");
+        panic!("invalid val_type")
     }
 }
 

@@ -11,7 +11,7 @@ use inkwell::{
     builder::Builder,
     execution_engine::JitFunction,
     types::IntType,
-    values::{BasicValueEnum, IntValue, StructValue},
+    values::{BasicValueEnum, FloatValue, IntValue, StructValue},
     FloatPredicate, IntPredicate,
 };
 use sql_parse::{BinaryOperator, Expression, IdentifierPart};
@@ -63,30 +63,27 @@ pub(crate) fn gen_select_filter_func<'ctx>(
     let ret;
     if let Some(where_part) = where_ {
         let param_u64ptr = func.get_nth_param(0).unwrap().into_int_value();
+        let i2f_func = func_generator.module.get_function("i2f").unwrap();
         let log_func = func_generator.module.get_function("log").unwrap();
-        let context = GenContext::new(func_generator, param_u64ptr, log_func);
+        let context = GenContext::new(func_generator, param_u64ptr, i2f_func, log_func);
         let opt_val = parse_exp(&context, &where_part.0, record, issues, &mut walker);
         if let Some(val) = opt_val {
-            log::info!("filter function parsed");
             let type_val = val.get_field_at_index(0).unwrap().into_int_value();
             let bool_val = i64_type.const_int(T_B64, true);
             let type_check_ret = func_generator
                 .builder
                 .build_int_compare(IntPredicate::EQ, type_val, bool_val, "type_check_status")
                 .unwrap();
-            log::info!("filter function type checked");
             let ret_val = val.get_field_at_index(1).unwrap().into_int_value();
             let true_val = i64_type.const_int(B_TRUE, true);
             let val_check_ret = func_generator
                 .builder
                 .build_int_compare(IntPredicate::EQ, ret_val, true_val, "val_check_status")
                 .unwrap();
-            log::info!("filter function val checked");
             ret = func_generator
                 .builder
                 .build_and(type_check_ret, val_check_ret, "ret_status")
                 .unwrap();
-            log::info!("filter function ret checked");
         } else {
             return Err("failed to gen filter function".to_string());
         }
@@ -94,9 +91,7 @@ pub(crate) fn gen_select_filter_func<'ctx>(
         ret = bool_type.const_int(T_B64, true);
     }
     let _ = func_generator.builder.build_return(Some(&ret));
-    log::info!("filter function start compiling");
     let opt_filter_func = func_generator.compile::<FilterFunc>(func_name);
-    log::info!("filter function compiled");
     if let Some(filter_func) = opt_filter_func {
         Ok(filter_func)
     } else {
@@ -111,7 +106,6 @@ fn parse_exp<'ctx>(
     issues: &mut Vec<String>,
     walker: &mut AtomicU64,
 ) -> Option<StructValue<'ctx>> {
-    log::info!("parse_exp: {:?}", expr);
     match expr {
         Expression::Binary {
             op,
@@ -180,7 +174,6 @@ fn parse_identifier<'ctx>(
         // todo table.column, currently just support column
         let _tab_id_part = id_vec.first().unwrap();
         let idp = id_vec.get(1).unwrap();
-        // log::info!("Identifier Vec: {_tab_id_part:?}/{idp:?}");
         gen_call_fetch_column(context, idp, record, issues)
     } else {
         issues.push(format!("unsupported id: {id_vec:?}"));
@@ -226,12 +219,10 @@ fn bin_op_calc<'ctx>(
     match op {
         BinaryOperator::Or => logic_op(context, walker, bin_exp, |builder, v1, v2, walker| {
             let w = walker.fetch_add(1, Ordering::SeqCst);
-            log::info!("logic_op or, {w}, v1: {v1:?}, v2: {v2:?}");
             builder.build_or(v1, v2, &format!("val_{w}_or")).unwrap()
         }),
         BinaryOperator::And => logic_op(context, walker, bin_exp, |builder, v1, v2, walker| {
             let w = walker.fetch_add(1, Ordering::SeqCst);
-            log::info!("logic_op and, {w}, v1: {v1:?}, v2: {v2:?}");
             builder.build_and(v1, v2, &format!("val_{w}_and")).unwrap()
         }),
         BinaryOperator::Eq
@@ -270,13 +261,10 @@ fn logic_op<'ctx>(
     f: LogicOpFnType<'ctx>,
 ) -> Option<StructValue<'ctx>> {
     let i64_type = context.func_generator.context.i64_type();
-    let w = walker.load(Ordering::SeqCst);
-    log::info!("logic_op walker start, {w}");
     let l_val = bin_exp.l_val.into_int_value();
     let r_val = bin_exp.r_val.into_int_value();
     let ret_type = i64_type.const_int(T_B64, true);
     let ret_val = f(&context.func_generator.builder, l_val, r_val, walker);
-    log::info!("logic_op walker, {w}");
     Some(
         context
             .func_generator
@@ -298,10 +286,7 @@ fn logic_compare<'ctx>(
     let i64_type = context.func_generator.context.i64_type();
     let l_val_type = bin_exp.l_val_type.into_int_value();
     let r_val_type = bin_exp.r_val_type.into_int_value();
-    _call_log(context, l_val_type, "left val type");
-    _call_log(context, r_val_type, "right val type");
 
-    log::info!("logic_compare: {w}/{name}/{func_name}");
     let t_f64 = i64_type.const_int(T_F64, true);
     let is_float = check_is_float_cmp(context, l_val_type, r_val_type, t_f64);
 
@@ -356,7 +341,7 @@ fn logic_compare<'ctx>(
     context.func_generator.builder.position_at_end(merge_block);
 
     let ret_type = i64_type.const_int(T_B64, true);
-    let ret_val = ret_phi_val(
+    let ret_val = ret_phi_int_val(
         context,
         func_name,
         i64_type,
@@ -409,11 +394,17 @@ fn build_float_cmp<'ctx>(
         .func_generator
         .builder
         .position_at_end(float_cmp_block);
+    let l_val_type = bin_exp.l_val_type.into_int_value();
+    let r_val_type = bin_exp.r_val_type.into_int_value();
     let l_val = bin_exp.l_val.into_int_value();
     let r_val = bin_exp.r_val.into_int_value();
-    _call_log(context, l_val, "left val");
-    _call_log(context, r_val, "right val");
+    _call_log(context, l_val_type, "left float val type");
+    _call_log(context, r_val_type, "right float val type");
+    _call_log(context, l_val, "left float val");
+    _call_log(context, r_val, "right float val");
     // float comp
+    let _l_float_val = convert_int2float(context, "l", l_val_type, l_val);
+    let _r_float_val = convert_int2float(context, "r", r_val_type, r_val);
     let float_result_int = i64_type.const_int(T_B64, true);
     let float_result = context
         .func_generator
@@ -426,6 +417,26 @@ fn build_float_cmp<'ctx>(
         .build_unconditional_branch(merge_block)
         .unwrap();
     float_result
+}
+
+fn convert_int2float<'ctx>(
+    context: &GenContext<'ctx>,
+    flag: &str,
+    val_type: IntValue<'ctx>,
+    val: IntValue<'ctx>,
+) -> FloatValue<'ctx> {
+    context
+        .func_generator
+        .builder
+        .build_call(
+            context.i2f_func,
+            &[val_type.into(), val.into()],
+            &format!("{flag}_i2f"),
+        )
+        .unwrap()
+        .try_as_basic_value()
+        .unwrap_basic()
+        .into_float_value()
 }
 
 fn build_int_cmp<'ctx>(
@@ -462,14 +473,14 @@ fn build_int_cmp<'ctx>(
     int_result
 }
 
-fn ret_phi_val<'ctx>(
+fn ret_phi_int_val<'ctx>(
     context: &GenContext<'ctx>,
     func_name: &String,
     i64_type: IntType<'ctx>,
-    float_cmp_block: BasicBlock<'ctx>,
-    int_cmp_block: BasicBlock<'ctx>,
-    float_result: IntValue<'ctx>,
-    int_result: IntValue<'ctx>,
+    block1: BasicBlock<'ctx>,
+    block2: BasicBlock<'ctx>,
+    result1: IntValue<'ctx>,
+    result2: IntValue<'ctx>,
 ) -> IntValue<'ctx> {
     // Create PHI node to merge results from both paths
     let phi = context
@@ -477,10 +488,7 @@ fn ret_phi_val<'ctx>(
         .builder
         .build_phi(i64_type, &format!("{}_phi", func_name))
         .unwrap();
-    phi.add_incoming(&[
-        (&float_result, float_cmp_block),
-        (&int_result, int_cmp_block),
-    ]);
+    phi.add_incoming(&[(&result1, block1), (&result2, block2)]);
     phi.as_basic_value().into_int_value()
 }
 
@@ -518,10 +526,7 @@ fn gen_call_fetch_column<'ctx>(
                 .unwrap();
             let val_enum = call_site_value.try_as_basic_value().unwrap_basic();
             match val_enum {
-                BasicValueEnum::StructValue(struct_value) => {
-                    // log::info!("fetch_column: {name}, {struct_value:?}");
-                    Some(struct_value)
-                }
+                BasicValueEnum::StructValue(struct_value) => Some(struct_value),
                 _ => {
                     issues.push(format!("unsupported BasicValueEnum: {val_enum:?}"));
                     None
