@@ -1,14 +1,14 @@
 use crate::{
     data::{ColumnType, Record},
     jit::{
-        base::{FuncGenerator, GenContext, B_TRUE, T_B64, T_F64, T_I64},
-        logcall::_call_log,
+        base::{
+            BinaryExpression, FuncGenerator, GenContext, LogicOpFnType, B_TRUE, T_B64, T_F64, T_I64,
+        },
     },
     sql::base::FilterFunc,
 };
 use inkwell::{
     basic_block::BasicBlock,
-    builder::Builder,
     execution_engine::JitFunction,
     types::IntType,
     values::{BasicValueEnum, FloatValue, IntValue, StructValue},
@@ -19,32 +19,6 @@ use std::{
     ops::Range,
     sync::atomic::{AtomicU64, Ordering},
 };
-
-type LogicOpFnType<'ctx> =
-    fn(&Builder<'ctx>, IntValue<'ctx>, IntValue<'ctx>, &mut AtomicU64) -> IntValue<'ctx>;
-
-#[derive(Debug)]
-struct BinaryExpression<'a> {
-    l_val_type: BasicValueEnum<'a>,
-    r_val_type: BasicValueEnum<'a>,
-    l_val: BasicValueEnum<'a>,
-    r_val: BasicValueEnum<'a>,
-}
-impl<'a> BinaryExpression<'a> {
-    fn new(
-        l_val_type: BasicValueEnum<'a>,
-        r_val_type: BasicValueEnum<'a>,
-        l_val: BasicValueEnum<'a>,
-        r_val: BasicValueEnum<'a>,
-    ) -> Self {
-        Self {
-            l_val_type,
-            r_val_type,
-            l_val,
-            r_val,
-        }
-    }
-}
 
 pub(crate) fn gen_select_filter_func<'ctx>(
     func_generator: &'ctx FuncGenerator<'ctx>,
@@ -291,13 +265,9 @@ fn logic_compare<'ctx>(
     let is_float = check_is_float_cmp(context, l_val_type, r_val_type, t_f64);
 
     // Get the current function to append basic blocks to
-    let current_func = context
-        .func_generator
-        .builder
-        .get_insert_block()
-        .unwrap()
-        .get_parent()
-        .unwrap();
+    let current_block = context.func_generator.builder.get_insert_block().unwrap();
+    let current_func = current_block.get_parent().unwrap();
+
     // Create basic blocks for different comparison paths
     let float_cmp_block = context
         .func_generator
@@ -398,10 +368,6 @@ fn build_float_cmp<'ctx>(
     let r_val_type = bin_exp.r_val_type.into_int_value();
     let l_val = bin_exp.l_val.into_int_value();
     let r_val = bin_exp.r_val.into_int_value();
-    _call_log(context, l_val_type, "left float val type");
-    _call_log(context, r_val_type, "right float val type");
-    _call_log(context, l_val, "left float val");
-    _call_log(context, r_val, "right float val");
     // float comp
     let _l_float_val = convert_int2float(context, "l", l_val_type, l_val);
     let _r_float_val = convert_int2float(context, "r", r_val_type, r_val);
@@ -526,7 +492,23 @@ fn gen_call_fetch_column<'ctx>(
                 .unwrap();
             let val_enum = call_site_value.try_as_basic_value().unwrap_basic();
             match val_enum {
-                BasicValueEnum::StructValue(struct_value) => Some(struct_value),
+                BasicValueEnum::StructValue(struct_value) => {
+                    // 提取字段
+                    let data_type = context
+                        .func_generator
+                        .builder
+                        .build_extract_value(struct_value, 0, "data_type")
+                        .unwrap()
+                        .into_int_value();
+                    let data = context
+                        .func_generator
+                        .builder
+                        .build_extract_value(struct_value, 1, "data")
+                        .unwrap()
+                        .into_int_value();
+                    let ret_val_type = context.func_generator.get_ret_val_type();
+                    Some(ret_val_type.const_named_struct(&[data_type.into(), data.into()]))
+                }
                 _ => {
                     issues.push(format!("unsupported BasicValueEnum: {val_enum:?}"));
                     None

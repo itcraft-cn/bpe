@@ -6,10 +6,10 @@ use inkwell::{
     execution_engine::{ExecutionEngine, JitFunction, UnsafeFunctionPointer},
     module::Module,
     types::{FunctionType, StructType},
-    values::{FunctionValue, IntValue},
+    values::{BasicValueEnum, FunctionValue, IntValue},
     OptimizationLevel,
 };
-use std::{slice, str::Utf8Error};
+use std::{slice, str::Utf8Error, sync::atomic::AtomicU64};
 
 static mut PTR_LLVM_CTX_STORE: u64 = 0;
 
@@ -20,14 +20,40 @@ pub const T_B64: u64 = 1;
 pub const T_I64: u64 = 2;
 pub const T_F64: u64 = 4;
 
+pub(crate) type LogicOpFnType<'ctx> =
+    fn(&Builder<'ctx>, IntValue<'ctx>, IntValue<'ctx>, &mut AtomicU64) -> IntValue<'ctx>;
+
+#[derive(Debug)]
+pub(crate) struct BinaryExpression<'a> {
+    pub(crate) l_val_type: BasicValueEnum<'a>,
+    pub(crate) r_val_type: BasicValueEnum<'a>,
+    pub(crate) l_val: BasicValueEnum<'a>,
+    pub(crate) r_val: BasicValueEnum<'a>,
+}
+impl<'a> BinaryExpression<'a> {
+    pub(crate) fn new(
+        l_val_type: BasicValueEnum<'a>,
+        r_val_type: BasicValueEnum<'a>,
+        l_val: BasicValueEnum<'a>,
+        r_val: BasicValueEnum<'a>,
+    ) -> Self {
+        Self {
+            l_val_type,
+            r_val_type,
+            l_val,
+            r_val,
+        }
+    }
+}
+
 #[repr(C)]
 #[derive(Debug, Clone, Copy)]
-pub struct RetVal {
-    pub data_type: u64,
-    pub data: u64,
+pub(crate) struct RetVal {
+    pub(crate) data_type: u64,
+    pub(crate) data: u64,
 }
 impl RetVal {
-    pub fn new(data_type: u64, data: u64) -> Self {
+    pub(crate) fn new(data_type: u64, data: u64) -> Self {
         Self { data_type, data }
     }
 }
@@ -55,10 +81,9 @@ impl FuncGenerator<'_> {
             };
             let i64_type = func_generator.context.i64_type();
             let i16_type = func_generator.context.i16_type();
-            let i8_type = func_generator.context.i8_type();
             let fetch_ret_val_type = func_generator
                 .context
-                .struct_type(&[i8_type.into(), i64_type.into()], false);
+                .struct_type(&[i64_type.into(), i64_type.into()], false);
             let fetch_fn_type = fetch_ret_val_type
                 .fn_type(&[i64_type.into(), i16_type.into(), i16_type.into()], false);
             let i2f_ret_val_type = func_generator.context.f64_type();
