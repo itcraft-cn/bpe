@@ -6,7 +6,7 @@
     <modelVersion>4.0.0</modelVersion>
     <groupId>com.erayt.bpe</groupId>
     <artifactId>bpe4j</artifactId>
-    <version>0.2.0</version> # managed by updgitver
+    <version>0.3.0-dev</version> <!-- managed by updgitver -->
 
     <properties>
         <java.version>8</java.version>
