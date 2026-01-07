@@ -74,15 +74,19 @@ fn init_func(sum_store: Arc<AtomicI64>) -> (u16, u16) {
 }
 
 #[inline]
-fn func_callback(sum_store: &Arc<AtomicI64>, _param: CallbackParams) {
-    sum_store.fetch_add(1, Ordering::SeqCst);
-    let ptr = _param.u8_ptr();
-    let v1 = fetch_i64(ptr);
-    let v2 = fetch_i64(ptr.wrapping_add(8));
-    let v3 = fetch_i64(ptr.wrapping_add(16));
-    let v4 = fetch_i64(ptr.wrapping_add(24));
-    //log::info!("data: {v1} {v2} {v3} {v4}");
-    let _v = v1 + v2 + v3 + v4;
+fn func_callback(sum_store: &Arc<AtomicI64>, param: CallbackParams) {
+    if param.size() > 0 {
+        sum_store.fetch_add(1, Ordering::SeqCst);
+        let ptr = param.u8_ptr();
+        let v1 = fetch_i64(ptr);
+        let v2 = fetch_i64(ptr.wrapping_add(8));
+        let v3 = fetch_i64(ptr.wrapping_add(16));
+        let v4 = fetch_i64(ptr.wrapping_add(24));
+        log::info!("data: {v1}|{v2}|{v3}|{v4}");
+        let _v = v1 + v2 + v3 + v4;
+    } else {
+        log::warn!("got null data");
+    }
 }
 
 fn gen_new_data(u8data: &mut U8Bytes) {
