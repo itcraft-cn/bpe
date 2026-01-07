@@ -1,5 +1,8 @@
-# dev mode
+# dev mode: default false
 dev_mode = true
-
+# vec_size: default 1048576
 vec_size = 1048576
+# record_size: limit, max record size is 8192
+record_size = 512
+# log_dir: default ./
 log_dir = "/tmp"
