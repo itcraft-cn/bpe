@@ -15,7 +15,7 @@ const LOOP_SIZE_F64: f64 = LOOP_SIZE as f64;
 const FILTER_SQL: &str = r#"
     SELECT demo.a, demo.b, demo.c, demo.d
     FROM demo
-    WHERE demo.a > 1 AND demo.b < 9.7 AND demo.c > 3 AND demo.d > 4.3 AND demo.e > 5.3
+    WHERE demo.a > 1 AND demo.b > 2.3 AND demo.c > 3 AND demo.d > 4.3 AND demo.e > 5.3
     LIMIT -100
     "#;
 
