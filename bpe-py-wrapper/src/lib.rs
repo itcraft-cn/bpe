@@ -2,6 +2,8 @@ use bpe::{CallbackParams, Column, FfiFunc, U8Bytes};
 use pyo3::prelude::*;
 use std::slice;
 
+const U8_DATA_MAX_SIZE: usize = 512;
+
 #[pyfunction]
 #[allow(dead_code)]
 fn start() -> PyResult<()> {
@@ -145,7 +147,7 @@ impl FfiFunc for PythonFfiFunc {
         let size = params.size();
         Python::with_gil(|py| {
             let data = unsafe {
-                let array_ptr = data_ptr as *const [u8; 512];
+                let array_ptr = data_ptr as *const [u8; U8_DATA_MAX_SIZE];
                 slice::from_raw_parts(array_ptr, size)
             };
             call_py_func(py, &self.callback, data);
@@ -153,7 +155,7 @@ impl FfiFunc for PythonFfiFunc {
     }
 }
 
-fn call_py_func(py: Python, callback: &PyObject, data: &[[u8; 512]]) {
+fn call_py_func(py: Python, callback: &PyObject, data: &[[u8; U8_DATA_MAX_SIZE]]) {
     if let Ok(func) = callback.getattr(py, "callback") {
         let array = conv_array(data);
         let args = (array,);
@@ -164,11 +166,11 @@ fn call_py_func(py: Python, callback: &PyObject, data: &[[u8; 512]]) {
     }
 }
 
-fn conv_array(data: &[[u8; 512]]) -> Vec<u8> {
+fn conv_array(data: &[[u8; U8_DATA_MAX_SIZE]]) -> Vec<u8> {
     let len = data.len();
-    let mut vec = vec![0_u8; len * 512];
+    let mut vec = vec![0_u8; len * U8_DATA_MAX_SIZE];
     for i in 0..len {
-        vec[i * 512..(i + 1) * 512].copy_from_slice(&data[i]);
+        vec[i * U8_DATA_MAX_SIZE..(i + 1) * U8_DATA_MAX_SIZE].copy_from_slice(&data[i]);
     }
     vec
 }

@@ -9,6 +9,8 @@ use jni::{
 };
 use std::{slice, sync::Once};
 
+const U8_DATA_MAX_SIZE: usize = 512;
+
 #[no_mangle]
 pub extern "system" fn Java_cn_itcraft_bpe4j_Bpe_start<'local>(
     _env: JNIEnv<'local>,
@@ -227,7 +229,7 @@ impl FfiFunc for JavaFfiFunc {
         let rs = self.vm.get_env();
         if let Ok(mut env) = rs {
             let data = unsafe {
-                let array_ptr = data_ptr as *const [u8; 512];
+                let array_ptr = data_ptr as *const [u8; U8_DATA_MAX_SIZE];
                 slice::from_raw_parts(array_ptr, size)
             };
             let array = conv_array(&env, data);
@@ -246,13 +248,13 @@ impl FfiFunc for JavaFfiFunc {
     }
 }
 
-fn conv_array<'a>(env: &JNIEnv<'a>, data: &[[u8; 512]]) -> JPrimitiveArray<'a, i8> {
+fn conv_array<'a>(env: &JNIEnv<'a>, data: &[[u8; U8_DATA_MAX_SIZE]]) -> JPrimitiveArray<'a, i8> {
     let len = data.len();
-    let array = env.new_byte_array((len * 512) as i32).unwrap();
+    let array = env.new_byte_array((len * U8_DATA_MAX_SIZE) as i32).unwrap();
     for (i, item) in data.iter().enumerate().take(len) {
         let u8slice = item.as_slice();
         let i8slice = unsafe { &*(u8slice as *const [u8] as *const [i8]) };
-        let _ = env.set_byte_array_region(&array, (i * 512) as i32, i8slice);
+        let _ = env.set_byte_array_region(&array, (i * U8_DATA_MAX_SIZE) as i32, i8slice);
     }
     array
 }

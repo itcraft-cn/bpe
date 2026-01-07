@@ -6,6 +6,8 @@ pub(crate) const DEFAULT_VEC_SIZE: usize = 1048576;
 
 pub(crate) const U8_DATA_MAX_SIZE: usize = 512;
 
+pub(crate) const ID_MAX_SIZE: usize = 8192;
+
 pub(crate) const DEFAULT_RECORD_SIZE: usize = U8_DATA_MAX_SIZE;
 
 pub(crate) const DEFAULT_SELECT_SIZE: isize = 10;

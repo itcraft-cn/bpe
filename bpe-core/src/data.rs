@@ -1,6 +1,6 @@
 use crate::{
-    aux::{bitmap_chk_id, bitmap_set_id, SimpleU16Map},
-    consts::U8_DATA_MAX_SIZE,
+    aux::{SimpleU16Map, bitmap_chk_id, bitmap_set_id},
+    consts::{ID_MAX_SIZE, U8_DATA_MAX_SIZE},
     id::next_record_id,
 };
 use globalvar::{def_global_ptr, get_global, get_global_mut};
@@ -209,7 +209,7 @@ impl Record {
             None
         } else {
             name_map.insert(key, id);
-            let id_store = get_global_mut::<[u8; 8192]>(unsafe { PTR_ID_STORE });
+            let id_store = get_global_mut::<[u8; ID_MAX_SIZE]>(unsafe { PTR_ID_STORE });
             bitmap_set_id(id_store.as_mut_slice(), id);
             Some(id)
         }
@@ -265,7 +265,7 @@ impl Record {
 /// Checks if a record ID is in the store (i.e., has been defined).
 /// Returns true if the ID is not in the store (meaning it's undefined), false otherwise.
 pub(crate) fn check_id_in_store(id: u16) -> bool {
-    let id_store = get_global_mut::<[u8; 8192]>(unsafe { PTR_ID_STORE });  // Get ID store
+    let id_store = get_global_mut::<[u8; ID_MAX_SIZE]>(unsafe { PTR_ID_STORE });  // Get ID store
     bitmap_chk_id(id_store.as_slice(), id)  // Check if ID is set in the bitmap
 }
 
@@ -277,6 +277,6 @@ pub(crate) fn init_data() {
     unsafe {
         PTR_RECORD_MAP = def_global_ptr(SimpleU16Map::new());              // Initialize record map
         PTR_NAME_MAP = def_global_ptr::<HashMap<String, u16>>(HashMap::new());  // Initialize name map
-        PTR_ID_STORE = def_global_ptr([0; 8192]);                         // Initialize ID store
+        PTR_ID_STORE = def_global_ptr([0; ID_MAX_SIZE]);                         // Initialize ID store
     }
 }
