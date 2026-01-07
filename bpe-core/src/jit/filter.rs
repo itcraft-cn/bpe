@@ -431,7 +431,7 @@ fn build_float_cmp<'ctx>(
     let float_result = context
         .func_generator
         .builder
-        .build_int_cast(float_result_int, i64_type, "float_result")
+        .build_int_cast_sign_flag(float_result_int, i64_type, false, "float_result")
         .unwrap();
     // Branch to merge block after comparison
     context
@@ -492,7 +492,7 @@ fn build_int_cmp<'ctx>(
     let int_result = context
         .func_generator
         .builder
-        .build_int_cast(int_result_int, i64_type, "int_result")
+        .build_int_cast_sign_flag(int_result_int, i64_type, false, "int_result")
         .unwrap();
     // Branch to merge block after comparison
     context
