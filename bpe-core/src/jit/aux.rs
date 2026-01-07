@@ -62,7 +62,17 @@ pub(crate) unsafe extern "C" fn int2float(val_type: u64, val: u64) -> f64 {
 }
 
 /// Logs a message from generated LLVM code, primarily used for debugging JIT-compiled functions.
-pub(crate) unsafe extern "C" fn llvm_log(data: u64, desc: u64, desc_len: u64) {
+pub(crate) unsafe extern "C" fn llvm_log_int(data: u64, desc: u64, desc_len: u64) {
+    let ptr = desc as *const u8;  // Convert description pointer to byte pointer
+    if let Ok(msg) = pointer_to_str_safe(ptr, desc_len as usize) {
+        log::info!("|jit|[{msg}]=>[{data}]");  // Log the message with data value
+    } else {
+        log::warn!("cannot convert to string");  // Log warning if string conversion fails
+    }
+}
+
+/// Logs a message from generated LLVM code, primarily used for debugging JIT-compiled functions.
+pub(crate) unsafe extern "C" fn llvm_log_float(data: f64, desc: u64, desc_len: u64) {
     let ptr = desc as *const u8;  // Convert description pointer to byte pointer
     if let Ok(msg) = pointer_to_str_safe(ptr, desc_len as usize) {
         log::info!("|jit|[{msg}]=>[{data}]");  // Log the message with data value
