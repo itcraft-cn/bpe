@@ -15,11 +15,12 @@ const LOOP_SIZE_F64: f64 = LOOP_SIZE as f64;
 const FILTER_SQL: &str = r#"
     SELECT demo.a, demo.b, demo.c, demo.d
     FROM demo
-    WHERE demo.a > 1.3 AND demo.b > 2.3 AND demo.c > 3.3 AND demo.d > 4.3 AND demo.e > 5.3
+    WHERE demo.a > 1.0 AND demo.b > 2.0 AND demo.c > 3.0 AND demo.d > 4.0 AND demo.e > 5.0
     LIMIT -1
     "#;
 
-pub fn main() {
+#[test]
+pub fn test() {
     env::set_var("BPE_HOME", env::current_dir().unwrap());
     start();
     let sum_store = Arc::new(AtomicI64::new(0));
@@ -28,7 +29,8 @@ pub fn main() {
     if id == 0 {
         log::warn!("init failed");
     } else {
-        exec_with_time_it(move || gen_new_data(id));
+        let u8data = gen_u8_bytes(id);
+        exec_with_time_it(move || gen_new_data(&u8data));
         let sum = sum_store.load(Ordering::SeqCst);
         log::info!("sum: {sum}");
     }
@@ -69,10 +71,8 @@ fn func_callback(sum_store: &Arc<AtomicI64>, param: CallbackParams) {
     }
 }
 
-fn gen_new_data(id: u16) {
-    static WALKER: AtomicI64 = AtomicI64::new(0);
-    let u8data = gen_u8_bytes(id, WALKER.fetch_add(1, Ordering::SeqCst) as f64);
-    let ret = new_data(&u8data);
+fn gen_new_data(u8data: &U8Bytes) {
+    let ret = new_data(u8data);
     if ret {
         log::debug!("send success");
     } else {
@@ -104,21 +104,17 @@ fn define_record() -> Option<u16> {
 }
 
 #[inline]
-fn gen_u8_bytes(id: u16, walker: f64) -> U8Bytes {
+fn gen_u8_bytes(id: u16) -> U8Bytes {
     let mut u8array = [0_u8; 512];
     let slice = u8array.as_mut_slice();
     let now = now();
-    log::info!(
-        "now: {now}/{walker}/{}/{}",
-        now as f64 / 500_f64,
-        walker + (now as f64 / 500_f64)
-    );
-    fill_f64(&mut slice[0..8], walker + 1.1);
-    fill_f64(&mut slice[8..16], walker + 2.2);
-    fill_f64(&mut slice[16..24], walker + 3.3);
-    fill_f64(&mut slice[24..32], walker + 4.4);
-    fill_f64(&mut slice[32..40], walker + 5.5);
-    fill_f64(&mut slice[40..48], walker + (now as f64 / 500_f64));
+    //log::info!("now: {now}");
+    fill_f64(&mut slice[0..8], 1.1);
+    fill_f64(&mut slice[8..16], 2.2);
+    fill_f64(&mut slice[16..24], 3.3);
+    fill_f64(&mut slice[24..32], 4.4);
+    fill_f64(&mut slice[32..40], 5.5);
+    fill_f64(&mut slice[40..48], now as f64 / 500_f64);
     U8Bytes::new_from_vec(id, 512, Vec::from(u8array))
 }
 

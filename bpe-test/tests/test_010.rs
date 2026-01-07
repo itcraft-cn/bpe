@@ -15,11 +15,12 @@ const LOOP_SIZE_F64: f64 = LOOP_SIZE as f64;
 const FILTER_SQL: &str = r#"
     SELECT demo.a, demo.b, demo.c, demo.d
     FROM demo
-    WHERE demo.a > 1.0 AND demo.b > 2.0 AND demo.c > 3.0 AND demo.d > 4.0 AND demo.e > 5.0
-    LIMIT -1
+    WHERE demo.a >= 0 AND demo.b >= 1 AND demo.c >= 2 AND demo.d >= 3 AND demo.e >= 4
+    LIMIT -5
     "#;
 
-pub fn main() {
+#[test]
+pub fn test() {
     env::set_var("BPE_HOME", env::current_dir().unwrap());
     start();
     let sum_store = Arc::new(AtomicI64::new(0));
@@ -38,7 +39,7 @@ pub fn main() {
 
 fn init_func(sum_store: Arc<AtomicI64>) -> u16 {
     let core_ids = core_affinity::get_core_ids().unwrap();
-    core_affinity::set_for_current(core_ids[core_ids.len() - 1]);
+    core_affinity::set_for_current(core_ids[0]);
     log::info!("thread:{} started", thread::current().name().unwrap());
     if let Some(id) = define_record() {
         if let Some(mapper_id) =
@@ -60,10 +61,10 @@ fn func_callback(sum_store: &Arc<AtomicI64>, param: CallbackParams) {
     if param.size() > 0 {
         sum_store.fetch_add(1, Ordering::SeqCst);
         let ptr = param.u8_ptr();
-        let v1 = fetch_f64(ptr);
-        let v2 = fetch_f64(ptr.wrapping_add(8));
-        let v3 = fetch_f64(ptr.wrapping_add(16));
-        let v4 = fetch_f64(ptr.wrapping_add(24));
+        let v1 = fetch_i64(ptr);
+        let v2 = fetch_i64(ptr.wrapping_add(8));
+        let v3 = fetch_i64(ptr.wrapping_add(16));
+        let v4 = fetch_i64(ptr.wrapping_add(24));
         log::info!("data: {v1}|{v2}|{v3}|{v4}");
     } else {
         log::warn!("got null data");
@@ -83,15 +84,15 @@ fn define_record() -> Option<u16> {
     if let Some(id) = def_incoming(
         "demo",
         vec![
-            Column::new_double("a"),
-            Column::new_double("b"),
-            Column::new_double("c"),
-            Column::new_double("d"),
-            Column::new_double("e"),
-            Column::new_double("f"),
-            Column::new_double("g"),
-            Column::new_double("h"),
-            Column::new_double("i"),
+            Column::new_long("a"),
+            Column::new_long("b"),
+            Column::new_long("c"),
+            Column::new_long("d"),
+            Column::new_long("e"),
+            Column::new_long("f"),
+            Column::new_long("g"),
+            Column::new_long("h"),
+            Column::new_long("i"),
         ],
     ) {
         log::info!("defined incoming: {id}");
@@ -108,12 +109,12 @@ fn gen_u8_bytes(id: u16) -> U8Bytes {
     let slice = u8array.as_mut_slice();
     let now = now();
     //log::info!("now: {now}");
-    fill_f64(&mut slice[0..8], 1.1);
-    fill_f64(&mut slice[8..16], 2.2);
-    fill_f64(&mut slice[16..24], 3.3);
-    fill_f64(&mut slice[24..32], 4.4);
-    fill_f64(&mut slice[32..40], 5.5);
-    fill_f64(&mut slice[40..48], now as f64 / 500_f64);
+    fill_i64(&mut slice[0..8], 1);
+    fill_i64(&mut slice[8..16], 2);
+    fill_i64(&mut slice[16..24], 3);
+    fill_i64(&mut slice[24..32], 4);
+    fill_i64(&mut slice[32..40], 5);
+    fill_i64(&mut slice[40..48], now as i64);
     U8Bytes::new_from_vec(id, 512, Vec::from(u8array))
 }
 
@@ -147,14 +148,14 @@ where
 }
 
 #[inline]
-pub(crate) fn fill_f64(slice: &mut [u8], data: f64) {
+pub(crate) fn fill_i64(slice: &mut [u8], data: i64) {
     let p_val = ptr::addr_of!(*slice);
-    let p_f64 = p_val as *mut f64;
-    unsafe { *p_f64 = data };
+    let p_i64 = p_val as *mut i64;
+    unsafe { *p_i64 = data };
 }
 
 #[inline]
-pub(crate) fn fetch_f64(p_val: *const u8) -> f64 {
-    let p_f64 = p_val as *const f64;
-    unsafe { *p_f64 }
+pub(crate) fn fetch_i64(p_val: *const u8) -> i64 {
+    let p_i64 = p_val as *const i64;
+    unsafe { *p_i64 }
 }

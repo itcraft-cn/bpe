@@ -29,7 +29,8 @@ const AGGREGATE_SQL: &str = r#"
     from stream
     "#;
 
-pub fn main() {
+#[test]
+pub fn test() {
     env::set_var("BPE_HOME", env::current_dir().unwrap());
     start();
     let sum_store = Arc::new(AtomicI64::new(0));

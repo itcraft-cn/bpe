@@ -15,11 +15,12 @@ const LOOP_SIZE_F64: f64 = LOOP_SIZE as f64;
 const FILTER_SQL: &str = r#"
     SELECT demo.a, demo.b, demo.c, demo.d
     FROM demo
-    WHERE demo.a >= 0 AND demo.b >= 1 AND demo.c >= 2 AND demo.d >= 3 AND demo.e >= 4
+    WHERE demo.a >= 0
     LIMIT -5
     "#;
 
-pub fn main() {
+#[test]
+pub fn test() {
     env::set_var("BPE_HOME", env::current_dir().unwrap());
     start();
     let sum_store = Arc::new(AtomicI64::new(0));
