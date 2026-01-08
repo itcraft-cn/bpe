@@ -13,7 +13,7 @@ use inkwell::{
     values::{BasicValueEnum, FloatValue, IntValue, StructValue},
     FloatPredicate, IntPredicate,
 };
-use sql_parse::{BinaryOperator, Expression, IdentifierPart};
+use sql_parse::{BinaryOperator, Expression, IdentifierPart, UnaryOperator};
 use std::{
     ops::Range,
     sync::atomic::{AtomicU64, Ordering},
@@ -123,6 +123,11 @@ fn parse_exp<'ctx>(
                 None
             }
         }
+        Expression::Unary {
+            op,
+            op_span: _,
+            operand,
+        } => parse_unary_exp(context, expr, operand, record, issues, walker, op),
         Expression::Identifier(id_vec) => parse_identifier(context, record, issues, id_vec), // Parse column identifier
         Expression::Integer(group) => parse_val(context, T_I64, group.0), // Parse integer literal
         Expression::Float(group) => parse_val(context, T_F64, group.0.to_bits()), // Parse float literal
@@ -166,6 +171,68 @@ fn unwrap_opt(opt: Option<StructValue<'_>>) -> StructValue<'_> {
     match opt {
         Some(v) => v,
         _ => panic!(),
+    }
+}
+
+fn parse_unary_exp<'ctx>(
+    context: &GenContext<'ctx>,
+    expr: &Expression<'_>,
+    sub_expr: &Expression<'_>,
+    record: &Record,
+    issues: &mut Vec<String>,
+    walker: &mut AtomicU64,
+    op: &UnaryOperator,
+) -> Option<StructValue<'ctx>> {
+    match op {
+        UnaryOperator::Binary => parse_unsupported(expr, issues), // Handle unsupported expression types
+        UnaryOperator::Collate => parse_unsupported(expr, issues), // Handle unsupported expression types
+        UnaryOperator::LogicalNot => parse_unsupported(expr, issues), // Handle unsupported expression types
+        UnaryOperator::Minus => parse_negative_val(context, sub_expr, record, issues, walker), // Parse negative value
+        UnaryOperator::Not => parse_unsupported(expr, issues), // Handle unsupported expression types
+    }
+}
+
+fn parse_negative_val<'ctx>(
+    context: &GenContext<'ctx>,
+    expr: &Expression<'_>,
+    record: &Record,
+    issues: &mut Vec<String>,
+    walker: &mut AtomicU64,
+) -> Option<StructValue<'ctx>> {
+    if let Some(ret) = parse_exp(context, expr, record, issues, walker) {
+        let ret_type = ret.get_field_at_index(0).unwrap().into_int_value();
+        let ret_val_enum = ret.get_field_at_index(1).unwrap();
+        let opt_ret_val = match ret_val_enum {
+            BasicValueEnum::IntValue(int_value) => Some(
+                context
+                    .func_generator
+                    .builder
+                    .build_int_neg(int_value, "int_v")
+                    .unwrap()
+                    .into(),
+            ),
+            BasicValueEnum::FloatValue(float_value) => Some(
+                context
+                    .func_generator
+                    .builder
+                    .build_float_neg(float_value, "float_v")
+                    .unwrap()
+                    .into(),
+            ),
+            _ => None,
+        };
+        if let Some(ret_val) = opt_ret_val {
+            Some(
+                context
+                    .func_generator
+                    .get_ret_val_type()
+                    .const_named_struct(&[ret_type.into(), ret_val]),
+            )
+        } else {
+            parse_unsupported(expr, issues)
+        }
+    } else {
+        None
     }
 }
 
