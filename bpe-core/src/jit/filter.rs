@@ -127,7 +127,7 @@ fn parse_exp<'ctx>(
             op,
             op_span: _,
             operand,
-        } => parse_unary_exp(context, expr, operand, record, issues, walker, op),
+        } => parse_unary_exp(context, expr, operand, record, issues, walker, op),  // Parse unary expressions like minus/negation
         Expression::Identifier(id_vec) => parse_identifier(context, record, issues, id_vec), // Parse column identifier
         Expression::Integer(group) => parse_val(context, T_I64, group.0), // Parse integer literal
         Expression::Float(group) => parse_val(context, T_F64, group.0.to_bits()), // Parse float literal
@@ -174,6 +174,8 @@ fn unwrap_opt(opt: Option<StructValue<'_>>) -> StructValue<'_> {
     }
 }
 
+/// Parses a unary expression (like negation) by handling different unary operators.
+/// Currently only handles the minus operator for negative values.
 fn parse_unary_exp<'ctx>(
     context: &GenContext<'ctx>,
     expr: &Expression<'_>,
@@ -184,14 +186,16 @@ fn parse_unary_exp<'ctx>(
     op: &UnaryOperator,
 ) -> Option<StructValue<'ctx>> {
     match op {
-        UnaryOperator::Binary => parse_unsupported(expr, issues), // Handle unsupported expression types
-        UnaryOperator::Collate => parse_unsupported(expr, issues), // Handle unsupported expression types
-        UnaryOperator::LogicalNot => parse_unsupported(expr, issues), // Handle unsupported expression types
-        UnaryOperator::Minus => parse_negative_val(context, sub_expr, record, issues, walker), // Parse negative value
-        UnaryOperator::Not => parse_unsupported(expr, issues), // Handle unsupported expression types
+        UnaryOperator::Binary => parse_unsupported(expr, issues),
+        UnaryOperator::Collate => parse_unsupported(expr, issues),
+        UnaryOperator::LogicalNot => parse_unsupported(expr, issues),
+        UnaryOperator::Minus => parse_negative_val(context, sub_expr, record, issues, walker),  // Handle negative values
+        UnaryOperator::Not => parse_unsupported(expr, issues),
     }
 }
 
+/// Parses a negative value by negating the result of the sub-expression.
+/// Handles both integer and floating-point negation in the JIT context.
 fn parse_negative_val<'ctx>(
     context: &GenContext<'ctx>,
     expr: &Expression<'_>,
