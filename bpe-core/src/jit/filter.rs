@@ -1,9 +1,12 @@
 use crate::{
-    data::{ColumnType, Record},
+    data::Record,
     jit::{
         base::{BinaryExpression, FuncGenerator, GenContext},
         consts::{B_TRUE, T_B64, T_F64, T_I64},
-        llvm_misc::{logic_compare, logic_op, parse_val, unwrap_opt},
+        llvm_misc::{
+            choose_fetch_val_fn, conv_rust_type_to_llvm_struct, logic_compare, logic_op, parse_val,
+            unwrap_opt,
+        },
     },
     sql::base::FilterFunc,
 };
@@ -12,7 +15,7 @@ use inkwell::{
     values::{BasicValueEnum, StructValue},
     FloatPredicate, IntPredicate,
 };
-use sql_parse::{BinaryOperator, Expression, IdentifierPart, UnaryOperator};
+use sql_parse::{BinaryOperator, Expression, Identifier, IdentifierPart, UnaryOperator};
 use std::{
     ops::Range,
     sync::atomic::{AtomicU64, Ordering},
@@ -337,67 +340,59 @@ fn gen_call_fetch_column<'ctx>(
     issues: &mut Vec<String>,   // Vector to collect error messages
 ) -> Option<StructValue<'ctx>> {
     match idp {
-        IdentifierPart::Name(id) => {
-            let name = id.as_str(); // Get the column name as a string
-            let column_id = *record.column_id(name).unwrap(); // Get the column ID from the record
-            let column = record.column(column_id); // Get the column definition
-            let i16_type = context.func_generator.context.i16_type(); // Get i16 type for IDs
-
-            // Create constants for record ID and column ID
-            let param_record_id = i16_type.const_int(record.id() as u64, true);
-            let param_column_id = i16_type.const_int(column_id as u64, true);
-            // Select the appropriate fetch function based on column data type
-            let fetch_val_func = match column.data_type() {
-                ColumnType::Long => context.func_generator.module.get_function("fetch_i64"), // For integer columns
-                ColumnType::Double => context.func_generator.module.get_function("fetch_f64"), // For float columns
-            }
-            .unwrap();
-
-            // Build a call to the fetch function with parameters: data pointer, record ID, column ID
-            let call_site_value = context
-                .func_generator
-                .builder
-                .build_call(
-                    fetch_val_func,
-                    &[
-                        context.param_u64ptr.into(), // Data pointer parameter
-                        param_record_id.into(),      // Record ID parameter
-                        param_column_id.into(),      // Column ID parameter
-                    ],
-                    "ret", // Name for the call result
-                )
-                .unwrap();
-            let val_enum = call_site_value.try_as_basic_value().unwrap_basic(); // Get the return value
-            match val_enum {
-                BasicValueEnum::StructValue(struct_value) => {
-                    // Extract type and value fields from the returned struct
-                    let data_type = context
-                        .func_generator
-                        .builder
-                        .build_extract_value(struct_value, 0, "data_type") // Extract type field
-                        .unwrap()
-                        .into_int_value();
-                    let data = context
-                        .func_generator
-                        .builder
-                        .build_extract_value(struct_value, 1, "data") // Extract value field
-                        .unwrap()
-                        .into_int_value();
-                    let ret_val_type = context.func_generator.get_ret_val_type(); // Get return type
-
-                    // Create a struct with type and value fields
-                    Some(ret_val_type.const_named_struct(&[data_type.into(), data.into()]))
-                }
-                _ => {
-                    // Add error if the return value is not a struct
-                    issues.push(format!("unsupported BasicValueEnum: {val_enum:?}"));
-                    None
-                }
-            }
-        }
+        IdentifierPart::Name(id) => gen_call_fetch_column_by_id(context, id, record, issues),
         _ => {
             // Add error for unsupported identifier types
             issues.push(format!("unsupported id: {idp:?}"));
+            None
+        }
+    }
+}
+
+fn gen_call_fetch_column_by_id<'ctx>(
+    context: &GenContext<'ctx>,
+    id: &Identifier<'_>,
+    record: &Record,
+    issues: &mut Vec<String>,
+) -> Option<StructValue<'ctx>> {
+    let name = id.as_str();
+    // Get the column name as a string
+    let column_id = *record.column_id(name).unwrap();
+    // Get the column ID from the record
+    let column = record.column(column_id);
+    // Get the column definition
+    let i16_type = context.func_generator.context.i16_type();
+    // Get i16 type for IDs
+
+    // Create constants for record ID and column ID
+    let param_record_id = i16_type.const_int(record.id() as u64, true);
+    let param_column_id = i16_type.const_int(column_id as u64, true);
+
+    let fetch_val_func = choose_fetch_val_fn(context, column);
+
+    // Build a call to the fetch function with parameters: data pointer, record ID, column ID
+    let call_site_value = context
+        .func_generator
+        .builder
+        .build_call(
+            fetch_val_func,
+            &[
+                context.param_u64ptr.into(), // Data pointer parameter
+                param_record_id.into(),      // Record ID parameter
+                param_column_id.into(),      // Column ID parameter
+            ],
+            "ret", // Name for the call result
+        )
+        .unwrap();
+    let val_enum = call_site_value.try_as_basic_value().unwrap_basic();
+    // Get the return value
+    match val_enum {
+        BasicValueEnum::StructValue(struct_value) => {
+            conv_rust_type_to_llvm_struct(context, struct_value)
+        }
+        _ => {
+            // Add error if the return value is not a struct
+            issues.push(format!("unsupported BasicValueEnum: {val_enum:?}"));
             None
         }
     }

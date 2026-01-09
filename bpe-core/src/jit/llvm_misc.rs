@@ -1,11 +1,14 @@
-use crate::jit::{
-    base::{BinaryExpression, GenContext, LogicOpFnType},
-    consts::{T_B64, T_F64},
+use crate::{
+    data::{Column, ColumnType},
+    jit::{
+        base::{BinaryExpression, GenContext, LogicOpFnType},
+        consts::{T_B64, T_F64},
+    },
 };
 use inkwell::{
     basic_block::BasicBlock,
     types::IntType,
-    values::{FloatValue, IntValue, StructValue},
+    values::{FloatValue, FunctionValue, IntValue, StructValue},
     FloatPredicate, IntPredicate,
 };
 use std::sync::atomic::{AtomicU64, Ordering};
@@ -196,8 +199,8 @@ pub(crate) fn build_float_cmp<'ctx>(
     let r_val = bin_exp.r_val.into_int_value(); // Get right value
 
     // Convert integer values to floats for comparison
-    let l_float_val = convert_int2float(context, "l", l_val_type, l_val); // Convert left value
-    let r_float_val = convert_int2float(context, "r", r_val_type, r_val); // Convert right value
+    let l_float_val = convert_int_to_float(context, "l", l_val_type, l_val); // Convert left value
+    let r_float_val = convert_int_to_float(context, "r", r_val_type, r_val); // Convert right value
 
     let float_result_int = context
         .func_generator
@@ -223,7 +226,7 @@ pub(crate) fn build_float_cmp<'ctx>(
 
 /// Converts an integer value to a float by calling the int-to-float conversion function.
 /// This function was registered in the LLVM module during initialization.
-pub(crate) fn convert_int2float<'ctx>(
+pub(crate) fn convert_int_to_float<'ctx>(
     context: &GenContext<'ctx>, // Generation context with LLVM builder and types
     flag: &str, // Flag for naming the conversion (e.g., "l" for left, "r" for right)
     val_type: IntValue<'ctx>, // Type of the value to convert
@@ -306,4 +309,41 @@ pub(crate) fn ret_phi_int_val<'ctx>(
     phi.add_incoming(&[(&result1, block1), (&result2, block2)]);
     // Convert the PHI node to an integer value
     phi.as_basic_value().into_int_value()
+}
+
+pub(crate) fn choose_fetch_val_fn<'ctx>(
+    context: &GenContext<'ctx>,
+    column: &Column,
+) -> FunctionValue<'ctx> {
+    // Select the appropriate fetch function based on column data type
+    let fetch_val_func = match column.data_type() {
+        ColumnType::Long => context.func_generator.module.get_function("fetch_i64"), // For integer columns
+        ColumnType::Double => context.func_generator.module.get_function("fetch_f64"), // For float columns
+    }
+    .unwrap();
+    fetch_val_func
+}
+
+pub(crate) fn conv_rust_type_to_llvm_struct<'ctx>(
+    context: &GenContext<'ctx>,
+    struct_value: StructValue<'ctx>,
+) -> Option<StructValue<'ctx>> {
+    // Extract type and value fields from the returned struct
+    let data_type = context
+        .func_generator
+        .builder
+        .build_extract_value(struct_value, 0, "data_type") // Extract type field
+        .unwrap()
+        .into_int_value();
+    let data = context
+        .func_generator
+        .builder
+        .build_extract_value(struct_value, 1, "data") // Extract value field
+        .unwrap()
+        .into_int_value();
+    let ret_val_type = context.func_generator.get_ret_val_type();
+    // Get return type
+
+    // Create a struct with type and value fields
+    Some(ret_val_type.const_named_struct(&[data_type.into(), data.into()]))
 }
