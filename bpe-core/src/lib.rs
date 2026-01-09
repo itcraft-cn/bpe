@@ -14,7 +14,7 @@ pub(crate) mod error;
 pub(crate) mod exec;
 pub(crate) mod ffi;
 pub(crate) mod fndef;
-pub(crate) mod func;
+pub(crate) mod func_enum;
 pub(crate) mod id;
 pub(crate) mod jit;
 pub(crate) mod logger;
