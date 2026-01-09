@@ -1,14 +1,15 @@
 use crate::{
     agg_func,
     aux::{fetch_ptr, fill_ptr, SimpleU16Map},
+    callback::{callback, FnHolder},
     consts::U8_DATA_MAX_SIZE,
     data::{ColumnType, Record},
     element::Element,
     error::ParseSqlError,
     exec::{create_executor, Executor},
-    fndef::{callback, CallbackParams, FnHolder},
     func_enum::Func,
     id::next_aggregate_id,
+    param::CallbackParams,
     sql::{
         base::{parse_options, ParsedSql},
         select::parse_select,

@@ -1,14 +1,5 @@
-use crate::FfiFunc;
-
-pub(crate) type NormalFunc = Box<dyn Fn(CallbackParams) + Send + 'static>;
-pub(crate) type LambdaFunc = Box<dyn Fn(CallbackParams) + 'static>;
-
-pub(crate) enum FnHolder {
-    Func(NormalFunc),
-    FfiFunc(Box<dyn FfiFunc>),
-    Lambda(LambdaFunc),
-}
-
+/// Parameters passed to callback functions.
+/// Contains pointers to data buffers and metadata for processing.
 pub struct CallbackParams {
     u8_ptr: *const u8,
     mask: usize,
@@ -51,13 +42,5 @@ impl CallbackParams {
 
     pub fn step(&self) -> usize {
         self.step
-    }
-}
-
-pub(crate) fn callback(fn_holder: &FnHolder, param: CallbackParams) {
-    match fn_holder {
-        FnHolder::Func(f) => f(param),
-        FnHolder::FfiFunc(ffi) => ffi.callback(param),
-        FnHolder::Lambda(f) => f(param),
     }
 }

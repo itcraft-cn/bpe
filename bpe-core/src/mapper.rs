@@ -1,10 +1,11 @@
 use crate::{
     aux::{SimpleU16Entry, SimpleU16Map},
+    callback::{callback, FnHolder},
     data::Record,
     error::ParseSqlError,
     exec::{create_executor, Executors},
-    fndef::{callback, CallbackParams, FnHolder},
     id::next_mapper_id,
+    param::CallbackParams,
     sql::{
         base::{parse_options, FilterFunc, ParsedSql},
         select::parse_select,
