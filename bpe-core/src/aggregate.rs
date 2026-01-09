@@ -7,7 +7,7 @@ use crate::{
     element::Element,
     error::ParseSqlError,
     exec::{create_executor, Executor},
-    func_enum::Func,
+    func_enum::SupportFunc,
     id::next_aggregate_id,
     param::CallbackParams,
     sql::{
@@ -139,18 +139,18 @@ fn setup_init_val(
 }
 
 #[inline]
-fn init_for_some_func(func: &Func, aggregate_data_ptr: *mut u8, offset: usize) {
+fn init_for_some_func(func: &SupportFunc, aggregate_data_ptr: *mut u8, offset: usize) {
     match func {
-        Func::MaxL => {
+        SupportFunc::MaxL => {
             fill_ptr(unsafe { aggregate_data_ptr.add(offset) }, i64::MIN);
         }
-        Func::MinL => {
+        SupportFunc::MinL => {
             fill_ptr(unsafe { aggregate_data_ptr.add(offset) }, i64::MAX);
         }
-        Func::MaxD => {
+        SupportFunc::MaxD => {
             fill_ptr(unsafe { aggregate_data_ptr.add(offset) }, f64::MIN);
         }
-        Func::MinD => {
+        SupportFunc::MinD => {
             fill_ptr(unsafe { aggregate_data_ptr.add(offset) }, f64::MAX);
         }
         _ => {}
@@ -190,14 +190,14 @@ fn compute_data(
                     return; // Return early if argument count is incorrect
                 }
                 match func {
-                    Func::FirstL | Func::FirstD => {
+                    SupportFunc::FirstL | SupportFunc::FirstD => {
                         // Handle First functions: get the first value
                         let sub_executor = executors.index_of(0); // Get the first sub-executor
                         let element = fetch_arg_val(param.u8_ptr(), sub_executor, stream); // Get value
                         call_once_compute(&wrapped_agg_param, func, element, offset);
                         // Compute
                     }
-                    Func::LastL | Func::LastD => {
+                    SupportFunc::LastL | SupportFunc::LastD => {
                         // Handle Last functions: get the last value
                         let sub_executor = executors.index_of(0); // Get the first sub-executor
                         let last = param.size() - 1; // Calculate index of last element
@@ -217,7 +217,7 @@ fn compute_data(
 
 fn call_once_compute(
     wrapped_agg_param: &WrappedAggParam,
-    func: &Func,
+    func: &SupportFunc,
     element: Element,
     offset: usize,
 ) {
@@ -271,7 +271,7 @@ fn compute(
 
 #[inline]
 fn choose_func(
-    func: &Func,
+    func: &SupportFunc,
     element: Element,
     wrapped_agg_param: &WrappedAggParam,
     offset: usize,
@@ -279,7 +279,7 @@ fn choose_func(
 ) {
     let aggregate_data_ptr = wrapped_agg_param.aggregate_data_ptr();
     match func {
-        Func::MaxL => match &element {
+        SupportFunc::MaxL => match &element {
             Element::Long(v) => {
                 agg_func::func_max_long(aggregate_data_ptr, offset, v);
             }
@@ -287,7 +287,7 @@ fn choose_func(
                 log::warn!("unsupported function: {:?}-{:?}", func, &element);
             }
         },
-        Func::MinL => match &element {
+        SupportFunc::MinL => match &element {
             Element::Long(v) => {
                 agg_func::func_min_long(aggregate_data_ptr, offset, v);
             }
@@ -295,7 +295,7 @@ fn choose_func(
                 log::warn!("unsupported function: {:?}-{:?}", func, &element);
             }
         },
-        Func::SumL => match &element {
+        SupportFunc::SumL => match &element {
             Element::Long(v) => {
                 agg_func::func_sum_long(aggregate_data_ptr, offset, v);
             }
@@ -303,7 +303,7 @@ fn choose_func(
                 log::warn!("unsupported function: {:?}-{:?}", func, &element);
             }
         },
-        Func::Count => match &element {
+        SupportFunc::Count => match &element {
             Element::Long(_) => {
                 agg_func::func_count_long(aggregate_data_ptr, offset);
             }
@@ -311,7 +311,7 @@ fn choose_func(
                 log::warn!("unsupported function: {:?}-{:?}", func, &element);
             }
         },
-        Func::MaxD => match &element {
+        SupportFunc::MaxD => match &element {
             Element::Long(v) => {
                 agg_func::func_maxd_long(aggregate_data_ptr, offset, v);
             }
@@ -319,7 +319,7 @@ fn choose_func(
                 agg_func::func_maxd_double(aggregate_data_ptr, offset, v);
             }
         },
-        Func::MinD => match &element {
+        SupportFunc::MinD => match &element {
             Element::Long(v) => {
                 agg_func::func_mind_long(aggregate_data_ptr, offset, v);
             }
@@ -327,7 +327,7 @@ fn choose_func(
                 agg_func::func_mind_double(aggregate_data_ptr, offset, v);
             }
         },
-        Func::SumD => match &element {
+        SupportFunc::SumD => match &element {
             Element::Long(v) => {
                 agg_func::func_sumd_long(aggregate_data_ptr, offset, v);
             }
@@ -335,7 +335,7 @@ fn choose_func(
                 agg_func::func_sumd_double(aggregate_data_ptr, offset, v);
             }
         },
-        Func::Avg => match &element {
+        SupportFunc::Avg => match &element {
             Element::Long(v) => {
                 agg_func::func_avg_long(aggregate_data_ptr, offset, v, data_idx);
             }
@@ -343,7 +343,7 @@ fn choose_func(
                 agg_func::func_avg_double(aggregate_data_ptr, offset, v, data_idx);
             }
         },
-        Func::FirstL => match &element {
+        SupportFunc::FirstL => match &element {
             Element::Long(v) => {
                 agg_func::func_first_long(aggregate_data_ptr, offset, v);
             }
@@ -351,14 +351,14 @@ fn choose_func(
                 log::warn!("unsupported function: {:?}-{:?}", func, &element);
             }
         },
-        Func::FirstD => {
+        SupportFunc::FirstD => {
             let v = match &element {
                 Element::Long(v) => *v as f64,
                 Element::Double(v) => *v,
             };
             agg_func::func_first_double(aggregate_data_ptr, offset, &v);
         }
-        Func::LastL => match &element {
+        SupportFunc::LastL => match &element {
             Element::Long(v) => {
                 agg_func::func_last_long(aggregate_data_ptr, offset, v);
             }
@@ -366,7 +366,7 @@ fn choose_func(
                 log::warn!("unsupported function: {:?}-{:?}", func, &element);
             }
         },
-        Func::LastD => {
+        SupportFunc::LastD => {
             let v = match &element {
                 Element::Long(v) => *v as f64,
                 Element::Double(v) => *v,

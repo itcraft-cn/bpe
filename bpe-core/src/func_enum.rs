@@ -1,7 +1,7 @@
 use strum_macros::EnumString;
 
 #[derive(Debug, Clone, EnumString)]
-pub(crate) enum Func {
+pub(crate) enum SupportFunc {
     // calc func
     #[strum(ascii_case_insensitive)]
     Add,

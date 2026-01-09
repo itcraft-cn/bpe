@@ -4,7 +4,7 @@ use crate::{
     data::{ColumnType, Record},
     element::Element,
     error::ParseSqlError,
-    func_enum::Func,
+    func_enum::SupportFunc,
     sql::base::{ExprEntity, ValType},
 };
 use std::{
@@ -51,7 +51,7 @@ pub(crate) enum Executor {
     ConstLong(i64),
     ConstDouble(f64),
     Fetch(u16, u16),
-    Compute(Func, Executors),
+    Compute(SupportFunc, Executors),
 }
 impl Executor {
     pub(crate) fn fetch(
@@ -98,15 +98,15 @@ fn compute_func(
     v_ptr: u64,
     record: &Record,
     position: usize,
-    f: &Func,
+    f: &SupportFunc,
     executors: &Executors,
 ) -> Element {
     match f {
-        Func::Add => calc_func::add(sub_data_ptr, id, v_ptr, record, position, executors),
-        Func::Sub => calc_func::sub(sub_data_ptr, id, v_ptr, record, position, executors),
-        Func::Mul => calc_func::mul(sub_data_ptr, id, v_ptr, record, position, executors),
-        Func::Div => calc_func::div(sub_data_ptr, id, v_ptr, record, position, executors),
-        Func::Mod => calc_func::mod_(sub_data_ptr, id, v_ptr, record, position, executors),
+        SupportFunc::Add => calc_func::add(sub_data_ptr, id, v_ptr, record, position, executors),
+        SupportFunc::Sub => calc_func::sub(sub_data_ptr, id, v_ptr, record, position, executors),
+        SupportFunc::Mul => calc_func::mul(sub_data_ptr, id, v_ptr, record, position, executors),
+        SupportFunc::Div => calc_func::div(sub_data_ptr, id, v_ptr, record, position, executors),
+        SupportFunc::Mod => calc_func::mod_(sub_data_ptr, id, v_ptr, record, position, executors),
         _ => Element::Long(0),
     }
 }
@@ -145,7 +145,7 @@ fn conv_as_executor(
             if func_name.starts_with('_') {
                 let mut real_func_name = func_name.clone();
                 real_func_name.remove(0);
-                let opt_func = Func::from_str(real_func_name.as_str());
+                let opt_func = SupportFunc::from_str(real_func_name.as_str());
                 if let Ok(func) = opt_func {
                     let rs = parse_args_fetchers(args, record_id_array);
                     if let Ok(args_fetchers) = rs {
