@@ -12,13 +12,13 @@ use std::{
     time::{Duration, SystemTime},
 };
 
-const LOOP_SIZE: usize = 50;
+const LOOP_SIZE: usize = 200;
 const LOOP_SIZE_F64: f64 = LOOP_SIZE as f64;
 
 const FILTER_SQL: &str = r#"
     SELECT demo.f, demo.a, demo.b, demo.c, _sub(_add(demo.d, demo.d), demo.e)
     FROM demo
-    WHERE demo.a >= 1 AND demo.b >= 2 AND demo.c >= 3 AND demo.d >= 4 AND demo.e >= 5
+    WHERE demo.a > 1 AND demo.b > 2 AND demo.c > 3 AND demo.d > 4 AND demo.e > 5
     LIMIT -10
     "#;
 const AGGREGATE_SQL: &str = r#"
@@ -94,7 +94,6 @@ fn gen_new_data(u8data: &mut U8Bytes) {
     } else {
         log::warn!("send failed");
     }
-    thread::sleep(Duration::from_millis(1));
 }
 
 fn define_records() -> Option<(u16, u16)> {

@@ -89,7 +89,12 @@ fn call_with_aggregate_data(
     stream: &Record,             // The stream record containing column information
     param: CallbackParams,       // Parameters for the callback
 ) {
-    if init_data(aggregate_data_ptr, wrapped, stream) {
+    if param.size() == 0 {
+        callback(
+            &wrapped.fn_holder,
+            CallbackParams::new(aggregate_data_ptr, 1, 0, 0, 1),
+        );
+    } else if init_data(aggregate_data_ptr, wrapped, stream) {
         // Initialize aggregate data
         // Compute the aggregate result using the input parameters
         compute_data(aggregate_data_ptr, wrapped, stream, param);
@@ -194,11 +199,6 @@ fn compute_data(
                 }
                 match func {
                     SupportFunc::FirstL | SupportFunc::FirstD => {
-                        let size = param.size();
-                        if size == 0 {
-                            continue; // Continue early if no data available
-                        }
-
                         // Handle First functions: get the first value
                         let sub_executor = executors.index_of(0); // Get the first sub-executor
                         let element = fetch_arg_val(param.u8_ptr(), sub_executor, stream); // Get value
@@ -206,11 +206,6 @@ fn compute_data(
                         // Compute
                     }
                     SupportFunc::LastL | SupportFunc::LastD => {
-                        let size = param.size();
-                        if size == 0 {
-                            continue; // Return early if no data available
-                        }
-
                         // Handle Last functions: get the last value
                         let sub_executor = executors.index_of(0); // Get the first sub-executor
                         let last = param.size() - 1; // Calculate index of last element
