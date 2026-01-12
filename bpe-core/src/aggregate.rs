@@ -187,10 +187,15 @@ fn compute_data(
                 if executor_size != 1 {
                     // Log warning if function doesn't support the number of arguments
                     log::warn!("aggregate func[{func:?}] just support one argument, here is {executor_size:?} executors");
-                    return; // Return early if argument count is incorrect
+                    continue; // Continue early if argument count is incorrect
                 }
                 match func {
                     SupportFunc::FirstL | SupportFunc::FirstD => {
+                        let size = param.size();
+                        if size == 0 {
+                            continue; // Continue early if no data available
+                        }
+
                         // Handle First functions: get the first value
                         let sub_executor = executors.index_of(0); // Get the first sub-executor
                         let element = fetch_arg_val(param.u8_ptr(), sub_executor, stream); // Get value
@@ -198,10 +203,16 @@ fn compute_data(
                         // Compute
                     }
                     SupportFunc::LastL | SupportFunc::LastD => {
+                        let size = param.size();
+                        if size == 0 {
+                            continue; // Return early if no data available
+                        }
+
                         // Handle Last functions: get the last value
                         let sub_executor = executors.index_of(0); // Get the first sub-executor
                         let last = param.size() - 1; // Calculate index of last element
-                                                     // Get pointer to the last data element
+
+                        // Get pointer to the last data element
                         let sub_data = unsafe { param.u8_ptr().add(last * param.step()) };
                         let element = fetch_arg_val(sub_data, sub_executor, stream); // Get value
                         call_once_compute(&wrapped_agg_param, func, element, offset);

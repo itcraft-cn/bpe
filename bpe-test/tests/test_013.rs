@@ -12,7 +12,7 @@ use std::{
     time::{Duration, SystemTime},
 };
 
-const LOOP_SIZE: usize = 2000000;
+const LOOP_SIZE: usize = 200;
 const LOOP_SIZE_F64: f64 = LOOP_SIZE as f64;
 
 // -- WHERE _sametime(demo.a, 'utc_delta', 'sec')

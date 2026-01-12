@@ -1,4 +1,7 @@
-use bpe::{def_incoming, def_mapper, new_data, start, stop, CallbackParams, Column, U8Bytes};
+use bpe::{
+    def_aggregate, def_incoming, def_mapper_bind_aggregate, def_stream, new_data, start, stop,
+    CallbackParams, Column, U8Bytes,
+};
 use std::{
     env, ptr,
     sync::{
@@ -13,10 +16,14 @@ const LOOP_SIZE: usize = 20;
 const LOOP_SIZE_F64: f64 = LOOP_SIZE as f64;
 
 const FILTER_SQL: &str = r#"
-    SELECT demo.a, demo.b, demo.c, demo.d
+    SELECT demo.f, demo.a, demo.b, demo.c, _sub(_add(demo.d, demo.d), demo.e)
     FROM demo
-    WHERE demo.a < -1 AND demo.b < -2 AND demo.c < -3 AND demo.d < -4 AND demo.e < -5
-    LIMIT -100
+    WHERE demo.a > 1 AND demo.b > 2 AND demo.c > 3 AND demo.d > 4 AND demo.e > 5
+    LIMIT -10
+    "#;
+const AGGREGATE_SQL: &str = r#"
+    select _firstl(stream.a), _lastl(stream.a), _minl(stream.a), _maxl(stream.a)
+    from stream
     "#;
 
 pub fn main() {
@@ -24,34 +31,43 @@ pub fn main() {
     start();
     let sum_store = Arc::new(AtomicI64::new(0));
     let sum_clone = Arc::clone(&sum_store);
-    let id = init_func(sum_clone);
-    if id == 0 {
+    let (id1, id2) = init_func(sum_clone);
+    if id1 == 0 || id2 == 0 {
         log::warn!("init failed");
     } else {
-        exec_with_time_it(move || gen_new_data(id));
+        let mut u8data = gen_u8_bytes(id1);
+        exec_with_time_it(move || gen_new_data(&mut u8data));
         let sum = sum_store.load(Ordering::SeqCst);
         log::info!("sum: {sum}");
     }
     stop();
 }
 
-fn init_func(sum_store: Arc<AtomicI64>) -> u16 {
+fn init_func(sum_store: Arc<AtomicI64>) -> (u16, u16) {
     let core_ids = core_affinity::get_core_ids().unwrap();
     core_affinity::set_for_current(core_ids[core_ids.len() - 1]);
     log::info!("thread:{} started", thread::current().name().unwrap());
-    if let Some(id) = define_record() {
-        if let Some(mapper_id) =
-            def_mapper(FILTER_SQL, move |params| func_callback(&sum_store, params))
-        {
-            log::info!("define mapper: {mapper_id}");
-            id
+    if let Some((id1, id2)) = define_records() {
+        log::info!("define record: {id1}/{id2}");
+        if let Some(aggregate_id) = def_aggregate(
+            AGGREGATE_SQL,
+            #[inline]
+            move |param| {
+                func_callback(&sum_store, param);
+            },
+        ) {
+            log::info!("define aggregate: {aggregate_id}");
+            if let Some(mapper_id) = def_mapper_bind_aggregate(FILTER_SQL, aggregate_id) {
+                log::info!("define mapper: {mapper_id}");
+                return (id1, id2);
+            } else {
+                log::warn!("def_mapper_bind_aggregate failed");
+            }
         } else {
-            log::warn!("def_mapper_bind_aggregate failed");
-            0
+            log::warn!("def_aggregate failed");
         }
-    } else {
-        0
     }
+    (0, 0)
 }
 
 #[inline]
@@ -64,16 +80,15 @@ fn func_callback(sum_store: &Arc<AtomicI64>, param: CallbackParams) {
         let v3 = fetch_i64(ptr.wrapping_add(16));
         let v4 = fetch_i64(ptr.wrapping_add(24));
         log::info!("data: {v1}|{v2}|{v3}|{v4}");
-        let _ = v1 + v2 + v3 + v4;
+        let _v = v1 + v2 + v3 + v4;
     } else {
         log::warn!("got null data");
     }
 }
 
-fn gen_new_data(id: u16) {
-    static WALKER: AtomicI64 = AtomicI64::new(0);
-    let u8data = gen_u8_bytes(id, WALKER.fetch_add(1, Ordering::SeqCst));
-    let ret = new_data(&u8data);
+fn gen_new_data(u8data: &mut U8Bytes) {
+    update_now(u8data);
+    let ret = new_data(u8data);
     if ret {
         log::debug!("send success");
     } else {
@@ -81,7 +96,9 @@ fn gen_new_data(id: u16) {
     }
 }
 
-fn define_record() -> Option<u16> {
+fn define_records() -> Option<(u16, u16)> {
+    let id1;
+    let id2;
     if let Some(id) = def_incoming(
         "demo",
         vec![
@@ -96,26 +113,55 @@ fn define_record() -> Option<u16> {
             Column::new_long("i"),
         ],
     ) {
-        log::info!("defined incoming: {id}");
-        Some(id)
+        id1 = id;
+        log::info!("defined incoming: {id1}");
     } else {
         log::warn!("failed to define incoming record");
-        None
+        return None;
     }
+    if let Some(id) = def_stream(
+        "stream",
+        vec![
+            Column::new_long("a"),
+            Column::new_long("b"),
+            Column::new_long("c"),
+            Column::new_long("d"),
+            Column::new_long("e"),
+            Column::new_long("f"),
+            Column::new_long("g"),
+            Column::new_long("h"),
+        ],
+    ) {
+        id2 = id;
+        log::info!("defined stream: {id2}");
+    } else {
+        log::warn!("failed to define stream record");
+        return None;
+    }
+    Some((id1, id2))
 }
 
 #[inline]
-fn gen_u8_bytes(id: u16, walker: i64) -> U8Bytes {
+fn gen_u8_bytes(id: u16) -> U8Bytes {
     let mut u8array = [0_u8; 512];
     let slice = u8array.as_mut_slice();
     let now = now();
-    fill_i64(&mut slice[0..8], -walker + 1);
-    fill_i64(&mut slice[8..16], -walker + 2);
-    fill_i64(&mut slice[16..24], -walker + 3);
-    fill_i64(&mut slice[24..32], -walker + 4);
-    fill_i64(&mut slice[32..40], -walker + 5);
+    //log::info!("now: {now}");
+    fill_i64(&mut slice[0..8], 1);
+    fill_i64(&mut slice[8..16], 2);
+    fill_i64(&mut slice[16..24], 3);
+    fill_i64(&mut slice[24..32], 4);
+    fill_i64(&mut slice[32..40], 5);
     fill_i64(&mut slice[40..48], now as i64);
+    log::info!("v: {}", now as i64);
     U8Bytes::new_from_vec(id, 512, Vec::from(u8array))
+}
+
+#[inline]
+fn update_now(u8data: &mut U8Bytes) {
+    let now = now();
+    // log::info!("v: {}", now as i64);
+    fill_i64(&mut u8data.bytes_mut()[40..48], now as i64);
 }
 
 #[inline]
