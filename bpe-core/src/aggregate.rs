@@ -1,5 +1,8 @@
 use crate::{
-    agg_func,
+    agg_func::{
+        f_avg_d, f_avg_l, f_count_l, f_first_d, f_first_l, f_last_d, f_last_l, f_max_d_d,
+        f_max_d_l, f_max_l, f_min_d_d, f_min_d_l, f_min_l, f_sum_d_d, f_sum_d_l, f_sum_l,
+    },
     aux::{fetch_ptr, fill_ptr, SimpleU16Map},
     callback::{callback, FnHolder},
     consts::U8_DATA_MAX_SIZE,
@@ -292,7 +295,7 @@ fn choose_func(
     match func {
         SupportFunc::MaxL => match &element {
             Element::Long(v) => {
-                agg_func::func_max_long(aggregate_data_ptr, offset, v);
+                f_max_l(aggregate_data_ptr, offset, v);
             }
             _ => {
                 log::warn!("unsupported function: {:?}-{:?}", func, &element);
@@ -300,7 +303,7 @@ fn choose_func(
         },
         SupportFunc::MinL => match &element {
             Element::Long(v) => {
-                agg_func::func_min_long(aggregate_data_ptr, offset, v);
+                f_min_l(aggregate_data_ptr, offset, v);
             }
             _ => {
                 log::warn!("unsupported function: {:?}-{:?}", func, &element);
@@ -308,7 +311,7 @@ fn choose_func(
         },
         SupportFunc::SumL => match &element {
             Element::Long(v) => {
-                agg_func::func_sum_long(aggregate_data_ptr, offset, v);
+                f_sum_l(aggregate_data_ptr, offset, v);
             }
             _ => {
                 log::warn!("unsupported function: {:?}-{:?}", func, &element);
@@ -316,7 +319,7 @@ fn choose_func(
         },
         SupportFunc::Count => match &element {
             Element::Long(_) => {
-                agg_func::func_count_long(aggregate_data_ptr, offset);
+                f_count_l(aggregate_data_ptr, offset);
             }
             _ => {
                 log::warn!("unsupported function: {:?}-{:?}", func, &element);
@@ -324,39 +327,39 @@ fn choose_func(
         },
         SupportFunc::MaxD => match &element {
             Element::Long(v) => {
-                agg_func::func_maxd_long(aggregate_data_ptr, offset, v);
+                f_max_d_l(aggregate_data_ptr, offset, v);
             }
             Element::Double(v) => {
-                agg_func::func_maxd_double(aggregate_data_ptr, offset, v);
+                f_max_d_d(aggregate_data_ptr, offset, v);
             }
         },
         SupportFunc::MinD => match &element {
             Element::Long(v) => {
-                agg_func::func_mind_long(aggregate_data_ptr, offset, v);
+                f_min_d_l(aggregate_data_ptr, offset, v);
             }
             Element::Double(v) => {
-                agg_func::func_mind_double(aggregate_data_ptr, offset, v);
+                f_min_d_d(aggregate_data_ptr, offset, v);
             }
         },
         SupportFunc::SumD => match &element {
             Element::Long(v) => {
-                agg_func::func_sumd_long(aggregate_data_ptr, offset, v);
+                f_sum_d_l(aggregate_data_ptr, offset, v);
             }
             Element::Double(v) => {
-                agg_func::func_sumd_double(aggregate_data_ptr, offset, v);
+                f_sum_d_d(aggregate_data_ptr, offset, v);
             }
         },
         SupportFunc::Avg => match &element {
             Element::Long(v) => {
-                agg_func::func_avg_long(aggregate_data_ptr, offset, v, data_idx);
+                f_avg_l(aggregate_data_ptr, offset, v, data_idx);
             }
             Element::Double(v) => {
-                agg_func::func_avg_double(aggregate_data_ptr, offset, v, data_idx);
+                f_avg_d(aggregate_data_ptr, offset, v, data_idx);
             }
         },
         SupportFunc::FirstL => match &element {
             Element::Long(v) => {
-                agg_func::func_first_long(aggregate_data_ptr, offset, v);
+                f_first_l(aggregate_data_ptr, offset, v);
             }
             _ => {
                 log::warn!("unsupported function: {:?}-{:?}", func, &element);
@@ -367,11 +370,11 @@ fn choose_func(
                 Element::Long(v) => *v as f64,
                 Element::Double(v) => *v,
             };
-            agg_func::func_first_double(aggregate_data_ptr, offset, &v);
+            f_first_d(aggregate_data_ptr, offset, &v);
         }
         SupportFunc::LastL => match &element {
             Element::Long(v) => {
-                agg_func::func_last_long(aggregate_data_ptr, offset, v);
+                f_last_l(aggregate_data_ptr, offset, v);
             }
             _ => {
                 log::warn!("unsupported function: {:?}-{:?}", func, &element);
@@ -382,7 +385,7 @@ fn choose_func(
                 Element::Long(v) => *v as f64,
                 Element::Double(v) => *v,
             };
-            agg_func::func_last_double(aggregate_data_ptr, offset, &v);
+            f_last_d(aggregate_data_ptr, offset, &v);
         }
         _ => {
             log::warn!("unsupported function: {:?}-{:?}", func, &element);
