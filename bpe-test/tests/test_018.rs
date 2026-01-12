@@ -12,7 +12,7 @@ use std::{
     time::{Duration, SystemTime},
 };
 
-const LOOP_SIZE: usize = 50;
+const LOOP_SIZE: usize = 1000;
 const LOOP_SIZE_F64: f64 = LOOP_SIZE as f64;
 
 const FILTER_SQL: &str = r#"
@@ -26,7 +26,8 @@ const AGGREGATE_SQL: &str = r#"
     from stream
     "#;
 
-pub fn main() {
+#[test]
+pub fn test() {
     env::set_var("BPE_HOME", env::current_dir().unwrap());
     start();
     let sum_store = Arc::new(AtomicI64::new(0));
