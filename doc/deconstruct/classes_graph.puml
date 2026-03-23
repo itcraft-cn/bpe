@@ -1,0 +1,216 @@
+@startuml BPE Class Diagram
+!theme plain
+
+title Bamboo Pipe Engine - Core Class Diagram
+
+package "Public API" {
+    class U8Bytes {
+        - id: u16
+        - data_len: usize
+        - bytes: [u8; U8_DATA_MAX_SIZE]
+        + new(id: u16, data_len: usize, bytes: [u8; U8_DATA_MAX_SIZE])
+        + new_from_vec(id: u16, data_len: usize, vec: Vec<u8>)
+        + new_from_slice(id: u16, data_len: usize, slice: &[u8])
+        + id(): u16
+        + data_len(): usize
+        + bytes(): &[u8]
+        + bytes_mut(): &mut [u8]
+    }
+    
+    class Column {
+        - name: String
+        - data_type: ColumnType
+        - idx: u16
+        - offset: usize
+        + new_long(name: &str)
+        + new_double(name: &str)
+    }
+    
+    enum ColumnType {
+        Long
+        Double
+    }
+    
+    class CallbackParams {
+        - u8_ptr: *const u8
+        - mask: usize
+        - offset: usize
+        - size: usize
+        - step: usize
+        + new(...)
+        + u8_ptr(): *const u8
+        + size(): usize
+        + step(): usize
+    }
+}
+
+package "Data Model" {
+    class Record {
+        - _name: String
+        - id: u16
+        - _record_type: RecordType
+        - columns: Vec<Column>
+        - columns_map: HashMap<String, u16>
+        + insert_record(name: &str, record_type: RecordType, columns: Vec<Column>): Option<u16>
+        + get_record(id: u16): Option<&'static Record>
+        + column(column_id: u16): &Column
+        + column_id(column_name: &str): Option<&u16>
+    }
+    
+    enum RecordType {
+        Incoming
+        Stream
+    }
+}
+
+package "Storage" {
+    class WrappedArray {
+        - data: *mut u8
+        - max_records: usize
+        - mask: usize
+        - walker: usize
+        - step: usize
+        + new(size: usize, step: usize)
+        + u64ptr(): u64
+        + sub_data(offset: usize): *const u8
+        + walker(): usize
+        + mask(): usize
+        + step(): usize
+    }
+}
+
+package "JIT Engine" {
+    class FuncGenerator {
+        + context: &'ctx Context
+        + module: Module<'ctx>
+        + builder: Builder<'ctx>
+        + execution_engine: ExecutionEngine<'ctx>
+        + type_wrapper: Option<StructType<'ctx>>
+        + new(): Self
+        + compile<T>(name: &str): Option<JitFunction<'_, T>>
+    }
+    
+    class GenContext {
+        + func_generator: &'ctx FuncGenerator<'ctx>
+        + param_u64ptr: IntValue<'ctx>
+        + i2f_func: FunctionValue<'ctx>
+    }
+    
+    class BinaryExpression {
+        + l_val_type: BasicValueEnum<'a>
+        + r_val_type: BasicValueEnum<'a>
+        + l_val: BasicValueEnum<'a>
+        + r_val: BasicValueEnum<'a>
+    }
+}
+
+package "SQL Processing" {
+    class Mapper {
+        - id: u16
+        - parsed_sql: ParsedSql
+        - executors: Executors
+        + id(): u16
+        + filter(): &JitFunction<'_, FilterFunc>
+        + fetch(...)
+    }
+    
+    class WrappedMapper {
+        - mapper: Mapper
+        - fn_holder: FnHolder
+    }
+    
+    class ParsedSql {
+        - records: Vec<u16>
+        - filter: JitFunction<'_, FilterFunc>
+        - limit: isize
+        - fields: Vec<ExprEntity>
+    }
+    
+    class ExprEntity {
+        Val(ValType)
+        Field(u16)
+        FieldWithTab(u16, u16)
+        Function(String, Vec<ExprEntity>)
+    }
+}
+
+package "Execution" {
+    class Executor {
+        ConstLong(i64)
+        ConstDouble(f64)
+        Fetch(u16, u16)
+        Compute(SupportFunc, Executors)
+        + fetch(...): Element
+    }
+    
+    class Executors {
+        - raw_ptr: *const Executor
+        - size: usize
+        + new(executors: &[Executor])
+        + index_of(idx: i32): &Executor
+    }
+    
+    class Element {
+        Long(i64)
+        Double(f64)
+        + len(): usize
+        + copy_to_target(u8_ptr: *mut u8, offset: usize)
+        + add(other: Element): Element
+        + sub(other: Element): Element
+        + mul(other: Element): Element
+        + div(other: Element): Element
+    }
+}
+
+package "Aggregate" {
+    class Aggregate {
+        - id: u16
+        - stream_id: u16
+        - executors: Vec<Executor>
+        + id(): u16
+        + stream_id(): u16
+    }
+    
+    class WrappedAggregate {
+        - aggregate: Aggregate
+        - fn_holder: FnHolder
+    }
+}
+
+package "Callback" {
+    enum FnHolder {
+        Func(NormalFunc)
+        FfiFunc(Box<dyn FfiFunc>)
+        Lambda(LambdaFunc)
+    }
+}
+
+package "Support Functions" {
+    enum SupportFunc {
+        Add, Sub, Mul, Div, Mod
+        MaxL, MinL, SumL, Count
+        MaxD, MinD, SumD, Avg
+        FirstL, FirstD, LastL, LastD
+    }
+}
+
+U8Bytes --> ColumnType
+Column --> ColumnType
+Record --> Column
+Record --> RecordType
+WrappedArray --> U8Bytes : stores
+Mapper --> ParsedSql
+Mapper --> Executors
+WrappedMapper --> Mapper
+WrappedMapper --> FnHolder
+Executor --> Element
+Executors --> Executor
+Element --> ColumnType
+Aggregate --> Executor
+WrappedAggregate --> Aggregate
+WrappedAggregate --> FnHolder
+FuncGenerator --> GenContext
+FuncGenerator --> BinaryExpression
+ParsedSql --> ExprEntity
+Executor --> SupportFunc
+@enduml

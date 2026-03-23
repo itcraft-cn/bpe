@@ -1,0 +1,81 @@
+@startuml BPE Data Flow
+!theme plain
+
+title Bamboo Pipe Engine - Core Data Flow
+
+start
+
+partition "1. System Initialization" {
+    :start();
+    :load_config();
+    :init_logger();
+    :init_func_generator();
+    note right: LLVM Context initialized\nonce globally
+    :init_data();
+    :init_store();
+    :init_mapper();
+    :init_aggregate();
+}
+
+partition "2. Record Definition" {
+    :def_incoming(name, columns);
+    :Record::insert_record();
+    :Generate record ID;
+    :Store record definition;
+    :Update name map;
+}
+
+partition "3. Mapper Definition" {
+    :def_mapper(sql, callback);
+    :parse_select(sql);
+    :Parse SQL query;
+    :FuncGenerator::new();
+    :gen_select_filter_func();
+    note right: JIT compile WHERE clause\nto native code
+    :create_executor();
+    :Store WrappedMapper;
+}
+
+partition "4. Data Processing" {
+    :new_data(U8Bytes);
+    :find_or_insert_array(id);
+    :insert(array, data);
+    note right: Insert into circular buffer
+    :call_mapper(array, id);
+    
+    if (Mapper found?) then (yes)
+        :loop_filter();
+        while (More records to process?) is (yes)
+            :Apply JIT filter;
+            if (Filter passes?) then (yes)
+                :mapper.fetch();
+                :Extract fields;
+                :Copy to output buffer;
+            endif
+        endwhile (no)
+        :callback(fn_holder, params);
+    else (no)
+    endif
+}
+
+partition "5. Aggregate Processing" {
+    :def_aggregate(sql, callback);
+    :parse_select(sql);
+    :gen_aggregate();
+    :Store WrappedAggregate;
+    
+    note right: When mapper triggers aggregate
+    :call_aggregate();
+    :init_data();
+    :compute_data();
+    while (More elements?) is (yes)
+        :fetch_arg_val();
+        :choose_func();
+        note right: Max/Min/Sum/Avg/First/Last
+    endwhile (no)
+    :callback();
+}
+
+stop
+
+@enduml
