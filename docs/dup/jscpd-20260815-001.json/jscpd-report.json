@@ -1,0 +1,2841 @@
+{
+  "duplicates": [
+    {
+      "firstFile": {
+        "end": 60,
+        "endLoc": {
+          "column": 29,
+          "line": 60,
+          "position": 1148
+        },
+        "name": "bpe-core/benches/bench_aux.rs",
+        "start": 10,
+        "startLoc": {
+          "column": 0,
+          "line": 10,
+          "position": 140
+        }
+      },
+      "format": "rust",
+      "fragment": "#[inline]\nfn fill<T>(slice: &mut [u8], data: T) {\n    let p_val = ptr::addr_of!(*slice);\n    let p_data = p_val as *mut T;\n    unsafe { *p_data = data };\n}\n\n#[inline]\nfn fetch<T>(slice: &[u8]) -> T\nwhere\n    T: Copy,\n{\n    let p_val = ptr::addr_of!(*slice);\n    let p_data = p_val as *const T;\n    unsafe { *p_data }\n}\n\n#[inline]\npub(crate) fn fill_i64(slice: &mut [u8], data: i64) {\n    fill(slice, data)\n}\n\n#[inline]\npub(crate) fn fetch_i64(slice: &[u8]) -> i64 {\n    fetch(slice)\n}\n\n#[inline]\npub(crate) fn fill_f64(slice: &mut [u8], data: f64) {\n    fill(slice, data)\n}\n\n#[inline]\npub(crate) fn fetch_f64(slice: &[u8]) -> f64 {\n    fetch(slice)\n}\n\n#[inline]\npub(crate) fn timestamp() -> u64 {\n    let duration = SystemTime::now()\n        .duration_since(UNIX_EPOCH)\n        .unwrap_or_else(|_e| Duration::new(0, 0));\n    duration.as_millis() as u64\n}\n\npub(crate) struct SimpleU16Map<T> {\n    vec: Vec<Option<T>>,\n}\nimpl<T> SimpleU16Map<T> {\n    pub(crate) fn new() -> Self {\n        let mut vec = vec![];",
+      "lines": 51,
+      "secondFile": {
+        "end": 73,
+        "endLoc": {
+          "column": 29,
+          "line": 73,
+          "position": 1380
+        },
+        "name": "bpe-core/tests/test_aux.rs",
+        "start": 23,
+        "startLoc": {
+          "column": 0,
+          "line": 23,
+          "position": 372
+        }
+      },
+      "tokens": 330
+    },
+    {
+      "firstFile": {
+        "end": 118,
+        "endLoc": {
+          "column": 1,
+          "line": 118,
+          "position": 2645
+        },
+        "name": "bpe-core/benches/bench_aux.rs",
+        "start": 68,
+        "startLoc": {
+          "column": 8,
+          "line": 68,
+          "position": 1315
+        }
+      },
+      "format": "rust",
+      "fragment": "        }\n        SimpleU16Map { vec }\n    }\n    #[inline]\n    pub(crate) fn insert(&mut self, key: u16, value: T) {\n        self.vec[key as usize] = Some(value);\n    }\n    #[inline]\n    pub(crate) fn entry(&mut self, id: u16) -> SimpleU16Entry {\n        let opt = self.vec[id as usize].as_mut();\n        match opt {\n            Some(_) => SimpleU16Entry::Exist(id),\n            None => SimpleU16Entry::NotExist(id),\n        }\n    }\n    #[inline]\n    pub(crate) fn get_mut(&mut self, id: u16) -> &mut T {\n        self.vec[id as usize].as_mut().unwrap()\n    }\n    #[inline]\n    pub(crate) fn get(&self, id: u16) -> Option<&T> {\n        self.vec[id as usize].as_ref()\n    }\n}\n\npub(crate) enum SimpleU16Entry {\n    Exist(u16),\n    NotExist(u16),\n}\nimpl SimpleU16Entry {\n    #[inline]\n    pub(crate) fn or_insert_with<T, F>(&mut self, map: &mut SimpleU16Map<T>, f: F)\n    where\n        F: FnOnce() -> T,\n    {\n        match *self {\n            SimpleU16Entry::Exist(_) => (),\n            SimpleU16Entry::NotExist(id) => {\n                map.vec[id as usize] = Some(f());\n            }\n        }\n    }\n\n    #[inline]\n    pub(crate) fn _fetch_as_mut<'a, T>(&self, map: &'a mut SimpleU16Map<T>) -> Option<&'a mut T> {\n        match *self {\n            SimpleU16Entry::Exist(id) => Some(map.get_mut(id)),\n            _ => None,\n        }\n    }\n}",
+      "lines": 51,
+      "secondFile": {
+        "end": 126,
+        "endLoc": {
+          "column": 1,
+          "line": 126,
+          "position": 2782
+        },
+        "name": "bpe-core/tests/test_aux.rs",
+        "start": 76,
+        "startLoc": {
+          "column": 8,
+          "line": 76,
+          "position": 1452
+        }
+      },
+      "tokens": 362
+    },
+    {
+      "firstFile": {
+        "end": 89,
+        "endLoc": {
+          "column": 1,
+          "line": 89,
+          "position": 2631
+        },
+        "name": "bpe-core/benches/bench_log.rs",
+        "start": 1,
+        "startLoc": {
+          "column": 0,
+          "line": 1,
+          "position": 0
+        }
+      },
+      "format": "rust",
+      "fragment": "#![allow(dead_code)]\n\nuse log::LevelFilter;\nuse log4rs::{\n    append::{\n        console::ConsoleAppender,\n        rolling_file::{\n            policy::compound::{\n                roll::fixed_window::FixedWindowRoller, trigger::size::SizeTrigger, CompoundPolicy,\n            },\n            RollingFileAppender,\n        },\n    },\n    config::{Appender, Root},\n    encode::pattern::PatternEncoder,\n    Config,\n};\nuse std::{env, path::PathBuf, sync::Once};\n\nconst PATTERN_STDOUT: &str = \"[{d}][{h({l})}][{I}|{h({T})}][{t}\\\\(L{L}\\\\)] {m}{n}\";\nconst PATTERN_FILE: &str = \"[{d}][{l}][{I}|{T}][{t}\\\\(L{L}\\\\)] {m}{n}\";\n\nconst LOG_NAME: &str = \"bpe.log\";\n\nconst ROLLING_FILE_PATTERN: &str = \"bpe.{}.log\";\nconst ROLLING_FILE_MAX_COUNT: u32 = 20;\nconst ROLLING_FILE_SIZE_200M: u64 = 200 * 1024 * 1024;\n\npub(crate) fn init_logger() {\n    static INIT: Once = Once::new();\n    INIT.call_once(init_log4rs);\n}\n\nfn init_log4rs() {\n    let console_appender = init_console();\n    let file_appender = init_file();\n    let root = Root::builder()\n        .appender(\"stdout\")\n        .appender(\"file\")\n        .build(LevelFilter::Info);\n    if let Ok(config) = Config::builder()\n        .appender(console_appender)\n        .appender(file_appender)\n        .build(root)\n    {\n        if let Ok(_handle) = log4rs::init_config(config) {\n            log::info!(\"Log4rs initialized.\");\n        } else {\n            eprintln!(\"failed to initialize log4rs\");\n        }\n    } else {\n        eprintln!(\"failed to initialize log4rs\");\n    }\n}\n\nfn init_console() -> Appender {\n    let encoder_stdout = Box::new(PatternEncoder::new(PATTERN_STDOUT));\n    let console_appender = Box::new(ConsoleAppender::builder().encoder(encoder_stdout).build());\n    Appender::builder().build(\"stdout\", console_appender)\n}\n\nfn init_file() -> Appender {\n    let log_path = fetch_log_path();\n    let encoder_file = Box::new(PatternEncoder::new(PATTERN_FILE));\n    let roller = FixedWindowRoller::builder()\n        .base(1)\n        .build(ROLLING_FILE_PATTERN, ROLLING_FILE_MAX_COUNT)\n        .unwrap();\n    let policy = Box::new(CompoundPolicy::new(\n        Box::new(SizeTrigger::new(ROLLING_FILE_SIZE_200M)),\n        Box::new(roller),\n    ));\n    let file_appender = Box::new(\n        RollingFileAppender::builder()\n            .encoder(encoder_file)\n            .build(log_path, policy)\n            .unwrap(),\n    );\n    Appender::builder().build(\"file\", file_appender)\n}\n\nfn fetch_log_path() -> PathBuf {\n    let current_dir = env::current_dir().unwrap();\n    current_dir.join(LOG_NAME)\n}\n\npub(crate) fn setup_bpe_home() {\n    env::set_var(\"BPE_HOME\", env::current_dir().unwrap());\n}",
+      "lines": 89,
+      "secondFile": {
+        "end": 89,
+        "endLoc": {
+          "column": 1,
+          "line": 89,
+          "position": 2631
+        },
+        "name": "bpe-core/tests/test_log.rs",
+        "start": 1,
+        "startLoc": {
+          "column": 0,
+          "line": 1,
+          "position": 0
+        }
+      },
+      "tokens": 569
+    },
+    {
+      "firstFile": {
+        "end": 18,
+        "endLoc": {
+          "column": 42,
+          "line": 18,
+          "position": 451
+        },
+        "name": "bpe-core/benches/bench_log.rs",
+        "start": 3,
+        "startLoc": {
+          "column": 0,
+          "line": 3,
+          "position": 22
+        }
+      },
+      "format": "rust",
+      "fragment": "use log::LevelFilter;\nuse log4rs::{\n    append::{\n        console::ConsoleAppender,\n        rolling_file::{\n            policy::compound::{\n                roll::fixed_window::FixedWindowRoller, trigger::size::SizeTrigger, CompoundPolicy,\n            },\n            RollingFileAppender,\n        },\n    },\n    config::{Appender, Root},\n    encode::pattern::PatternEncoder,\n    Config,\n};\nuse std::{env, path::PathBuf, sync::Once};",
+      "lines": 16,
+      "secondFile": {
+        "end": 20,
+        "endLoc": {
+          "column": 42,
+          "line": 20,
+          "position": 507
+        },
+        "name": "bpe-core/src/logger.rs",
+        "start": 5,
+        "startLoc": {
+          "column": 0,
+          "line": 5,
+          "position": 78
+        }
+      },
+      "tokens": 96
+    },
+    {
+      "firstFile": {
+        "end": 56,
+        "endLoc": {
+          "column": 2,
+          "line": 56,
+          "position": 1511
+        },
+        "name": "bpe-core/benches/bench_log.rs",
+        "start": 34,
+        "startLoc": {
+          "column": 14,
+          "line": 34,
+          "position": 907
+        }
+      },
+      "format": "rust",
+      "fragment": "fn init_log4rs() {\n    let console_appender = init_console();\n    let file_appender = init_file();\n    let root = Root::builder()\n        .appender(\"stdout\")\n        .appender(\"file\")\n        .build(LevelFilter::Info);\n    if let Ok(config) = Config::builder()\n        .appender(console_appender)\n        .appender(file_appender)\n        .build(root)\n    {\n        if let Ok(_handle) = log4rs::init_config(config) {\n            log::info!(\"Log4rs initialized.\");\n        } else {\n            eprintln!(\"failed to initialize log4rs\");\n        }\n    } else {\n        eprintln!(\"failed to initialize log4rs\");\n    }\n}\n\nfn init_console() -> Appender {",
+      "lines": 23,
+      "secondFile": {
+        "end": 68,
+        "endLoc": {
+          "column": 2,
+          "line": 68,
+          "position": 1853
+        },
+        "name": "bpe-core/src/logger.rs",
+        "start": 46,
+        "startLoc": {
+          "column": 29,
+          "line": 46,
+          "position": 1249
+        }
+      },
+      "tokens": 120
+    },
+    {
+      "firstFile": {
+        "end": 83,
+        "endLoc": {
+          "column": 7,
+          "line": 83,
+          "position": 2460
+        },
+        "name": "bpe-core/benches/bench_log.rs",
+        "start": 42,
+        "startLoc": {
+          "column": 34,
+          "line": 42,
+          "position": 1188
+        }
+      },
+      "format": "rust",
+      "fragment": "        .appender(console_appender)\n        .appender(file_appender)\n        .build(root)\n    {\n        if let Ok(_handle) = log4rs::init_config(config) {\n            log::info!(\"Log4rs initialized.\");\n        } else {\n            eprintln!(\"failed to initialize log4rs\");\n        }\n    } else {\n        eprintln!(\"failed to initialize log4rs\");\n    }\n}\n\nfn init_console() -> Appender {\n    let encoder_stdout = Box::new(PatternEncoder::new(PATTERN_STDOUT));\n    let console_appender = Box::new(ConsoleAppender::builder().encoder(encoder_stdout).build());\n    Appender::builder().build(\"stdout\", console_appender)\n}\n\nfn init_file() -> Appender {\n    let log_path = fetch_log_path();\n    let encoder_file = Box::new(PatternEncoder::new(PATTERN_FILE));\n    let roller = FixedWindowRoller::builder()\n        .base(1)\n        .build(ROLLING_FILE_PATTERN, ROLLING_FILE_MAX_COUNT)\n        .unwrap();\n    let policy = Box::new(CompoundPolicy::new(\n        Box::new(SizeTrigger::new(ROLLING_FILE_SIZE_200M)),\n        Box::new(roller),\n    ));\n    let file_appender = Box::new(\n        RollingFileAppender::builder()\n            .encoder(encoder_file)\n            .build(log_path, policy)\n            .unwrap(),\n    );\n    Appender::builder().build(\"file\", file_appender)\n}\n\nfn fetch_log_path() -> PathBuf {\n    let current_dir = env::current_dir().unwrap();",
+      "lines": 42,
+      "secondFile": {
+        "end": 109,
+        "endLoc": {
+          "column": 7,
+          "line": 109,
+          "position": 3276
+        },
+        "name": "bpe-core/src/logger.rs",
+        "start": 71,
+        "startLoc": {
+          "column": 40,
+          "line": 71,
+          "position": 2026
+        }
+      },
+      "tokens": 273
+    },
+    {
+      "firstFile": {
+        "end": 26,
+        "endLoc": {
+          "column": 13,
+          "line": 26,
+          "position": 679
+        },
+        "name": "bpe-core/benches/benchmarks1.rs",
+        "start": 6,
+        "startLoc": {
+          "column": 38,
+          "line": 6,
+          "position": 167
+        }
+      },
+      "format": "rust",
+      "fragment": "use std::{ptr, thread, time::Duration};\n\nconst FILTER_SQL: &str = r#\"\n    SELECT demo.a, demo.b, demo.c, _sub(_add(demo.d, demo.d), demo.e)\n    FROM demo\n    WHERE (demo.a = 1 AND demo.b = 2) OR (demo.a = 3 AND demo.b = 4)\n    LIMIT 10\n    \"#;\n\nfn alternate_measurement() -> Criterion {\n    Criterion::default()\n        .sample_size(100)\n        .measurement_time(Duration::from_secs(5))\n}\n\npub fn criterion_benchmark(c: &mut Criterion) {\n    bench_log::setup_bpe_home();\n    bench_log::init_logger();\n    bpe::start();\n    test_bpe(c);\n    bpe::stop();",
+      "lines": 21,
+      "secondFile": {
+        "end": 26,
+        "endLoc": {
+          "column": 7,
+          "line": 26,
+          "position": 713
+        },
+        "name": "bpe-test/tests/test_001.rs",
+        "start": 11,
+        "startLoc": {
+          "column": 43,
+          "line": 11,
+          "position": 275
+        }
+      },
+      "tokens": 145
+    },
+    {
+      "firstFile": {
+        "end": 55,
+        "endLoc": {
+          "column": 20,
+          "line": 55,
+          "position": 1393
+        },
+        "name": "bpe-core/benches/benchmarks1.rs",
+        "start": 13,
+        "startLoc": {
+          "column": 4,
+          "line": 13,
+          "position": 369
+        }
+      },
+      "format": "rust",
+      "fragment": "    \"#;\n\nfn alternate_measurement() -> Criterion {\n    Criterion::default()\n        .sample_size(100)\n        .measurement_time(Duration::from_secs(5))\n}\n\npub fn criterion_benchmark(c: &mut Criterion) {\n    bench_log::setup_bpe_home();\n    bench_log::init_logger();\n    bpe::start();\n    test_bpe(c);\n    bpe::stop();\n}\n\nfn test<F>(c: &mut Criterion, test_case: &str, f: F)\nwhere\n    F: FnMut(&mut Bencher),\n{\n    call_test_case(c, test_case, f);\n}\n\nfn call_test_case<F>(c: &mut Criterion, test_case: &str, f: F)\nwhere\n    F: FnMut(&mut Bencher),\n{\n    c.bench_function(test_case, f);\n}\n\ncriterion_group!(\n    name = benches;\n    config = alternate_measurement();\n    targets = criterion_benchmark\n);\ncriterion_main!(benches);\n\nfn test_bpe(c: &mut Criterion) {\n    let core_ids = core_affinity::get_core_ids().unwrap();\n    core_affinity::set_for_current(core_ids[core_ids.len() - 1]);\n    log::info!(\"thread:{} started\", thread::current().name().unwrap());\n    if let Some((id1, _id2)) = define_records() {\n        if let Some(mapper_id) = bpe::def_mapper(FILTER_SQL, |_params| {}) {",
+      "lines": 43,
+      "secondFile": {
+        "end": 61,
+        "endLoc": {
+          "column": 20,
+          "line": 61,
+          "position": 1617
+        },
+        "name": "bpe-core/benches/benchmarks2.rs",
+        "start": 19,
+        "startLoc": {
+          "column": 4,
+          "line": 19,
+          "position": 593
+        }
+      },
+      "tokens": 269
+    },
+    {
+      "firstFile": {
+        "end": 129,
+        "endLoc": {
+          "column": 1,
+          "line": 129,
+          "position": 3465
+        },
+        "name": "bpe-core/benches/benchmarks1.rs",
+        "start": 62,
+        "startLoc": {
+          "column": 37,
+          "line": 62,
+          "position": 1673
+        }
+      },
+      "format": "rust",
+      "fragment": "        test(c, \"new_data_and_filter\", |b| {\n            b.iter(|| bpe::new_data(&u8data))\n        });\n    }\n}\n\nfn define_records() -> Option<(u16, u16)> {\n    let id1;\n    let id2;\n    if let Some(id) = bpe::def_incoming(\n        \"demo\",\n        vec![\n            Column::new_long(\"a\"),\n            Column::new_long(\"b\"),\n            Column::new_long(\"c\"),\n            Column::new_long(\"d\"),\n            Column::new_long(\"e\"),\n            Column::new_long(\"f\"),\n            Column::new_long(\"g\"),\n            Column::new_long(\"h\"),\n            Column::new_long(\"i\"),\n        ],\n    ) {\n        id1 = id;\n        log::info!(\"defined incoming: {id1}\");\n    } else {\n        log::warn!(\"failed to define incoming record\");\n        return None;\n    }\n    if let Some(id) = bpe::def_stream(\n        \"stream\",\n        vec![\n            Column::new_long(\"a\"),\n            Column::new_long(\"b\"),\n            Column::new_long(\"c\"),\n            Column::new_double(\"d\"),\n            Column::new_double(\"e\"),\n            Column::new_double(\"f\"),\n            Column::new_double(\"g\"),\n            Column::new_long(\"h\"),\n        ],\n    ) {\n        id2 = id;\n        log::info!(\"defined stream: {id2}\");\n    } else {\n        log::warn!(\"failed to define stream record\");\n        return None;\n    }\n    Some((id1, id2))\n}\n\nfn gen_u8_bytes(id: u16) -> U8Bytes {\n    let mut u8array = [0_u8; 512];\n    let slice = u8array.as_mut_slice();\n    fill_u64(&mut slice[0..8], 1);\n    fill_u64(&mut slice[8..16], 2);\n    fill_u64(&mut slice[16..24], 3);\n    fill_u64(&mut slice[24..32], 4);\n    fill_u64(&mut slice[32..40], 5);\n    U8Bytes::new_from_vec(id, 512, Vec::from(u8array))\n}\n\n#[inline]\npub(crate) fn fill_u64(slice: &mut [u8], data: u64) {\n    let p_val = ptr::addr_of!(*slice);\n    let p_u64 = p_val as *mut u64;\n    unsafe { *p_u64 = data };\n}",
+      "lines": 68,
+      "secondFile": {
+        "end": 141,
+        "endLoc": {
+          "column": 1,
+          "line": 141,
+          "position": 3998
+        },
+        "name": "bpe-core/benches/benchmarks2.rs",
+        "start": 74,
+        "startLoc": {
+          "column": 51,
+          "line": 74,
+          "position": 2206
+        }
+      },
+      "tokens": 455
+    },
+    {
+      "firstFile": {
+        "end": 91,
+        "endLoc": {
+          "column": 21,
+          "line": 91,
+          "position": 2405
+        },
+        "name": "bpe-core/benches/benchmarks1.rs",
+        "start": 71,
+        "startLoc": {
+          "column": 27,
+          "line": 71,
+          "position": 1845
+        }
+      },
+      "format": "rust",
+      "fragment": "    if let Some(id) = bpe::def_incoming(\n        \"demo\",\n        vec![\n            Column::new_long(\"a\"),\n            Column::new_long(\"b\"),\n            Column::new_long(\"c\"),\n            Column::new_long(\"d\"),\n            Column::new_long(\"e\"),\n            Column::new_long(\"f\"),\n            Column::new_long(\"g\"),\n            Column::new_long(\"h\"),\n            Column::new_long(\"i\"),\n        ],\n    ) {\n        id1 = id;\n        log::info!(\"defined incoming: {id1}\");\n    } else {\n        log::warn!(\"failed to define incoming record\");\n        return None;\n    }\n    if let Some(id) = bpe::def_stream(",
+      "lines": 21,
+      "secondFile": {
+        "end": 122,
+        "endLoc": {
+          "column": 21,
+          "line": 122,
+          "position": 3610
+        },
+        "name": "bpe-sample/src/main.rs",
+        "start": 102,
+        "startLoc": {
+          "column": 22,
+          "line": 102,
+          "position": 3050
+        }
+      },
+      "tokens": 119
+    },
+    {
+      "firstFile": {
+        "end": 113,
+        "endLoc": {
+          "column": 2,
+          "line": 113,
+          "position": 2945
+        },
+        "name": "bpe-core/benches/benchmarks1.rs",
+        "start": 91,
+        "startLoc": {
+          "column": 27,
+          "line": 91,
+          "position": 2411
+        }
+      },
+      "format": "rust",
+      "fragment": "    if let Some(id) = bpe::def_stream(\n        \"stream\",\n        vec![\n            Column::new_long(\"a\"),\n            Column::new_long(\"b\"),\n            Column::new_long(\"c\"),\n            Column::new_double(\"d\"),\n            Column::new_double(\"e\"),\n            Column::new_double(\"f\"),\n            Column::new_double(\"g\"),\n            Column::new_long(\"h\"),\n        ],\n    ) {\n        id2 = id;\n        log::info!(\"defined stream: {id2}\");\n    } else {\n        log::warn!(\"failed to define stream record\");\n        return None;\n    }\n    Some((id1, id2))\n}\n\nfn gen_u8_bytes(id: u16) -> U8Bytes {",
+      "lines": 23,
+      "secondFile": {
+        "end": 105,
+        "endLoc": {
+          "column": 2,
+          "line": 105,
+          "position": 3005
+        },
+        "name": "bpe-core/tests/lib_test_07.rs",
+        "start": 83,
+        "startLoc": {
+          "column": 22,
+          "line": 83,
+          "position": 2471
+        }
+      },
+      "tokens": 114
+    },
+    {
+      "firstFile": {
+        "end": 25,
+        "endLoc": {
+          "column": 9,
+          "line": 25,
+          "position": 413
+        },
+        "name": "bpe-core/src/aux.rs",
+        "start": 8,
+        "startLoc": {
+          "column": 29,
+          "line": 8,
+          "position": 121
+        }
+      },
+      "format": "rust",
+      "fragment": "use crate::consts::FIELD_SIZE;\n\nconst U16_FULL_VAL: u32 = u16::MAX as u32 + 1;\n\n#[inline]\npub(crate) fn fill_ptr<T>(u8_ptr: *mut u8, data: T) {\n    unsafe { *(u8_ptr as *mut T) = data };\n}\n\n#[inline]\npub(crate) fn fetch_ptr<T>(u8_ptr: *const u8) -> T\nwhere\n    T: Copy,\n{\n    unsafe { *(u8_ptr as *const T) }\n}\n\n#[inline]",
+      "lines": 18,
+      "secondFile": {
+        "end": 23,
+        "endLoc": {
+          "column": 9,
+          "line": 23,
+          "position": 381
+        },
+        "name": "bpe-core/tests/test_aux.rs",
+        "start": 6,
+        "startLoc": {
+          "column": 1,
+          "line": 6,
+          "position": 89
+        }
+      },
+      "tokens": 100
+    },
+    {
+      "firstFile": {
+        "end": 70,
+        "endLoc": {
+          "column": 20,
+          "line": 70,
+          "position": 2110
+        },
+        "name": "bpe-core/tests/lib_test_07.rs",
+        "start": 45,
+        "startLoc": {
+          "column": 52,
+          "line": 45,
+          "position": 1531
+        }
+      },
+      "format": "rust",
+      "fragment": "                        fetch_ptr::<i64>(data.add(56)),\n                    );\n                }\n            }\n        }) {\n            let opt = def_mapper_bind_aggregate(FILTER_SQL, aggregate_id);\n            if opt.is_none() {\n                log::warn!(\"def_mapper_bind_aggregate failed\");\n                return;\n            }\n        } else {\n            log::warn!(\"def_aggregate failed\");\n            return;\n        }\n        gen_new_data(id1);\n    }\n    stop();\n}\n\nfn define_records() -> Option<(u16, u16)> {\n    let id1;\n    let id2;\n    if let Some(id) = def_incoming(\n        \"demo\",\n        vec![\n            Column::new_long(\"a\"),",
+      "lines": 26,
+      "secondFile": {
+        "end": 56,
+        "endLoc": {
+          "column": 21,
+          "line": 56,
+          "position": 1450
+        },
+        "name": "bpe-core/tests/lib_test_11.rs",
+        "start": 33,
+        "startLoc": {
+          "column": 69,
+          "line": 33,
+          "position": 905
+        }
+      },
+      "tokens": 103
+    },
+    {
+      "firstFile": {
+        "end": 71,
+        "endLoc": {
+          "column": 35,
+          "line": 71,
+          "position": 2160
+        },
+        "name": "bpe-core/tests/lib_test_07.rs",
+        "start": 48,
+        "startLoc": {
+          "column": 12,
+          "line": 48,
+          "position": 1588
+        }
+      },
+      "format": "rust",
+      "fragment": "            }\n        }) {\n            let opt = def_mapper_bind_aggregate(FILTER_SQL, aggregate_id);\n            if opt.is_none() {\n                log::warn!(\"def_mapper_bind_aggregate failed\");\n                return;\n            }\n        } else {\n            log::warn!(\"def_aggregate failed\");\n            return;\n        }\n        gen_new_data(id1);\n    }\n    stop();\n}\n\nfn define_records() -> Option<(u16, u16)> {\n    let id1;\n    let id2;\n    if let Some(id) = def_incoming(\n        \"demo\",\n        vec![\n            Column::new_long(\"a\"),\n            Column::new_double(\"b\"),",
+      "lines": 24,
+      "secondFile": {
+        "end": 52,
+        "endLoc": {
+          "column": 94,
+          "line": 52,
+          "position": 1445
+        },
+        "name": "bpe-core/tests/lib_test_09.rs",
+        "start": 33,
+        "startLoc": {
+          "column": 12,
+          "line": 33,
+          "position": 915
+        }
+      },
+      "tokens": 109
+    },
+    {
+      "firstFile": {
+        "end": 89,
+        "endLoc": {
+          "column": 20,
+          "line": 89,
+          "position": 2640
+        },
+        "name": "bpe-core/tests/lib_test_07.rs",
+        "start": 74,
+        "startLoc": {
+          "column": 32,
+          "line": 74,
+          "position": 2266
+        }
+      },
+      "format": "rust",
+      "fragment": "            Column::new_long(\"e\"),\n        ],\n    ) {\n        id1 = id;\n        log::info!(\"defined incoming: {id1}\");\n    } else {\n        log::warn!(\"failed to define incoming record\");\n        return None;\n    }\n    if let Some(id) = def_stream(\n        \"stream\",\n        vec![\n            Column::new_long(\"a\"),\n            Column::new_long(\"b\"),\n            Column::new_long(\"c\"),\n            Column::new_double(\"d\"),",
+      "lines": 16,
+      "secondFile": {
+        "end": 128,
+        "endLoc": {
+          "column": 20,
+          "line": 128,
+          "position": 3780
+        },
+        "name": "bpe-sample/src/main.rs",
+        "start": 113,
+        "startLoc": {
+          "column": 32,
+          "line": 113,
+          "position": 3406
+        }
+      },
+      "tokens": 76
+    },
+    {
+      "firstFile": {
+        "end": 123,
+        "endLoc": {
+          "column": 32,
+          "line": 123,
+          "position": 3606
+        },
+        "name": "bpe-core/tests/lib_test_07.rs",
+        "start": 94,
+        "startLoc": {
+          "column": 8,
+          "line": 94,
+          "position": 2811
+        }
+      },
+      "format": "rust",
+      "fragment": "        ],\n    ) {\n        id2 = id;\n        log::info!(\"defined stream: {id2}\");\n    } else {\n        log::warn!(\"failed to define stream record\");\n        return None;\n    }\n    Some((id1, id2))\n}\n\nfn gen_new_data(id: u16) {\n    let core_ids = core_affinity::get_core_ids().unwrap();\n    core_affinity::set_for_current(core_ids[core_ids.len() - 1]);\n    log::info!(\"thread:{} started\", thread::current().name().unwrap());\n    let u8data = gen_u8_bytes(id);\n    for _ in 1..=LOOP_SIZE {\n        let ret = new_data(&u8data);\n        if ret {\n            log::debug!(\"send success\");\n        } else {\n            log::warn!(\"send failed\");\n        }\n    }\n}\n\nfn gen_u8_bytes(id: u16) -> U8Bytes {\n    let mut u8array = [0_u8; 512];\n    let slice = u8array.as_mut_slice();\n    fill_i64(&mut slice[0..8], 1);",
+      "lines": 30,
+      "secondFile": {
+        "end": 90,
+        "endLoc": {
+          "column": 32,
+          "line": 90,
+          "position": 2517
+        },
+        "name": "bpe-core/tests/lib_test_09.rs",
+        "start": 61,
+        "startLoc": {
+          "column": 59,
+          "line": 61,
+          "position": 1722
+        }
+      },
+      "tokens": 197
+    },
+    {
+      "firstFile": {
+        "end": 122,
+        "endLoc": {
+          "column": 39,
+          "line": 122,
+          "position": 3573
+        },
+        "name": "bpe-core/tests/lib_test_07.rs",
+        "start": 103,
+        "startLoc": {
+          "column": 0,
+          "line": 103,
+          "position": 3000
+        }
+      },
+      "format": "rust",
+      "fragment": "}\n\nfn gen_new_data(id: u16) {\n    let core_ids = core_affinity::get_core_ids().unwrap();\n    core_affinity::set_for_current(core_ids[core_ids.len() - 1]);\n    log::info!(\"thread:{} started\", thread::current().name().unwrap());\n    let u8data = gen_u8_bytes(id);\n    for _ in 1..=LOOP_SIZE {\n        let ret = new_data(&u8data);\n        if ret {\n            log::debug!(\"send success\");\n        } else {\n            log::warn!(\"send failed\");\n        }\n    }\n}\n\nfn gen_u8_bytes(id: u16) -> U8Bytes {\n    let mut u8array = [0_u8; 512];\n    let slice = u8array.as_mut_slice();",
+      "lines": 20,
+      "secondFile": {
+        "end": 71,
+        "endLoc": {
+          "column": 39,
+          "line": 71,
+          "position": 1891
+        },
+        "name": "bpe-core/tests/lib_test_10.rs",
+        "start": 52,
+        "startLoc": {
+          "column": 0,
+          "line": 52,
+          "position": 1318
+        }
+      },
+      "tokens": 146
+    },
+    {
+      "firstFile": {
+        "end": 32,
+        "endLoc": {
+          "column": 37,
+          "line": 32,
+          "position": 858
+        },
+        "name": "bpe-core/tests/lib_test_09.rs",
+        "start": 9,
+        "startLoc": {
+          "column": 44,
+          "line": 9,
+          "position": 220
+        }
+      },
+      "format": "rust",
+      "fragment": "use test_aux::{fetch_ptr, fill_f64, fill_i64};\nuse test_log::{init_logger, setup_bpe_home};\n\nconst LOOP_SIZE: usize = 20;\n\nconst FILTER_SQL: &str = r#\"\n    select demo.a, demo.b from demo limit 10\n    \"#;\nconst AGGREGATE_SQL: &str = r#\"\n    select _sumd(stream.b) from stream\n    \"#;\n\n#[test]\nfn test_new_proc() {\n    setup_bpe_home();\n    init_logger();\n    start();\n    if let Some((id1, _id2)) = define_records() {\n        if let Some(aggregate_id) = def_aggregate(AGGREGATE_SQL, |params| {\n            let data = params.u8_ptr();\n            let size = params.size();\n            log::info!(\"data len: [{size}]\");\n            if size == 1 {\n                log::info!(\"sumd:{}\", fetch_ptr::<f64>(unsafe { data.add(8) }),);",
+      "lines": 24,
+      "secondFile": {
+        "end": 33,
+        "endLoc": {
+          "column": 31,
+          "line": 33,
+          "position": 867
+        },
+        "name": "bpe-core/tests/lib_test_11.rs",
+        "start": 9,
+        "startLoc": {
+          "column": 34,
+          "line": 9,
+          "position": 210
+        }
+      },
+      "tokens": 152
+    },
+    {
+      "firstFile": {
+        "end": 93,
+        "endLoc": {
+          "column": 1,
+          "line": 93,
+          "position": 2620
+        },
+        "name": "bpe-core/tests/lib_test_09.rs",
+        "start": 61,
+        "startLoc": {
+          "column": 29,
+          "line": 61,
+          "position": 1692
+        }
+      },
+      "format": "rust",
+      "fragment": "        vec![Column::new_long(\"a\"), Column::new_double(\"b\")],\n    ) {\n        id2 = id;\n        log::info!(\"defined stream: {id2}\");\n    } else {\n        log::warn!(\"failed to define stream record\");\n        return None;\n    }\n    Some((id1, id2))\n}\n\nfn gen_new_data(id: u16) {\n    let core_ids = core_affinity::get_core_ids().unwrap();\n    core_affinity::set_for_current(core_ids[core_ids.len() - 1]);\n    log::info!(\"thread:{} started\", thread::current().name().unwrap());\n    let u8data = gen_u8_bytes(id);\n    for _ in 1..=LOOP_SIZE {\n        let ret = new_data(&u8data);\n        if ret {\n            log::debug!(\"send success\");\n        } else {\n            log::warn!(\"send failed\");\n        }\n    }\n}\n\nfn gen_u8_bytes(id: u16) -> U8Bytes {\n    let mut u8array = [0_u8; 512];\n    let slice = u8array.as_mut_slice();\n    fill_i64(&mut slice[0..8], 1_i64);\n    fill_f64(&mut slice[8..16], 2_f64);\n    U8Bytes::new_from_vec(id, 512, Vec::from(u8array))\n}",
+      "lines": 33,
+      "secondFile": {
+        "end": 98,
+        "endLoc": {
+          "column": 1,
+          "line": 98,
+          "position": 2673
+        },
+        "name": "bpe-core/tests/lib_test_11.rs",
+        "start": 66,
+        "startLoc": {
+          "column": 31,
+          "line": 66,
+          "position": 1745
+        }
+      },
+      "tokens": 242
+    },
+    {
+      "firstFile": {
+        "end": 24,
+        "endLoc": {
+          "column": 20,
+          "line": 24,
+          "position": 612
+        },
+        "name": "bpe-sample/src/main.rs",
+        "start": 1,
+        "startLoc": {
+          "column": 0,
+          "line": 1,
+          "position": 0
+        }
+      },
+      "format": "rust",
+      "fragment": "use bpe::{\n    def_aggregate, def_incoming, def_mapper_bind_aggregate, def_stream, new_data, start, stop,\n    CallbackParams, Column, U8Bytes,\n};\nuse std::{\n    env, ptr,\n    sync::{\n        atomic::{AtomicI64, Ordering},\n        Arc,\n    },\n    thread,\n    time::{Duration, SystemTime},\n};\n\nconst LOOP_SIZE: usize = 200;\nconst LOOP_SIZE_F64: f64 = LOOP_SIZE as f64;\n\nconst FILTER_SQL: &str = r#\"\n    SELECT demo.f, demo.a, demo.b, demo.c, _sub(_add(demo.d, demo.d), demo.e)\n    FROM demo\n    WHERE demo.a > 1 AND demo.b > 2 AND demo.c > 3 AND demo.d > 4 AND demo.e > 5\n    LIMIT -10\n    \"#;\nconst AGGREGATE_SQL: &str = r#\"",
+      "lines": 24,
+      "secondFile": {
+        "end": 23,
+        "endLoc": {
+          "column": 9,
+          "line": 23,
+          "position": 599
+        },
+        "name": "bpe-test/tests/test_005.rs",
+        "start": 1,
+        "startLoc": {
+          "column": 0,
+          "line": 1,
+          "position": 0
+        }
+      },
+      "tokens": 164
+    },
+    {
+      "firstFile": {
+        "end": 16,
+        "endLoc": {
+          "column": 44,
+          "line": 16,
+          "position": 366
+        },
+        "name": "bpe-sample/src/main.rs",
+        "start": 1,
+        "startLoc": {
+          "column": 0,
+          "line": 1,
+          "position": 0
+        }
+      },
+      "format": "rust",
+      "fragment": "use bpe::{\n    def_aggregate, def_incoming, def_mapper_bind_aggregate, def_stream, new_data, start, stop,\n    CallbackParams, Column, U8Bytes,\n};\nuse std::{\n    env, ptr,\n    sync::{\n        atomic::{AtomicI64, Ordering},\n        Arc,\n    },\n    thread,\n    time::{Duration, SystemTime},\n};\n\nconst LOOP_SIZE: usize = 200;\nconst LOOP_SIZE_F64: f64 = LOOP_SIZE as f64;",
+      "lines": 16,
+      "secondFile": {
+        "end": 16,
+        "endLoc": {
+          "column": 44,
+          "line": 16,
+          "position": 365
+        },
+        "name": "bpe-test/tests/test_009.rs",
+        "start": 1,
+        "startLoc": {
+          "column": 0,
+          "line": 1,
+          "position": 0
+        }
+      },
+      "tokens": 82
+    },
+    {
+      "firstFile": {
+        "end": 16,
+        "endLoc": {
+          "column": 44,
+          "line": 16,
+          "position": 366
+        },
+        "name": "bpe-sample/src/main.rs",
+        "start": 1,
+        "startLoc": {
+          "column": 0,
+          "line": 1,
+          "position": 0
+        }
+      },
+      "format": "rust",
+      "fragment": "use bpe::{\n    def_aggregate, def_incoming, def_mapper_bind_aggregate, def_stream, new_data, start, stop,\n    CallbackParams, Column, U8Bytes,\n};\nuse std::{\n    env, ptr,\n    sync::{\n        atomic::{AtomicI64, Ordering},\n        Arc,\n    },\n    thread,\n    time::{Duration, SystemTime},\n};\n\nconst LOOP_SIZE: usize = 200;\nconst LOOP_SIZE_F64: f64 = LOOP_SIZE as f64;",
+      "lines": 16,
+      "secondFile": {
+        "end": 16,
+        "endLoc": {
+          "column": 44,
+          "line": 16,
+          "position": 366
+        },
+        "name": "bpe-test/tests/test_013.rs",
+        "start": 1,
+        "startLoc": {
+          "column": 0,
+          "line": 1,
+          "position": 0
+        }
+      },
+      "tokens": 82
+    },
+    {
+      "firstFile": {
+        "end": 75,
+        "endLoc": {
+          "column": 18,
+          "line": 75,
+          "position": 2337
+        },
+        "name": "bpe-sample/src/main.rs",
+        "start": 41,
+        "startLoc": {
+          "column": 31,
+          "line": 41,
+          "position": 1221
+        }
+      },
+      "format": "rust",
+      "fragment": "        log::info!(\"sum: {sum}\");\n    }\n    stop();\n}\n\nfn init_func(sum_store: Arc<AtomicI64>) -> (u16, u16) {\n    let core_ids = core_affinity::get_core_ids().unwrap();\n    core_affinity::set_for_current(core_ids[core_ids.len() - 1]);\n    log::info!(\"thread:{} started\", thread::current().name().unwrap());\n    if let Some((id1, id2)) = define_records() {\n        log::info!(\"define record: {id1}/{id2}\");\n        if let Some(aggregate_id) = def_aggregate(\n            AGGREGATE_SQL,\n            #[inline]\n            move |param| {\n                func_callback(&sum_store, param);\n            },\n        ) {\n            log::info!(\"define aggregate: {aggregate_id}\");\n            if let Some(mapper_id) = def_mapper_bind_aggregate(FILTER_SQL, aggregate_id) {\n                log::info!(\"define mapper: {mapper_id}\");\n                return (id1, id2);\n            } else {\n                log::warn!(\"def_mapper_bind_aggregate failed\");\n            }\n        } else {\n            log::warn!(\"def_aggregate failed\");\n        }\n    }\n    (0, 0)\n}\n\n#[inline]\nfn func_callback(sum_store: &Arc<AtomicI64>, param: CallbackParams) {\n    if param.size() > 0 {",
+      "lines": 35,
+      "secondFile": {
+        "end": 82,
+        "endLoc": {
+          "column": 44,
+          "line": 82,
+          "position": 2545
+        },
+        "name": "bpe-test/tests/test_003.rs",
+        "start": 49,
+        "startLoc": {
+          "column": 8,
+          "line": 49,
+          "position": 1447
+        }
+      },
+      "tokens": 234
+    },
+    {
+      "firstFile": {
+        "end": 74,
+        "endLoc": {
+          "column": 44,
+          "line": 74,
+          "position": 2293
+        },
+        "name": "bpe-sample/src/main.rs",
+        "start": 56,
+        "startLoc": {
+          "column": 47,
+          "line": 56,
+          "position": 1771
+        }
+      },
+      "format": "rust",
+      "fragment": "                func_callback(&sum_store, param);\n            },\n        ) {\n            log::info!(\"define aggregate: {aggregate_id}\");\n            if let Some(mapper_id) = def_mapper_bind_aggregate(FILTER_SQL, aggregate_id) {\n                log::info!(\"define mapper: {mapper_id}\");\n                return (id1, id2);\n            } else {\n                log::warn!(\"def_mapper_bind_aggregate failed\");\n            }\n        } else {\n            log::warn!(\"def_aggregate failed\");\n        }\n    }\n    (0, 0)\n}\n\n#[inline]\nfn func_callback(sum_store: &Arc<AtomicI64>, param: CallbackParams) {",
+      "lines": 19,
+      "secondFile": {
+        "end": 79,
+        "endLoc": {
+          "column": 44,
+          "line": 79,
+          "position": 2447
+        },
+        "name": "bpe-test/tests/test_002.rs",
+        "start": 61,
+        "startLoc": {
+          "column": 72,
+          "line": 61,
+          "position": 1925
+        }
+      },
+      "tokens": 93
+    },
+    {
+      "firstFile": {
+        "end": 74,
+        "endLoc": {
+          "column": 69,
+          "line": 74,
+          "position": 2318
+        },
+        "name": "bpe-sample/src/main.rs",
+        "start": 57,
+        "startLoc": {
+          "column": 13,
+          "line": 57,
+          "position": 1787
+        }
+      },
+      "format": "rust",
+      "fragment": "            },\n        ) {\n            log::info!(\"define aggregate: {aggregate_id}\");\n            if let Some(mapper_id) = def_mapper_bind_aggregate(FILTER_SQL, aggregate_id) {\n                log::info!(\"define mapper: {mapper_id}\");\n                return (id1, id2);\n            } else {\n                log::warn!(\"def_mapper_bind_aggregate failed\");\n            }\n        } else {\n            log::warn!(\"def_aggregate failed\");\n        }\n    }\n    (0, 0)\n}\n\n#[inline]\nfn func_callback(sum_store: &Arc<AtomicI64>, param: CallbackParams) {",
+      "lines": 18,
+      "secondFile": {
+        "end": 79,
+        "endLoc": {
+          "column": 69,
+          "line": 79,
+          "position": 2508
+        },
+        "name": "bpe-test/tests/test_004.rs",
+        "start": 62,
+        "startLoc": {
+          "column": 57,
+          "line": 62,
+          "position": 1977
+        }
+      },
+      "tokens": 95
+    },
+    {
+      "firstFile": {
+        "end": 105,
+        "endLoc": {
+          "column": 20,
+          "line": 105,
+          "position": 3114
+        },
+        "name": "bpe-sample/src/main.rs",
+        "start": 83,
+        "startLoc": {
+          "column": 34,
+          "line": 83,
+          "position": 2694
+        }
+      },
+      "format": "rust",
+      "fragment": "        let _v = v1 + v2 + v3 + v4;\n    } else {\n        log::warn!(\"got null data\");\n    }\n}\n\nfn gen_new_data(u8data: &mut U8Bytes) {\n    update_now(u8data);\n    let ret = new_data(u8data);\n    if ret {\n        log::debug!(\"send success\");\n    } else {\n        log::warn!(\"send failed\");\n    }\n}\n\nfn define_records() -> Option<(u16, u16)> {\n    let id1;\n    let id2;\n    if let Some(id) = def_incoming(\n        \"demo\",\n        vec![\n            Column::new_long(\"a\"),",
+      "lines": 23,
+      "secondFile": {
+        "end": 108,
+        "endLoc": {
+          "column": 20,
+          "line": 108,
+          "position": 3210
+        },
+        "name": "bpe-test/tests/test_009.rs",
+        "start": 86,
+        "startLoc": {
+          "column": 47,
+          "line": 86,
+          "position": 2790
+        }
+      },
+      "tokens": 102
+    },
+    {
+      "firstFile": {
+        "end": 149,
+        "endLoc": {
+          "column": 31,
+          "line": 149,
+          "position": 4310
+        },
+        "name": "bpe-sample/src/main.rs",
+        "start": 87,
+        "startLoc": {
+          "column": 0,
+          "line": 87,
+          "position": 2752
+        }
+      },
+      "format": "rust",
+      "fragment": "}\n\nfn gen_new_data(u8data: &mut U8Bytes) {\n    update_now(u8data);\n    let ret = new_data(u8data);\n    if ret {\n        log::debug!(\"send success\");\n    } else {\n        log::warn!(\"send failed\");\n    }\n}\n\nfn define_records() -> Option<(u16, u16)> {\n    let id1;\n    let id2;\n    if let Some(id) = def_incoming(\n        \"demo\",\n        vec![\n            Column::new_long(\"a\"),\n            Column::new_long(\"b\"),\n            Column::new_long(\"c\"),\n            Column::new_long(\"d\"),\n            Column::new_long(\"e\"),\n            Column::new_long(\"f\"),\n            Column::new_long(\"g\"),\n            Column::new_long(\"h\"),\n            Column::new_long(\"i\"),\n        ],\n    ) {\n        id1 = id;\n        log::info!(\"defined incoming: {id1}\");\n    } else {\n        log::warn!(\"failed to define incoming record\");\n        return None;\n    }\n    if let Some(id) = def_stream(\n        \"stream\",\n        vec![\n            Column::new_long(\"a\"),\n            Column::new_long(\"b\"),\n            Column::new_long(\"c\"),\n            Column::new_long(\"d\"),\n            Column::new_long(\"e\"),\n            Column::new_long(\"f\"),\n            Column::new_long(\"g\"),\n            Column::new_long(\"h\"),\n        ],\n    ) {\n        id2 = id;\n        log::info!(\"defined stream: {id2}\");\n    } else {\n        log::warn!(\"failed to define stream record\");\n        return None;\n    }\n    Some((id1, id2))\n}\n\n#[inline]\nfn gen_u8_bytes(id: u16) -> U8Bytes {\n    let mut u8array = [0_u8; 512];\n    let slice = u8array.as_mut_slice();\n    let now = now();\n    //log::info!(\"now: {now}\");",
+      "lines": 63,
+      "secondFile": {
+        "end": 149,
+        "endLoc": {
+          "column": 31,
+          "line": 149,
+          "position": 4368
+        },
+        "name": "bpe-test/tests/test_002.rs",
+        "start": 87,
+        "startLoc": {
+          "column": 0,
+          "line": 87,
+          "position": 2802
+        }
+      },
+      "tokens": 353
+    },
+    {
+      "firstFile": {
+        "end": 155,
+        "endLoc": {
+          "column": 24,
+          "line": 155,
+          "position": 4517
+        },
+        "name": "bpe-sample/src/main.rs",
+        "start": 91,
+        "startLoc": {
+          "column": 23,
+          "line": 91,
+          "position": 2842
+        }
+      },
+      "format": "rust",
+      "fragment": "    let ret = new_data(u8data);\n    if ret {\n        log::debug!(\"send success\");\n    } else {\n        log::warn!(\"send failed\");\n    }\n}\n\nfn define_records() -> Option<(u16, u16)> {\n    let id1;\n    let id2;\n    if let Some(id) = def_incoming(\n        \"demo\",\n        vec![\n            Column::new_long(\"a\"),\n            Column::new_long(\"b\"),\n            Column::new_long(\"c\"),\n            Column::new_long(\"d\"),\n            Column::new_long(\"e\"),\n            Column::new_long(\"f\"),\n            Column::new_long(\"g\"),\n            Column::new_long(\"h\"),\n            Column::new_long(\"i\"),\n        ],\n    ) {\n        id1 = id;\n        log::info!(\"defined incoming: {id1}\");\n    } else {\n        log::warn!(\"failed to define incoming record\");\n        return None;\n    }\n    if let Some(id) = def_stream(\n        \"stream\",\n        vec![\n            Column::new_long(\"a\"),\n            Column::new_long(\"b\"),\n            Column::new_long(\"c\"),\n            Column::new_long(\"d\"),\n            Column::new_long(\"e\"),\n            Column::new_long(\"f\"),\n            Column::new_long(\"g\"),\n            Column::new_long(\"h\"),\n        ],\n    ) {\n        id2 = id;\n        log::info!(\"defined stream: {id2}\");\n    } else {\n        log::warn!(\"failed to define stream record\");\n        return None;\n    }\n    Some((id1, id2))\n}\n\n#[inline]\nfn gen_u8_bytes(id: u16) -> U8Bytes {\n    let mut u8array = [0_u8; 512];\n    let slice = u8array.as_mut_slice();\n    let now = now();\n    //log::info!(\"now: {now}\");\n    fill_i64(&mut slice[0..8], 1);\n    fill_i64(&mut slice[8..16], 2);\n    fill_i64(&mut slice[16..24], 3);\n    fill_i64(&mut slice[24..32], 4);\n    fill_i64(&mut slice[32..40], 5);\n    fill_i64(&mut slice[40..48], now as i64);",
+      "lines": 65,
+      "secondFile": {
+        "end": 120,
+        "endLoc": {
+          "column": 1,
+          "line": 120,
+          "position": 3481
+        },
+        "name": "bpe-test/tests/test_001.rs",
+        "start": 58,
+        "startLoc": {
+          "column": 24,
+          "line": 58,
+          "position": 1829
+        }
+      },
+      "tokens": 398
+    },
+    {
+      "firstFile": {
+        "end": 207,
+        "endLoc": {
+          "column": 1,
+          "line": 207,
+          "position": 5807
+        },
+        "name": "bpe-sample/src/main.rs",
+        "start": 97,
+        "startLoc": {
+          "column": 0,
+          "line": 97,
+          "position": 2955
+        }
+      },
+      "format": "rust",
+      "fragment": "}\n\nfn define_records() -> Option<(u16, u16)> {\n    let id1;\n    let id2;\n    if let Some(id) = def_incoming(\n        \"demo\",\n        vec![\n            Column::new_long(\"a\"),\n            Column::new_long(\"b\"),\n            Column::new_long(\"c\"),\n            Column::new_long(\"d\"),\n            Column::new_long(\"e\"),\n            Column::new_long(\"f\"),\n            Column::new_long(\"g\"),\n            Column::new_long(\"h\"),\n            Column::new_long(\"i\"),\n        ],\n    ) {\n        id1 = id;\n        log::info!(\"defined incoming: {id1}\");\n    } else {\n        log::warn!(\"failed to define incoming record\");\n        return None;\n    }\n    if let Some(id) = def_stream(\n        \"stream\",\n        vec![\n            Column::new_long(\"a\"),\n            Column::new_long(\"b\"),\n            Column::new_long(\"c\"),\n            Column::new_long(\"d\"),\n            Column::new_long(\"e\"),\n            Column::new_long(\"f\"),\n            Column::new_long(\"g\"),\n            Column::new_long(\"h\"),\n        ],\n    ) {\n        id2 = id;\n        log::info!(\"defined stream: {id2}\");\n    } else {\n        log::warn!(\"failed to define stream record\");\n        return None;\n    }\n    Some((id1, id2))\n}\n\n#[inline]\nfn gen_u8_bytes(id: u16) -> U8Bytes {\n    let mut u8array = [0_u8; 512];\n    let slice = u8array.as_mut_slice();\n    let now = now();\n    //log::info!(\"now: {now}\");\n    fill_i64(&mut slice[0..8], 1);\n    fill_i64(&mut slice[8..16], 2);\n    fill_i64(&mut slice[16..24], 3);\n    fill_i64(&mut slice[24..32], 4);\n    fill_i64(&mut slice[32..40], 5);\n    fill_i64(&mut slice[40..48], now as i64);\n    log::info!(\"v: {}\", now as i64);\n    U8Bytes::new_from_vec(id, 512, Vec::from(u8array))\n}\n\n#[inline]\nfn update_now(u8data: &mut U8Bytes) {\n    let now = now();\n    // log::info!(\"v: {}\", now as i64);\n    fill_i64(&mut u8data.bytes_mut()[40..48], now as i64);\n}\n\n#[inline]\nfn now() -> u64 {\n    SystemTime::now()\n        .duration_since(SystemTime::UNIX_EPOCH)\n        .unwrap()\n        .as_nanos() as u64\n}\n\npub fn exec_with_time_it<F>(mut f: F)\nwhere\n    F: FnMut(),\n{\n    let start = SystemTime::now();\n    for _n in 1..=LOOP_SIZE {\n        f();\n    }\n    let end = SystemTime::now();\n    let duration = end\n        .duration_since(start)\n        .unwrap_or_else(|_e| Duration::new(0, 0));\n    log::info!(\"cost time: {duration:?}\");\n    log::info!(\"cost time: {:?}ms\", duration.as_millis());\n    log::info!(\"cost time: {:?}ns\", duration.as_nanos());\n    log::info!(\n        \"cost time: {:?}ns per operation\",\n        duration.as_nanos() as f64 / LOOP_SIZE_F64\n    );\n}\n\n#[inline]\npub(crate) fn fill_i64(slice: &mut [u8], data: i64) {\n    let p_val = ptr::addr_of!(*slice);\n    let p_i64 = p_val as *mut i64;\n    unsafe { *p_i64 = data };\n}\n\n#[inline]\npub(crate) fn fetch_i64(p_val: *const u8) -> i64 {\n    let p_i64 = p_val as *const i64;\n    unsafe { *p_i64 }\n}",
+      "lines": 111,
+      "secondFile": {
+        "end": 209,
+        "endLoc": {
+          "column": 1,
+          "line": 209,
+          "position": 5866
+        },
+        "name": "bpe-test/tests/test_018.rs",
+        "start": 99,
+        "startLoc": {
+          "column": 0,
+          "line": 99,
+          "position": 3014
+        }
+      },
+      "tokens": 715
+    },
+    {
+      "firstFile": {
+        "end": 148,
+        "endLoc": {
+          "column": 20,
+          "line": 148,
+          "position": 4278
+        },
+        "name": "bpe-sample/src/main.rs",
+        "start": 132,
+        "startLoc": {
+          "column": 28,
+          "line": 132,
+          "position": 3928
+        }
+      },
+      "format": "rust",
+      "fragment": "            Column::new_long(\"h\"),\n        ],\n    ) {\n        id2 = id;\n        log::info!(\"defined stream: {id2}\");\n    } else {\n        log::warn!(\"failed to define stream record\");\n        return None;\n    }\n    Some((id1, id2))\n}\n\n#[inline]\nfn gen_u8_bytes(id: u16) -> U8Bytes {\n    let mut u8array = [0_u8; 512];\n    let slice = u8array.as_mut_slice();\n    let now = now();",
+      "lines": 17,
+      "secondFile": {
+        "end": 148,
+        "endLoc": {
+          "column": 20,
+          "line": 148,
+          "position": 4403
+        },
+        "name": "bpe-test/tests/test_004.rs",
+        "start": 132,
+        "startLoc": {
+          "column": 30,
+          "line": 132,
+          "position": 4053
+        }
+      },
+      "tokens": 88
+    },
+    {
+      "firstFile": {
+        "end": 157,
+        "endLoc": {
+          "column": 38,
+          "line": 157,
+          "position": 4614
+        },
+        "name": "bpe-sample/src/main.rs",
+        "start": 142,
+        "startLoc": {
+          "column": 0,
+          "line": 142,
+          "position": 4132
+        }
+      },
+      "format": "rust",
+      "fragment": "}\n\n#[inline]\nfn gen_u8_bytes(id: u16) -> U8Bytes {\n    let mut u8array = [0_u8; 512];\n    let slice = u8array.as_mut_slice();\n    let now = now();\n    //log::info!(\"now: {now}\");\n    fill_i64(&mut slice[0..8], 1);\n    fill_i64(&mut slice[8..16], 2);\n    fill_i64(&mut slice[16..24], 3);\n    fill_i64(&mut slice[24..32], 4);\n    fill_i64(&mut slice[32..40], 5);\n    fill_i64(&mut slice[40..48], now as i64);\n    log::info!(\"v: {}\", now as i64);\n    U8Bytes::new_from_vec(id, 512, Vec::from(u8array))",
+      "lines": 16,
+      "secondFile": {
+        "end": 122,
+        "endLoc": {
+          "column": 2,
+          "line": 122,
+          "position": 3317
+        },
+        "name": "bpe-test/tests/test_010.rs",
+        "start": 104,
+        "startLoc": {
+          "column": 0,
+          "line": 104,
+          "position": 2840
+        }
+      },
+      "tokens": 141
+    },
+    {
+      "firstFile": {
+        "end": 180,
+        "endLoc": {
+          "column": 7,
+          "line": 180,
+          "position": 5055
+        },
+        "name": "bpe-sample/src/main.rs",
+        "start": 164,
+        "startLoc": {
+          "column": 56,
+          "line": 164,
+          "position": 4799
+        }
+      },
+      "format": "rust",
+      "fragment": "    fill_i64(&mut u8data.bytes_mut()[40..48], now as i64);\n}\n\n#[inline]\nfn now() -> u64 {\n    SystemTime::now()\n        .duration_since(SystemTime::UNIX_EPOCH)\n        .unwrap()\n        .as_nanos() as u64\n}\n\npub fn exec_with_time_it<F>(mut f: F)\nwhere\n    F: FnMut(),\n{\n    let start = SystemTime::now();\n    for _n in 1..=LOOP_SIZE {",
+      "lines": 17,
+      "secondFile": {
+        "end": 180,
+        "endLoc": {
+          "column": 7,
+          "line": 180,
+          "position": 5091
+        },
+        "name": "bpe-test/tests/test_002.rs",
+        "start": 164,
+        "startLoc": {
+          "column": 49,
+          "line": 164,
+          "position": 4835
+        }
+      },
+      "tokens": 71
+    },
+    {
+      "firstFile": {
+        "end": 207,
+        "endLoc": {
+          "column": 1,
+          "line": 207,
+          "position": 5807
+        },
+        "name": "bpe-sample/src/main.rs",
+        "start": 164,
+        "startLoc": {
+          "column": 4,
+          "line": 164,
+          "position": 4747
+        }
+      },
+      "format": "rust",
+      "fragment": "    fill_i64(&mut u8data.bytes_mut()[40..48], now as i64);\n}\n\n#[inline]\nfn now() -> u64 {\n    SystemTime::now()\n        .duration_since(SystemTime::UNIX_EPOCH)\n        .unwrap()\n        .as_nanos() as u64\n}\n\npub fn exec_with_time_it<F>(mut f: F)\nwhere\n    F: FnMut(),\n{\n    let start = SystemTime::now();\n    for _n in 1..=LOOP_SIZE {\n        f();\n    }\n    let end = SystemTime::now();\n    let duration = end\n        .duration_since(start)\n        .unwrap_or_else(|_e| Duration::new(0, 0));\n    log::info!(\"cost time: {duration:?}\");\n    log::info!(\"cost time: {:?}ms\", duration.as_millis());\n    log::info!(\"cost time: {:?}ns\", duration.as_nanos());\n    log::info!(\n        \"cost time: {:?}ns per operation\",\n        duration.as_nanos() as f64 / LOOP_SIZE_F64\n    );\n}\n\n#[inline]\npub(crate) fn fill_i64(slice: &mut [u8], data: i64) {\n    let p_val = ptr::addr_of!(*slice);\n    let p_i64 = p_val as *mut i64;\n    unsafe { *p_i64 = data };\n}\n\n#[inline]\npub(crate) fn fetch_i64(p_val: *const u8) -> i64 {\n    let p_i64 = p_val as *const i64;\n    unsafe { *p_i64 }\n}",
+      "lines": 44,
+      "secondFile": {
+        "end": 205,
+        "endLoc": {
+          "column": 1,
+          "line": 205,
+          "position": 5852
+        },
+        "name": "bpe-test/tests/test_004.rs",
+        "start": 162,
+        "startLoc": {
+          "column": 4,
+          "line": 162,
+          "position": 4793
+        }
+      },
+      "tokens": 284
+    },
+    {
+      "firstFile": {
+        "end": 207,
+        "endLoc": {
+          "column": 1,
+          "line": 207,
+          "position": 5807
+        },
+        "name": "bpe-sample/src/main.rs",
+        "start": 164,
+        "startLoc": {
+          "column": 56,
+          "line": 164,
+          "position": 4799
+        }
+      },
+      "format": "rust",
+      "fragment": "    fill_i64(&mut u8data.bytes_mut()[40..48], now as i64);\n}\n\n#[inline]\nfn now() -> u64 {\n    SystemTime::now()\n        .duration_since(SystemTime::UNIX_EPOCH)\n        .unwrap()\n        .as_nanos() as u64\n}\n\npub fn exec_with_time_it<F>(mut f: F)\nwhere\n    F: FnMut(),\n{\n    let start = SystemTime::now();\n    for _n in 1..=LOOP_SIZE {\n        f();\n    }\n    let end = SystemTime::now();\n    let duration = end\n        .duration_since(start)\n        .unwrap_or_else(|_e| Duration::new(0, 0));\n    log::info!(\"cost time: {duration:?}\");\n    log::info!(\"cost time: {:?}ms\", duration.as_millis());\n    log::info!(\"cost time: {:?}ns\", duration.as_nanos());\n    log::info!(\n        \"cost time: {:?}ns per operation\",\n        duration.as_nanos() as f64 / LOOP_SIZE_F64\n    );\n}\n\n#[inline]\npub(crate) fn fill_i64(slice: &mut [u8], data: i64) {\n    let p_val = ptr::addr_of!(*slice);\n    let p_i64 = p_val as *mut i64;\n    unsafe { *p_i64 = data };\n}\n\n#[inline]\npub(crate) fn fetch_i64(p_val: *const u8) -> i64 {\n    let p_i64 = p_val as *const i64;\n    unsafe { *p_i64 }\n}",
+      "lines": 44,
+      "secondFile": {
+        "end": 210,
+        "endLoc": {
+          "column": 1,
+          "line": 210,
+          "position": 5984
+        },
+        "name": "bpe-test/tests/test_009.rs",
+        "start": 167,
+        "startLoc": {
+          "column": 66,
+          "line": 167,
+          "position": 4976
+        }
+      },
+      "tokens": 268
+    },
+    {
+      "firstFile": {
+        "end": 197,
+        "endLoc": {
+          "column": 13,
+          "line": 197,
+          "position": 5538
+        },
+        "name": "bpe-sample/src/main.rs",
+        "start": 165,
+        "startLoc": {
+          "column": 0,
+          "line": 165,
+          "position": 4802
+        }
+      },
+      "format": "rust",
+      "fragment": "}\n\n#[inline]\nfn now() -> u64 {\n    SystemTime::now()\n        .duration_since(SystemTime::UNIX_EPOCH)\n        .unwrap()\n        .as_nanos() as u64\n}\n\npub fn exec_with_time_it<F>(mut f: F)\nwhere\n    F: FnMut(),\n{\n    let start = SystemTime::now();\n    for _n in 1..=LOOP_SIZE {\n        f();\n    }\n    let end = SystemTime::now();\n    let duration = end\n        .duration_since(start)\n        .unwrap_or_else(|_e| Duration::new(0, 0));\n    log::info!(\"cost time: {duration:?}\");\n    log::info!(\"cost time: {:?}ms\", duration.as_millis());\n    log::info!(\"cost time: {:?}ns\", duration.as_nanos());\n    log::info!(\n        \"cost time: {:?}ns per operation\",\n        duration.as_nanos() as f64 / LOOP_SIZE_F64\n    );\n}\n\n#[inline]\npub(crate) fn fill_i64(slice: &mut [u8], data: i64) {",
+      "lines": 33,
+      "secondFile": {
+        "end": 151,
+        "endLoc": {
+          "column": 13,
+          "line": 151,
+          "position": 4098
+        },
+        "name": "bpe-test/tests/test_007.rs",
+        "start": 119,
+        "startLoc": {
+          "column": 0,
+          "line": 119,
+          "position": 3362
+        }
+      },
+      "tokens": 184
+    },
+    {
+      "firstFile": {
+        "end": 197,
+        "endLoc": {
+          "column": 13,
+          "line": 197,
+          "position": 5538
+        },
+        "name": "bpe-sample/src/main.rs",
+        "start": 180,
+        "startLoc": {
+          "column": 11,
+          "line": 180,
+          "position": 5059
+        }
+      },
+      "format": "rust",
+      "fragment": "    for _n in 1..=LOOP_SIZE {\n        f();\n    }\n    let end = SystemTime::now();\n    let duration = end\n        .duration_since(start)\n        .unwrap_or_else(|_e| Duration::new(0, 0));\n    log::info!(\"cost time: {duration:?}\");\n    log::info!(\"cost time: {:?}ms\", duration.as_millis());\n    log::info!(\"cost time: {:?}ns\", duration.as_nanos());\n    log::info!(\n        \"cost time: {:?}ns per operation\",\n        duration.as_nanos() as f64 / LOOP_SIZE_F64\n    );\n}\n\n#[inline]\npub(crate) fn fill_i64(slice: &mut [u8], data: i64) {",
+      "lines": 18,
+      "secondFile": {
+        "end": 144,
+        "endLoc": {
+          "column": 13,
+          "line": 144,
+          "position": 4062
+        },
+        "name": "bpe-test/tests/test_001.rs",
+        "start": 127,
+        "startLoc": {
+          "column": 10,
+          "line": 127,
+          "position": 3583
+        }
+      },
+      "tokens": 114
+    },
+    {
+      "firstFile": {
+        "end": 148,
+        "endLoc": {
+          "column": 1,
+          "line": 148,
+          "position": 4208
+        },
+        "name": "bpe-test/tests/test_001.rs",
+        "start": 124,
+        "startLoc": {
+          "column": 9,
+          "line": 124,
+          "position": 3532
+        }
+      },
+      "format": "rust",
+      "fragment": "    F: Fn(),\n{\n    let start = SystemTime::now();\n    for _ in 1..=LOOP_SIZE {\n        f();\n    }\n    let end = SystemTime::now();\n    let duration = end\n        .duration_since(start)\n        .unwrap_or_else(|_e| Duration::new(0, 0));\n    log::info!(\"cost time: {duration:?}\");\n    log::info!(\"cost time: {:?}ms\", duration.as_millis());\n    log::info!(\"cost time: {:?}ns\", duration.as_nanos());\n    log::info!(\n        \"cost time: {:?}ns per operation\",\n        duration.as_nanos() as f64 / LOOP_SIZE_F64\n    );\n}\n\n#[inline]\npub(crate) fn fill_u64(slice: &mut [u8], data: u64) {\n    let p_val = ptr::addr_of!(*slice);\n    let p_u64 = p_val as *mut u64;\n    unsafe { *p_u64 = data };\n}",
+      "lines": 25,
+      "secondFile": {
+        "end": 201,
+        "endLoc": {
+          "column": 1,
+          "line": 201,
+          "position": 5719
+        },
+        "name": "bpe-test/tests/test_002.rs",
+        "start": 177,
+        "startLoc": {
+          "column": 12,
+          "line": 177,
+          "position": 5043
+        }
+      },
+      "tokens": 176
+    },
+    {
+      "firstFile": {
+        "end": 26,
+        "endLoc": {
+          "column": 44,
+          "line": 26,
+          "position": 670
+        },
+        "name": "bpe-test/tests/test_002.rs",
+        "start": 1,
+        "startLoc": {
+          "column": 0,
+          "line": 1,
+          "position": 0
+        }
+      },
+      "format": "rust",
+      "fragment": "use bpe::{\n    def_aggregate, def_incoming, def_mapper_bind_aggregate, def_stream, new_data, start, stop,\n    Column, U8Bytes,\n};\nuse std::{\n    env, ptr,\n    sync::{\n        atomic::{AtomicI64, Ordering},\n        Arc,\n    },\n    thread,\n    time::{Duration, SystemTime},\n};\n\nconst BASE: f64 = 1000000f64;\nconst LOOP_SIZE: usize = 1000;\nconst LOOP_SIZE_F64: f64 = LOOP_SIZE as f64;\n\nconst FILTER_SQL: &str = r#\"\n    SELECT demo.f, demo.a, demo.b, demo.c, _sub(_add(demo.d, demo.d), demo.e)\n    FROM demo\n    WHERE (demo.a = 1 AND demo.b = 2) OR (demo.a = 3 AND demo.b = 4)\n    LIMIT 10\n    \"#;\nconst AGGREGATE_SQL: &str = r#\"\n    select _maxd(stream.a), _mind(stream.a), _sumd(stream.a),",
+      "lines": 26,
+      "secondFile": {
+        "end": 26,
+        "endLoc": {
+          "column": 44,
+          "line": 26,
+          "position": 670
+        },
+        "name": "bpe-test/tests/test_003.rs",
+        "start": 1,
+        "startLoc": {
+          "column": 0,
+          "line": 1,
+          "position": 0
+        }
+      },
+      "tokens": 188
+    },
+    {
+      "firstFile": {
+        "end": 64,
+        "endLoc": {
+          "column": 16,
+          "line": 64,
+          "position": 1971
+        },
+        "name": "bpe-test/tests/test_002.rs",
+        "start": 27,
+        "startLoc": {
+          "column": 15,
+          "line": 27,
+          "position": 703
+        }
+      },
+      "format": "rust",
+      "fragment": "           _avg(stream.a)\n    from stream\n    \"#;\n\n#[test]\npub fn test() {\n    env::set_var(\"BPE_HOME\", env::current_dir().unwrap());\n    start();\n    let sum_store = Arc::new(AtomicI64::new(0));\n    let sum_clone = Arc::clone(&sum_store);\n    let (id1, _id2) = init_func(sum_clone);\n    let mut u8data = gen_u8_bytes(id1);\n    exec_with_time_it(move || gen_new_data(&mut u8data));\n    let sum = sum_store.load(Ordering::SeqCst);\n    log::info!(\n        \"sum: {}s({}ns), latency: {}s({}ns)\",\n        sum as f64 / BASE / 1_000_000_000f64,\n        sum,\n        (sum as f64 / BASE / LOOP_SIZE as f64) / 1_000_000_000f64,\n        sum as f64 / BASE / LOOP_SIZE as f64\n    );\n    stop();\n}\n\nfn init_func(sum_store: Arc<AtomicI64>) -> (u16, u16) {\n    let core_ids = core_affinity::get_core_ids().unwrap();\n    core_affinity::set_for_current(core_ids[core_ids.len() - 1]);\n    log::info!(\"thread:{} started\", thread::current().name().unwrap());\n    if let Some((id1, id2)) = define_records() {\n        log::info!(\"define record: {id1}/{id2}\");\n        if let Some(aggregate_id) = def_aggregate(\n            AGGREGATE_SQL,\n            #[inline]\n            move |params| {\n                func_callback(&sum_store, params.u8_ptr(), params.size());\n            },\n        ) {\n            log::info!(\"define aggregate: {aggregate_id}\");",
+      "lines": 38,
+      "secondFile": {
+        "end": 62,
+        "endLoc": {
+          "column": 24,
+          "line": 62,
+          "position": 1944
+        },
+        "name": "bpe-test/tests/test_004.rs",
+        "start": 26,
+        "startLoc": {
+          "column": 36,
+          "line": 26,
+          "position": 679
+        }
+      },
+      "tokens": 308
+    },
+    {
+      "firstFile": {
+        "end": 74,
+        "endLoc": {
+          "column": 5,
+          "line": 74,
+          "position": 2378
+        },
+        "name": "bpe-test/tests/test_002.rs",
+        "start": 27,
+        "startLoc": {
+          "column": 15,
+          "line": 27,
+          "position": 703
+        }
+      },
+      "format": "rust",
+      "fragment": "           _avg(stream.a)\n    from stream\n    \"#;\n\n#[test]\npub fn test() {\n    env::set_var(\"BPE_HOME\", env::current_dir().unwrap());\n    start();\n    let sum_store = Arc::new(AtomicI64::new(0));\n    let sum_clone = Arc::clone(&sum_store);\n    let (id1, _id2) = init_func(sum_clone);\n    let mut u8data = gen_u8_bytes(id1);\n    exec_with_time_it(move || gen_new_data(&mut u8data));\n    let sum = sum_store.load(Ordering::SeqCst);\n    log::info!(\n        \"sum: {}s({}ns), latency: {}s({}ns)\",\n        sum as f64 / BASE / 1_000_000_000f64,\n        sum,\n        (sum as f64 / BASE / LOOP_SIZE as f64) / 1_000_000_000f64,\n        sum as f64 / BASE / LOOP_SIZE as f64\n    );\n    stop();\n}\n\nfn init_func(sum_store: Arc<AtomicI64>) -> (u16, u16) {\n    let core_ids = core_affinity::get_core_ids().unwrap();\n    core_affinity::set_for_current(core_ids[core_ids.len() - 1]);\n    log::info!(\"thread:{} started\", thread::current().name().unwrap());\n    if let Some((id1, id2)) = define_records() {\n        log::info!(\"define record: {id1}/{id2}\");\n        if let Some(aggregate_id) = def_aggregate(\n            AGGREGATE_SQL,\n            #[inline]\n            move |params| {\n                func_callback(&sum_store, params.u8_ptr(), params.size());\n            },\n        ) {\n            log::info!(\"define aggregate: {aggregate_id}\");\n            if let Some(mapper_id) = def_mapper_bind_aggregate(FILTER_SQL, aggregate_id) {\n                log::info!(\"define mapper: {mapper_id}\");\n                return (id1, id2);\n            } else {\n                log::warn!(\"def_mapper_bind_aggregate failed\");\n            }\n        } else {\n            log::warn!(\"def_aggregate failed\");\n        }\n    }",
+      "lines": 48,
+      "secondFile": {
+        "end": 76,
+        "endLoc": {
+          "column": 44,
+          "line": 76,
+          "position": 2370
+        },
+        "name": "bpe-test/tests/test_006.rs",
+        "start": 26,
+        "startLoc": {
+          "column": 70,
+          "line": 26,
+          "position": 763
+        }
+      },
+      "tokens": 372
+    },
+    {
+      "firstFile": {
+        "end": 45,
+        "endLoc": {
+          "column": 46,
+          "line": 45,
+          "position": 1285
+        },
+        "name": "bpe-test/tests/test_002.rs",
+        "start": 28,
+        "startLoc": {
+          "column": 4,
+          "line": 28,
+          "position": 718
+        }
+      },
+      "format": "rust",
+      "fragment": "    from stream\n    \"#;\n\n#[test]\npub fn test() {\n    env::set_var(\"BPE_HOME\", env::current_dir().unwrap());\n    start();\n    let sum_store = Arc::new(AtomicI64::new(0));\n    let sum_clone = Arc::clone(&sum_store);\n    let (id1, _id2) = init_func(sum_clone);\n    let mut u8data = gen_u8_bytes(id1);\n    exec_with_time_it(move || gen_new_data(&mut u8data));\n    let sum = sum_store.load(Ordering::SeqCst);\n    log::info!(\n        \"sum: {}s({}ns), latency: {}s({}ns)\",\n        sum as f64 / BASE / 1_000_000_000f64,\n        sum,\n        (sum as f64 / BASE / LOOP_SIZE as f64) / 1_000_000_000f64,",
+      "lines": 18,
+      "secondFile": {
+        "end": 43,
+        "endLoc": {
+          "column": 19,
+          "line": 43,
+          "position": 1201
+        },
+        "name": "bpe-test/tests/test_003.rs",
+        "start": 27,
+        "startLoc": {
+          "column": 4,
+          "line": 27,
+          "position": 693
+        }
+      },
+      "tokens": 142
+    },
+    {
+      "firstFile": {
+        "end": 51,
+        "endLoc": {
+          "column": 42,
+          "line": 51,
+          "position": 1415
+        },
+        "name": "bpe-test/tests/test_002.rs",
+        "start": 29,
+        "startLoc": {
+          "column": 4,
+          "line": 29,
+          "position": 734
+        }
+      },
+      "format": "rust",
+      "fragment": "    \"#;\n\n#[test]\npub fn test() {\n    env::set_var(\"BPE_HOME\", env::current_dir().unwrap());\n    start();\n    let sum_store = Arc::new(AtomicI64::new(0));\n    let sum_clone = Arc::clone(&sum_store);\n    let (id1, _id2) = init_func(sum_clone);\n    let mut u8data = gen_u8_bytes(id1);\n    exec_with_time_it(move || gen_new_data(&mut u8data));\n    let sum = sum_store.load(Ordering::SeqCst);\n    log::info!(\n        \"sum: {}s({}ns), latency: {}s({}ns)\",\n        sum as f64 / BASE / 1_000_000_000f64,\n        sum,\n        (sum as f64 / BASE / LOOP_SIZE as f64) / 1_000_000_000f64,\n        sum as f64 / BASE / LOOP_SIZE as f64\n    );\n    stop();\n}\n\nfn init_func(sum_store: Arc<AtomicI64>) -> (u16, u16) {",
+      "lines": 23,
+      "secondFile": {
+        "end": 42,
+        "endLoc": {
+          "column": 44,
+          "line": 42,
+          "position": 1152
+        },
+        "name": "bpe-test/tests/test_010.rs",
+        "start": 20,
+        "startLoc": {
+          "column": 4,
+          "line": 20,
+          "position": 502
+        }
+      },
+      "tokens": 172
+    },
+    {
+      "firstFile": {
+        "end": 66,
+        "endLoc": {
+          "column": 19,
+          "line": 66,
+          "position": 2125
+        },
+        "name": "bpe-test/tests/test_002.rs",
+        "start": 29,
+        "startLoc": {
+          "column": 4,
+          "line": 29,
+          "position": 734
+        }
+      },
+      "format": "rust",
+      "fragment": "    \"#;\n\n#[test]\npub fn test() {\n    env::set_var(\"BPE_HOME\", env::current_dir().unwrap());\n    start();\n    let sum_store = Arc::new(AtomicI64::new(0));\n    let sum_clone = Arc::clone(&sum_store);\n    let (id1, _id2) = init_func(sum_clone);\n    let mut u8data = gen_u8_bytes(id1);\n    exec_with_time_it(move || gen_new_data(&mut u8data));\n    let sum = sum_store.load(Ordering::SeqCst);\n    log::info!(\n        \"sum: {}s({}ns), latency: {}s({}ns)\",\n        sum as f64 / BASE / 1_000_000_000f64,\n        sum,\n        (sum as f64 / BASE / LOOP_SIZE as f64) / 1_000_000_000f64,\n        sum as f64 / BASE / LOOP_SIZE as f64\n    );\n    stop();\n}\n\nfn init_func(sum_store: Arc<AtomicI64>) -> (u16, u16) {\n    let core_ids = core_affinity::get_core_ids().unwrap();\n    core_affinity::set_for_current(core_ids[core_ids.len() - 1]);\n    log::info!(\"thread:{} started\", thread::current().name().unwrap());\n    if let Some((id1, id2)) = define_records() {\n        log::info!(\"define record: {id1}/{id2}\");\n        if let Some(aggregate_id) = def_aggregate(\n            AGGREGATE_SQL,\n            #[inline]\n            move |params| {\n                func_callback(&sum_store, params.u8_ptr(), params.size());\n            },\n        ) {\n            log::info!(\"define aggregate: {aggregate_id}\");\n            if let Some(mapper_id) = def_mapper_bind_aggregate(FILTER_SQL, aggregate_id) {\n                log::info!(\"define mapper: {mapper_id}\");",
+      "lines": 38,
+      "secondFile": {
+        "end": 64,
+        "endLoc": {
+          "column": 16,
+          "line": 64,
+          "position": 1815
+        },
+        "name": "bpe-test/tests/test_015.rs",
+        "start": 20,
+        "startLoc": {
+          "column": 4,
+          "line": 20,
+          "position": 507
+        }
+      },
+      "tokens": 323
+    },
+    {
+      "firstFile": {
+        "end": 129,
+        "endLoc": {
+          "column": 20,
+          "line": 129,
+          "position": 3867
+        },
+        "name": "bpe-test/tests/test_002.rs",
+        "start": 86,
+        "startLoc": {
+          "column": 4,
+          "line": 86,
+          "position": 2740
+        }
+      },
+      "format": "rust",
+      "fragment": "    sum_store.fetch_add((BASE * delta) as i64, Ordering::SeqCst);\n}\n\nfn gen_new_data(u8data: &mut U8Bytes) {\n    update_now(u8data);\n    let ret = new_data(u8data);\n    if ret {\n        log::debug!(\"send success\");\n    } else {\n        log::warn!(\"send failed\");\n    }\n}\n\nfn define_records() -> Option<(u16, u16)> {\n    let id1;\n    let id2;\n    if let Some(id) = def_incoming(\n        \"demo\",\n        vec![\n            Column::new_long(\"a\"),\n            Column::new_long(\"b\"),\n            Column::new_long(\"c\"),\n            Column::new_long(\"d\"),\n            Column::new_long(\"e\"),\n            Column::new_long(\"f\"),\n            Column::new_long(\"g\"),\n            Column::new_long(\"h\"),\n            Column::new_long(\"i\"),\n        ],\n    ) {\n        id1 = id;\n        log::info!(\"defined incoming: {id1}\");\n    } else {\n        log::warn!(\"failed to define incoming record\");\n        return None;\n    }\n    if let Some(id) = def_stream(\n        \"stream\",\n        vec![\n            Column::new_long(\"a\"),\n            Column::new_long(\"b\"),\n            Column::new_long(\"c\"),\n            Column::new_double(\"d\"),\n            Column::new_double(\"e\"),",
+      "lines": 44,
+      "secondFile": {
+        "end": 136,
+        "endLoc": {
+          "column": 20,
+          "line": 136,
+          "position": 4188
+        },
+        "name": "bpe-test/tests/test_003.rs",
+        "start": 93,
+        "startLoc": {
+          "column": 4,
+          "line": 93,
+          "position": 3063
+        }
+      },
+      "tokens": 257
+    },
+    {
+      "firstFile": {
+        "end": 175,
+        "endLoc": {
+          "column": 34,
+          "line": 175,
+          "position": 5021
+        },
+        "name": "bpe-test/tests/test_002.rs",
+        "start": 150,
+        "startLoc": {
+          "column": 33,
+          "line": 150,
+          "position": 4402
+        }
+      },
+      "format": "rust",
+      "fragment": "    fill_u64(&mut slice[0..8], 1);\n    fill_u64(&mut slice[8..16], 2);\n    fill_u64(&mut slice[16..24], 3);\n    fill_u64(&mut slice[24..32], 4);\n    fill_u64(&mut slice[32..40], 5);\n    fill_u64(&mut slice[40..48], now);\n    //let v = fetch_u64(slice.as_ptr());\n    //log::info!(\"v: {v}\");\n    U8Bytes::new_from_vec(id, 512, Vec::from(u8array))\n}\n\n#[inline]\nfn update_now(u8data: &mut U8Bytes) {\n    let now = now();\n    fill_u64(&mut u8data.bytes_mut()[40..48], now);\n}\n\n#[inline]\nfn now() -> u64 {\n    SystemTime::now()\n        .duration_since(SystemTime::UNIX_EPOCH)\n        .unwrap()\n        .as_nanos() as u64\n}\n\npub fn exec_with_time_it<F>(mut f: F)",
+      "lines": 26,
+      "secondFile": {
+        "end": 182,
+        "endLoc": {
+          "column": 34,
+          "line": 182,
+          "position": 5342
+        },
+        "name": "bpe-test/tests/test_003.rs",
+        "start": 157,
+        "startLoc": {
+          "column": 33,
+          "line": 157,
+          "position": 4723
+        }
+      },
+      "tokens": 165
+    },
+    {
+      "firstFile": {
+        "end": 139,
+        "endLoc": {
+          "column": 20,
+          "line": 139,
+          "position": 4299
+        },
+        "name": "bpe-test/tests/test_003.rs",
+        "start": 92,
+        "startLoc": {
+          "column": 32,
+          "line": 92,
+          "position": 3057
+        }
+      },
+      "format": "rust",
+      "fragment": "    log::info!(\"delta: {delta}\");\n    sum_store.fetch_add((BASE * delta) as i64, Ordering::SeqCst);\n}\n\nfn gen_new_data(u8data: &mut U8Bytes) {\n    update_now(u8data);\n    let ret = new_data(u8data);\n    if ret {\n        log::debug!(\"send success\");\n    } else {\n        log::warn!(\"send failed\");\n    }\n}\n\nfn define_records() -> Option<(u16, u16)> {\n    let id1;\n    let id2;\n    if let Some(id) = def_incoming(\n        \"demo\",\n        vec![\n            Column::new_long(\"a\"),\n            Column::new_long(\"b\"),\n            Column::new_long(\"c\"),\n            Column::new_long(\"d\"),\n            Column::new_long(\"e\"),\n            Column::new_long(\"f\"),\n            Column::new_long(\"g\"),\n            Column::new_long(\"h\"),\n            Column::new_long(\"i\"),\n        ],\n    ) {\n        id1 = id;\n        log::info!(\"defined incoming: {id1}\");\n    } else {\n        log::warn!(\"failed to define incoming record\");\n        return None;\n    }\n    if let Some(id) = def_stream(\n        \"stream\",\n        vec![\n            Column::new_long(\"a\"),\n            Column::new_long(\"b\"),\n            Column::new_long(\"c\"),\n            Column::new_long(\"d\"),\n            Column::new_double(\"e\"),\n            Column::new_double(\"f\"),\n            Column::new_double(\"g\"),\n            Column::new_long(\"h\"),",
+      "lines": 48,
+      "secondFile": {
+        "end": 132,
+        "endLoc": {
+          "column": 20,
+          "line": 132,
+          "position": 4043
+        },
+        "name": "bpe-test/tests/test_004.rs",
+        "start": 85,
+        "startLoc": {
+          "column": 51,
+          "line": 85,
+          "position": 2801
+        }
+      },
+      "tokens": 282
+    },
+    {
+      "firstFile": {
+        "end": 220,
+        "endLoc": {
+          "column": 1,
+          "line": 220,
+          "position": 6286
+        },
+        "name": "bpe-test/tests/test_003.rs",
+        "start": 204,
+        "startLoc": {
+          "column": 35,
+          "line": 204,
+          "position": 5916
+        }
+      },
+      "format": "rust",
+      "fragment": "pub(crate) fn fill_u64(slice: &mut [u8], data: u64) {\n    let p_val = ptr::addr_of!(*slice);\n    let p_u64 = p_val as *mut u64;\n    unsafe { *p_u64 = data };\n}\n\n#[inline]\npub(crate) fn fetch_i64(p_val: *const u8) -> i64 {\n    let p_i64 = p_val as *const i64;\n    unsafe { *p_i64 }\n}\n\n#[inline]\npub(crate) fn fetch_f64(p_val: *const u8) -> f64 {\n    let p_f64 = p_val as *const f64;\n    unsafe { *p_f64 }\n}",
+      "lines": 17,
+      "secondFile": {
+        "end": 215,
+        "endLoc": {
+          "column": 1,
+          "line": 215,
+          "position": 6076
+        },
+        "name": "bpe-test/tests/test_006.rs",
+        "start": 199,
+        "startLoc": {
+          "column": 35,
+          "line": 199,
+          "position": 5706
+        }
+      },
+      "tokens": 112
+    },
+    {
+      "firstFile": {
+        "end": 83,
+        "endLoc": {
+          "column": 7,
+          "line": 83,
+          "position": 2611
+        },
+        "name": "bpe-test/tests/test_004.rs",
+        "start": 23,
+        "startLoc": {
+          "column": 10,
+          "line": 23,
+          "position": 600
+        }
+      },
+      "format": "rust",
+      "fragment": "    LIMIT 10\n    \"#;\nconst AGGREGATE_SQL: &str = r#\"\n    select _firstl(stream.a), _lastl(stream.a) from stream\n    \"#;\n\n#[test]\npub fn test() {\n    env::set_var(\"BPE_HOME\", env::current_dir().unwrap());\n    start();\n    let sum_store = Arc::new(AtomicI64::new(0));\n    let sum_clone = Arc::clone(&sum_store);\n    let (id1, id2) = init_func(sum_clone);\n    if id1 == 0 || id2 == 0 {\n        log::warn!(\"init failed\");\n    } else {\n        let mut u8data = gen_u8_bytes(id1);\n        exec_with_time_it(move || gen_new_data(&mut u8data));\n        let sum = sum_store.load(Ordering::SeqCst);\n        log::info!(\n            \"sum: {}s({}ns), latency: {}s({}ns)\",\n            sum as f64 / BASE / 1_000_000_000f64,\n            sum,\n            (sum as f64 / BASE / LOOP_SIZE as f64) / 1_000_000_000f64,\n            sum as f64 / BASE / LOOP_SIZE as f64\n        );\n    }\n    stop();\n}\n\nfn init_func(sum_store: Arc<AtomicI64>) -> (u16, u16) {\n    let core_ids = core_affinity::get_core_ids().unwrap();\n    core_affinity::set_for_current(core_ids[core_ids.len() - 1]);\n    log::info!(\"thread:{} started\", thread::current().name().unwrap());\n    if let Some((id1, id2)) = define_records() {\n        log::info!(\"define record: {id1}/{id2}\");\n        if let Some(aggregate_id) = def_aggregate(\n            AGGREGATE_SQL,\n            #[inline]\n            move |param| func_callback(&sum_store, param),\n        ) {\n            log::info!(\"define aggregate: {aggregate_id}\");\n            if let Some(mapper_id) = def_mapper_bind_aggregate(FILTER_SQL, aggregate_id) {\n                log::info!(\"define mapper: {mapper_id}\");\n                return (id1, id2);\n            } else {\n                log::warn!(\"def_mapper_bind_aggregate failed\");\n            }\n        } else {\n            log::warn!(\"def_aggregate failed\");\n        }\n    }\n    (0, 0)\n}\n\n#[inline]\nfn func_callback(sum_store: &Arc<AtomicI64>, param: CallbackParams) {\n    let data = param.u8_ptr();\n    let now = now();\n    let timestamp_first = fetch_i64(data);\n    let timestamp_last = fetch_i64(unsafe { data.add(8) });",
+      "lines": 61,
+      "secondFile": {
+        "end": 83,
+        "endLoc": {
+          "column": 7,
+          "line": 83,
+          "position": 2612
+        },
+        "name": "bpe-test/tests/test_005.rs",
+        "start": 23,
+        "startLoc": {
+          "column": 11,
+          "line": 23,
+          "position": 601
+        }
+      },
+      "tokens": 455
+    },
+    {
+      "firstFile": {
+        "end": 205,
+        "endLoc": {
+          "column": 1,
+          "line": 205,
+          "position": 5852
+        },
+        "name": "bpe-test/tests/test_004.rs",
+        "start": 84,
+        "startLoc": {
+          "column": 83,
+          "line": 84,
+          "position": 2747
+        }
+      },
+      "format": "rust",
+      "fragment": "    log::info!(\"long: now->{now}, first->{timestamp_first}, last->{timestamp_last}\");\n    let delta = now as f64 - timestamp_first as f64;\n    sum_store.fetch_add((BASE * delta) as i64, Ordering::SeqCst);\n}\n\nfn gen_new_data(u8data: &mut U8Bytes) {\n    update_now(u8data);\n    let ret = new_data(u8data);\n    if ret {\n        log::debug!(\"send success\");\n    } else {\n        log::warn!(\"send failed\");\n    }\n}\n\nfn define_records() -> Option<(u16, u16)> {\n    let id1;\n    let id2;\n    if let Some(id) = def_incoming(\n        \"demo\",\n        vec![\n            Column::new_long(\"a\"),\n            Column::new_long(\"b\"),\n            Column::new_long(\"c\"),\n            Column::new_long(\"d\"),\n            Column::new_long(\"e\"),\n            Column::new_long(\"f\"),\n            Column::new_long(\"g\"),\n            Column::new_long(\"h\"),\n            Column::new_long(\"i\"),\n        ],\n    ) {\n        id1 = id;\n        log::info!(\"defined incoming: {id1}\");\n    } else {\n        log::warn!(\"failed to define incoming record\");\n        return None;\n    }\n    if let Some(id) = def_stream(\n        \"stream\",\n        vec![\n            Column::new_long(\"a\"),\n            Column::new_long(\"b\"),\n            Column::new_long(\"c\"),\n            Column::new_long(\"d\"),\n            Column::new_double(\"e\"),\n            Column::new_double(\"f\"),\n            Column::new_double(\"g\"),\n            Column::new_double(\"h\"),\n        ],\n    ) {\n        id2 = id;\n        log::info!(\"defined stream: {id2}\");\n    } else {\n        log::warn!(\"failed to define stream record\");\n        return None;\n    }\n    Some((id1, id2))\n}\n\n#[inline]\nfn gen_u8_bytes(id: u16) -> U8Bytes {\n    let mut u8array = [0_u8; 512];\n    let slice = u8array.as_mut_slice();\n    let now = now();\n    fill_i64(&mut slice[0..8], 1);\n    fill_i64(&mut slice[8..16], 2);\n    fill_i64(&mut slice[16..24], 3);\n    fill_i64(&mut slice[24..32], 4);\n    fill_i64(&mut slice[32..40], 5);\n    fill_i64(&mut slice[40..48], now as i64);\n    U8Bytes::new_from_vec(id, 512, Vec::from(u8array))\n}\n\n#[inline]\nfn update_now(u8data: &mut U8Bytes) {\n    let now = now();\n    log::info!(\"now: {now}\");\n    fill_i64(&mut u8data.bytes_mut()[40..48], now as i64);\n}\n\n#[inline]\nfn now() -> u64 {\n    SystemTime::now()\n        .duration_since(SystemTime::UNIX_EPOCH)\n        .unwrap()\n        .as_nanos() as u64\n}\n\npub fn exec_with_time_it<F>(mut f: F)\nwhere\n    F: FnMut(),\n{\n    let start = SystemTime::now();\n    for _ in 1..=LOOP_SIZE {\n        f();\n    }\n    let end = SystemTime::now();\n    let duration = end\n        .duration_since(start)\n        .unwrap_or_else(|_e| Duration::new(0, 0));\n    log::info!(\"cost time: {duration:?}\");\n    log::info!(\"cost time: {:?}ms\", duration.as_millis());\n    log::info!(\"cost time: {:?}ns\", duration.as_nanos());\n    log::info!(\n        \"cost time: {:?}ns per operation\",\n        duration.as_nanos() as f64 / LOOP_SIZE_F64\n    );\n}\n\n#[inline]\npub(crate) fn fill_i64(slice: &mut [u8], data: i64) {\n    let p_val = ptr::addr_of!(*slice);\n    let p_i64 = p_val as *mut i64;\n    unsafe { *p_i64 = data };\n}\n\n#[inline]\npub(crate) fn fetch_i64(p_val: *const u8) -> i64 {\n    let p_i64 = p_val as *const i64;\n    unsafe { *p_i64 }\n}",
+      "lines": 122,
+      "secondFile": {
+        "end": 203,
+        "endLoc": {
+          "column": 1,
+          "line": 203,
+          "position": 5707
+        },
+        "name": "bpe-test/tests/test_005.rs",
+        "start": 82,
+        "startLoc": {
+          "column": 40,
+          "line": 82,
+          "position": 2602
+        }
+      },
+      "tokens": 789
+    },
+    {
+      "firstFile": {
+        "end": 149,
+        "endLoc": {
+          "column": 12,
+          "line": 149,
+          "position": 4416
+        },
+        "name": "bpe-test/tests/test_004.rs",
+        "start": 128,
+        "startLoc": {
+          "column": 28,
+          "line": 128,
+          "position": 3905
+        }
+      },
+      "format": "rust",
+      "fragment": "            Column::new_long(\"d\"),\n            Column::new_double(\"e\"),\n            Column::new_double(\"f\"),\n            Column::new_double(\"g\"),\n            Column::new_double(\"h\"),\n        ],\n    ) {\n        id2 = id;\n        log::info!(\"defined stream: {id2}\");\n    } else {\n        log::warn!(\"failed to define stream record\");\n        return None;\n    }\n    Some((id1, id2))\n}\n\n#[inline]\nfn gen_u8_bytes(id: u16) -> U8Bytes {\n    let mut u8array = [0_u8; 512];\n    let slice = u8array.as_mut_slice();\n    let now = now();\n    fill_i64(&mut slice[0..8], 1);",
+      "lines": 22,
+      "secondFile": {
+        "end": 152,
+        "endLoc": {
+          "column": 31,
+          "line": 152,
+          "position": 4440
+        },
+        "name": "bpe-test/tests/test_009.rs",
+        "start": 131,
+        "startLoc": {
+          "column": 30,
+          "line": 131,
+          "position": 3910
+        }
+      },
+      "tokens": 121
+    },
+    {
+      "firstFile": {
+        "end": 19,
+        "endLoc": {
+          "column": 16,
+          "line": 19,
+          "position": 412
+        },
+        "name": "bpe-test/tests/test_006.rs",
+        "start": 4,
+        "startLoc": {
+          "column": 0,
+          "line": 4,
+          "position": 143
+        }
+      },
+      "format": "rust",
+      "fragment": "};\nuse std::{\n    env, ptr,\n    sync::{\n        atomic::{AtomicI64, Ordering},\n        Arc,\n    },\n    thread,\n    time::{Duration, SystemTime},\n};\n\nconst LOOP_SIZE: usize = 20;\nconst LOOP_SIZE_F64: f64 = LOOP_SIZE as f64;\n\nconst FILTER_SQL: &str = r#\"\n    SELECT demo.f, demo.a, demo.b, demo.c, _sub(_add(demo.d, demo.d), demo.e)",
+      "lines": 16,
+      "secondFile": {
+        "end": 16,
+        "endLoc": {
+          "column": 16,
+          "line": 16,
+          "position": 359
+        },
+        "name": "bpe-test/tests/test_007.rs",
+        "start": 1,
+        "startLoc": {
+          "column": 90,
+          "line": 1,
+          "position": 90
+        }
+      },
+      "tokens": 69
+    },
+    {
+      "firstFile": {
+        "end": 85,
+        "endLoc": {
+          "column": 44,
+          "line": 85,
+          "position": 2776
+        },
+        "name": "bpe-test/tests/test_006.rs",
+        "start": 26,
+        "startLoc": {
+          "column": 11,
+          "line": 26,
+          "position": 704
+        }
+      },
+      "format": "rust",
+      "fragment": "           _firstd(stream.a), _lastd(stream.a), _mind(stream.a), _maxd(stream.a)\n    from stream\n    \"#;\n\n#[test]\npub fn test() {\n    env::set_var(\"BPE_HOME\", env::current_dir().unwrap());\n    start();\n    let sum_store = Arc::new(AtomicI64::new(0));\n    let sum_clone = Arc::clone(&sum_store);\n    let (id1, id2) = init_func(sum_clone);\n    if id1 == 0 || id2 == 0 {\n        log::warn!(\"init failed\");\n    } else {\n        let mut u8data = gen_u8_bytes(id1);\n        exec_with_time_it(move || gen_new_data(&mut u8data));\n        let sum = sum_store.load(Ordering::SeqCst);\n        log::info!(\"sum: {sum}\");\n    }\n    stop();\n}\n\nfn init_func(sum_store: Arc<AtomicI64>) -> (u16, u16) {\n    let core_ids = core_affinity::get_core_ids().unwrap();\n    core_affinity::set_for_current(core_ids[core_ids.len() - 1]);\n    log::info!(\"thread:{} started\", thread::current().name().unwrap());\n    if let Some((id1, id2)) = define_records() {\n        log::info!(\"define record: {id1}/{id2}\");\n        if let Some(aggregate_id) = def_aggregate(\n            AGGREGATE_SQL,\n            #[inline]\n            move |param| {\n                func_callback(&sum_store, param);\n            },\n        ) {\n            log::info!(\"define aggregate: {aggregate_id}\");\n            if let Some(mapper_id) = def_mapper_bind_aggregate(FILTER_SQL, aggregate_id) {\n                log::info!(\"define mapper: {mapper_id}\");\n                return (id1, id2);\n            } else {\n                log::warn!(\"def_mapper_bind_aggregate failed\");\n            }\n        } else {\n            log::warn!(\"def_aggregate failed\");\n        }\n    }\n    (0, 0)\n}\n\n#[inline]\nfn func_callback(sum_store: &Arc<AtomicI64>, _param: CallbackParams) {\n    sum_store.fetch_add(1, Ordering::SeqCst);\n    let ptr = _param.u8_ptr();\n    let v1 = fetch_i64(ptr);\n    let v2 = fetch_i64(ptr.wrapping_add(8));\n    let v3 = fetch_i64(ptr.wrapping_add(16));\n    let v4 = fetch_i64(ptr.wrapping_add(24));\n    let v5 = fetch_f64(ptr.wrapping_add(32));\n    let v6 = fetch_f64(ptr.wrapping_add(40));\n    let v7 = fetch_f64(ptr.wrapping_add(48));",
+      "lines": 60,
+      "secondFile": {
+        "end": 92,
+        "endLoc": {
+          "column": 25,
+          "line": 92,
+          "position": 2876
+        },
+        "name": "bpe-test/tests/test_009.rs",
+        "start": 28,
+        "startLoc": {
+          "column": 11,
+          "line": 28,
+          "position": 759
+        }
+      },
+      "tokens": 505
+    },
+    {
+      "firstFile": {
+        "end": 18,
+        "endLoc": {
+          "column": 18,
+          "line": 18,
+          "position": 417
+        },
+        "name": "bpe-test/tests/test_007.rs",
+        "start": 1,
+        "startLoc": {
+          "column": 0,
+          "line": 1,
+          "position": 0
+        }
+      },
+      "format": "rust",
+      "fragment": "use bpe::{def_incoming, def_mapper, new_data, start, stop, CallbackParams, Column, U8Bytes};\nuse std::{\n    env, ptr,\n    sync::{\n        atomic::{AtomicI64, Ordering},\n        Arc,\n    },\n    thread,\n    time::{Duration, SystemTime},\n};\n\nconst LOOP_SIZE: usize = 20;\nconst LOOP_SIZE_F64: f64 = LOOP_SIZE as f64;\n\nconst FILTER_SQL: &str = r#\"\n    SELECT demo.a, demo.b, demo.c, demo.d\n    FROM demo\n    WHERE demo.a > 1.0 AND demo.b > 2.0 AND demo.c > 3.0 AND demo.d > 4.0 AND demo.e > 5.0",
+      "lines": 18,
+      "secondFile": {
+        "end": 18,
+        "endLoc": {
+          "column": 18,
+          "line": 18,
+          "position": 417
+        },
+        "name": "bpe-test/tests/test_008.rs",
+        "start": 1,
+        "startLoc": {
+          "column": 0,
+          "line": 1,
+          "position": 0
+        }
+      },
+      "tokens": 109
+    },
+    {
+      "firstFile": {
+        "end": 18,
+        "endLoc": {
+          "column": 18,
+          "line": 18,
+          "position": 417
+        },
+        "name": "bpe-test/tests/test_007.rs",
+        "start": 1,
+        "startLoc": {
+          "column": 0,
+          "line": 1,
+          "position": 0
+        }
+      },
+      "format": "rust",
+      "fragment": "use bpe::{def_incoming, def_mapper, new_data, start, stop, CallbackParams, Column, U8Bytes};\nuse std::{\n    env, ptr,\n    sync::{\n        atomic::{AtomicI64, Ordering},\n        Arc,\n    },\n    thread,\n    time::{Duration, SystemTime},\n};\n\nconst LOOP_SIZE: usize = 20;\nconst LOOP_SIZE_F64: f64 = LOOP_SIZE as f64;\n\nconst FILTER_SQL: &str = r#\"\n    SELECT demo.a, demo.b, demo.c, demo.d\n    FROM demo\n    WHERE demo.a > 1.0 AND demo.b > 2.0 AND demo.c > 3.0 AND demo.d > 4.0 AND demo.e > 5.0",
+      "lines": 18,
+      "secondFile": {
+        "end": 18,
+        "endLoc": {
+          "column": 18,
+          "line": 18,
+          "position": 417
+        },
+        "name": "bpe-test/tests/test_010.rs",
+        "start": 1,
+        "startLoc": {
+          "column": 0,
+          "line": 1,
+          "position": 0
+        }
+      },
+      "tokens": 109
+    },
+    {
+      "firstFile": {
+        "end": 18,
+        "endLoc": {
+          "column": 26,
+          "line": 18,
+          "position": 425
+        },
+        "name": "bpe-test/tests/test_007.rs",
+        "start": 1,
+        "startLoc": {
+          "column": 0,
+          "line": 1,
+          "position": 0
+        }
+      },
+      "format": "rust",
+      "fragment": "use bpe::{def_incoming, def_mapper, new_data, start, stop, CallbackParams, Column, U8Bytes};\nuse std::{\n    env, ptr,\n    sync::{\n        atomic::{AtomicI64, Ordering},\n        Arc,\n    },\n    thread,\n    time::{Duration, SystemTime},\n};\n\nconst LOOP_SIZE: usize = 20;\nconst LOOP_SIZE_F64: f64 = LOOP_SIZE as f64;\n\nconst FILTER_SQL: &str = r#\"\n    SELECT demo.a, demo.b, demo.c, demo.d\n    FROM demo\n    WHERE demo.a > 1.0 AND demo.b > 2.0 AND demo.c > 3.0 AND demo.d > 4.0 AND demo.e > 5.0",
+      "lines": 18,
+      "secondFile": {
+        "end": 18,
+        "endLoc": {
+          "column": 21,
+          "line": 18,
+          "position": 420
+        },
+        "name": "bpe-test/tests/test_011.rs",
+        "start": 1,
+        "startLoc": {
+          "column": 0,
+          "line": 1,
+          "position": 0
+        }
+      },
+      "tokens": 111
+    },
+    {
+      "firstFile": {
+        "end": 17,
+        "endLoc": {
+          "column": 13,
+          "line": 17,
+          "position": 398
+        },
+        "name": "bpe-test/tests/test_007.rs",
+        "start": 1,
+        "startLoc": {
+          "column": 0,
+          "line": 1,
+          "position": 0
+        }
+      },
+      "format": "rust",
+      "fragment": "use bpe::{def_incoming, def_mapper, new_data, start, stop, CallbackParams, Column, U8Bytes};\nuse std::{\n    env, ptr,\n    sync::{\n        atomic::{AtomicI64, Ordering},\n        Arc,\n    },\n    thread,\n    time::{Duration, SystemTime},\n};\n\nconst LOOP_SIZE: usize = 20;\nconst LOOP_SIZE_F64: f64 = LOOP_SIZE as f64;\n\nconst FILTER_SQL: &str = r#\"\n    SELECT demo.a, demo.b, demo.c, demo.d\n    FROM demo",
+      "lines": 17,
+      "secondFile": {
+        "end": 17,
+        "endLoc": {
+          "column": 13,
+          "line": 17,
+          "position": 398
+        },
+        "name": "bpe-test/tests/test_012.rs",
+        "start": 1,
+        "startLoc": {
+          "column": 0,
+          "line": 1,
+          "position": 0
+        }
+      },
+      "tokens": 104
+    },
+    {
+      "firstFile": {
+        "end": 18,
+        "endLoc": {
+          "column": 18,
+          "line": 18,
+          "position": 417
+        },
+        "name": "bpe-test/tests/test_007.rs",
+        "start": 1,
+        "startLoc": {
+          "column": 0,
+          "line": 1,
+          "position": 0
+        }
+      },
+      "format": "rust",
+      "fragment": "use bpe::{def_incoming, def_mapper, new_data, start, stop, CallbackParams, Column, U8Bytes};\nuse std::{\n    env, ptr,\n    sync::{\n        atomic::{AtomicI64, Ordering},\n        Arc,\n    },\n    thread,\n    time::{Duration, SystemTime},\n};\n\nconst LOOP_SIZE: usize = 20;\nconst LOOP_SIZE_F64: f64 = LOOP_SIZE as f64;\n\nconst FILTER_SQL: &str = r#\"\n    SELECT demo.a, demo.b, demo.c, demo.d\n    FROM demo\n    WHERE demo.a > 1.0 AND demo.b > 2.0 AND demo.c > 3.0 AND demo.d > 4.0 AND demo.e > 5.0",
+      "lines": 18,
+      "secondFile": {
+        "end": 18,
+        "endLoc": {
+          "column": 18,
+          "line": 18,
+          "position": 417
+        },
+        "name": "bpe-test/tests/test_014.rs",
+        "start": 1,
+        "startLoc": {
+          "column": 0,
+          "line": 1,
+          "position": 0
+        }
+      },
+      "tokens": 109
+    },
+    {
+      "firstFile": {
+        "end": 18,
+        "endLoc": {
+          "column": 33,
+          "line": 18,
+          "position": 432
+        },
+        "name": "bpe-test/tests/test_007.rs",
+        "start": 1,
+        "startLoc": {
+          "column": 0,
+          "line": 1,
+          "position": 0
+        }
+      },
+      "format": "rust",
+      "fragment": "use bpe::{def_incoming, def_mapper, new_data, start, stop, CallbackParams, Column, U8Bytes};\nuse std::{\n    env, ptr,\n    sync::{\n        atomic::{AtomicI64, Ordering},\n        Arc,\n    },\n    thread,\n    time::{Duration, SystemTime},\n};\n\nconst LOOP_SIZE: usize = 20;\nconst LOOP_SIZE_F64: f64 = LOOP_SIZE as f64;\n\nconst FILTER_SQL: &str = r#\"\n    SELECT demo.a, demo.b, demo.c, demo.d\n    FROM demo\n    WHERE demo.a > 1.0 AND demo.b > 2.0 AND demo.c > 3.0 AND demo.d > 4.0 AND demo.e > 5.0",
+      "lines": 18,
+      "secondFile": {
+        "end": 18,
+        "endLoc": {
+          "column": 31,
+          "line": 18,
+          "position": 432
+        },
+        "name": "bpe-test/tests/test_016.rs",
+        "start": 1,
+        "startLoc": {
+          "column": 0,
+          "line": 1,
+          "position": 0
+        }
+      },
+      "tokens": 114
+    },
+    {
+      "firstFile": {
+        "end": 18,
+        "endLoc": {
+          "column": 16,
+          "line": 18,
+          "position": 415
+        },
+        "name": "bpe-test/tests/test_007.rs",
+        "start": 1,
+        "startLoc": {
+          "column": 0,
+          "line": 1,
+          "position": 0
+        }
+      },
+      "format": "rust",
+      "fragment": "use bpe::{def_incoming, def_mapper, new_data, start, stop, CallbackParams, Column, U8Bytes};\nuse std::{\n    env, ptr,\n    sync::{\n        atomic::{AtomicI64, Ordering},\n        Arc,\n    },\n    thread,\n    time::{Duration, SystemTime},\n};\n\nconst LOOP_SIZE: usize = 20;\nconst LOOP_SIZE_F64: f64 = LOOP_SIZE as f64;\n\nconst FILTER_SQL: &str = r#\"\n    SELECT demo.a, demo.b, demo.c, demo.d\n    FROM demo\n    WHERE demo.a > 1.0 AND demo.b > 2.0 AND demo.c > 3.0 AND demo.d > 4.0 AND demo.e > 5.0",
+      "lines": 18,
+      "secondFile": {
+        "end": 18,
+        "endLoc": {
+          "column": 16,
+          "line": 18,
+          "position": 415
+        },
+        "name": "bpe-test/tests/test_017.rs",
+        "start": 1,
+        "startLoc": {
+          "column": 0,
+          "line": 1,
+          "position": 0
+        }
+      },
+      "tokens": 108
+    },
+    {
+      "firstFile": {
+        "end": 161,
+        "endLoc": {
+          "column": 1,
+          "line": 161,
+          "position": 4367
+        },
+        "name": "bpe-test/tests/test_007.rs",
+        "start": 19,
+        "startLoc": {
+          "column": 4,
+          "line": 19,
+          "position": 494
+        }
+      },
+      "format": "rust",
+      "fragment": "    LIMIT -1\n    \"#;\n\n#[test]\npub fn test() {\n    env::set_var(\"BPE_HOME\", env::current_dir().unwrap());\n    start();\n    let sum_store = Arc::new(AtomicI64::new(0));\n    let sum_clone = Arc::clone(&sum_store);\n    let id = init_func(sum_clone);\n    if id == 0 {\n        log::warn!(\"init failed\");\n    } else {\n        let u8data = gen_u8_bytes(id);\n        exec_with_time_it(move || gen_new_data(&u8data));\n        let sum = sum_store.load(Ordering::SeqCst);\n        log::info!(\"sum: {sum}\");\n    }\n    stop();\n}\n\nfn init_func(sum_store: Arc<AtomicI64>) -> u16 {\n    let core_ids = core_affinity::get_core_ids().unwrap();\n    core_affinity::set_for_current(core_ids[core_ids.len() - 1]);\n    log::info!(\"thread:{} started\", thread::current().name().unwrap());\n    if let Some(id) = define_record() {\n        if let Some(mapper_id) =\n            def_mapper(FILTER_SQL, move |params| func_callback(&sum_store, params))\n        {\n            log::info!(\"define mapper: {mapper_id}\");\n            id\n        } else {\n            log::warn!(\"def_mapper_bind_aggregate failed\");\n            0\n        }\n    } else {\n        0\n    }\n}\n\n#[inline]\nfn func_callback(sum_store: &Arc<AtomicI64>, param: CallbackParams) {\n    if param.size() > 0 {\n        sum_store.fetch_add(1, Ordering::SeqCst);\n        let ptr = param.u8_ptr();\n        let v1 = fetch_f64(ptr);\n        let v2 = fetch_f64(ptr.wrapping_add(8));\n        let v3 = fetch_f64(ptr.wrapping_add(16));\n        let v4 = fetch_f64(ptr.wrapping_add(24));\n        log::info!(\"data: {v1}|{v2}|{v3}|{v4}\");\n    } else {\n        log::warn!(\"got null data\");\n    }\n}\n\nfn gen_new_data(u8data: &U8Bytes) {\n    let ret = new_data(u8data);\n    if ret {\n        log::debug!(\"send success\");\n    } else {\n        log::warn!(\"send failed\");\n    }\n}\n\nfn define_record() -> Option<u16> {\n    if let Some(id) = def_incoming(\n        \"demo\",\n        vec![\n            Column::new_double(\"a\"),\n            Column::new_double(\"b\"),\n            Column::new_double(\"c\"),\n            Column::new_double(\"d\"),\n            Column::new_double(\"e\"),\n            Column::new_double(\"f\"),\n            Column::new_double(\"g\"),\n            Column::new_double(\"h\"),\n            Column::new_double(\"i\"),\n        ],\n    ) {\n        log::info!(\"defined incoming: {id}\");\n        Some(id)\n    } else {\n        log::warn!(\"failed to define incoming record\");\n        None\n    }\n}\n\n#[inline]\nfn gen_u8_bytes(id: u16) -> U8Bytes {\n    let mut u8array = [0_u8; 512];\n    let slice = u8array.as_mut_slice();\n    let now = now();\n    //log::info!(\"now: {now}\");\n    fill_f64(&mut slice[0..8], 1.1);\n    fill_f64(&mut slice[8..16], 2.2);\n    fill_f64(&mut slice[16..24], 3.3);\n    fill_f64(&mut slice[24..32], 4.4);\n    fill_f64(&mut slice[32..40], 5.5);\n    fill_f64(&mut slice[40..48], now as f64 / 500_f64);\n    U8Bytes::new_from_vec(id, 512, Vec::from(u8array))\n}\n\n#[inline]\nfn now() -> u64 {\n    SystemTime::now()\n        .duration_since(SystemTime::UNIX_EPOCH)\n        .unwrap()\n        .as_nanos() as u64\n}\n\npub fn exec_with_time_it<F>(mut f: F)\nwhere\n    F: FnMut(),\n{\n    let start = SystemTime::now();\n    for _n in 1..=LOOP_SIZE {\n        f();\n    }\n    let end = SystemTime::now();\n    let duration = end\n        .duration_since(start)\n        .unwrap_or_else(|_e| Duration::new(0, 0));\n    log::info!(\"cost time: {duration:?}\");\n    log::info!(\"cost time: {:?}ms\", duration.as_millis());\n    log::info!(\"cost time: {:?}ns\", duration.as_nanos());\n    log::info!(\n        \"cost time: {:?}ns per operation\",\n        duration.as_nanos() as f64 / LOOP_SIZE_F64\n    );\n}\n\n#[inline]\npub(crate) fn fill_f64(slice: &mut [u8], data: f64) {\n    let p_val = ptr::addr_of!(*slice);\n    let p_f64 = p_val as *mut f64;\n    unsafe { *p_f64 = data };\n}\n\n#[inline]\npub(crate) fn fetch_f64(p_val: *const u8) -> f64 {\n    let p_f64 = p_val as *const f64;\n    unsafe { *p_f64 }\n}",
+      "lines": 143,
+      "secondFile": {
+        "end": 161,
+        "endLoc": {
+          "column": 1,
+          "line": 161,
+          "position": 4357
+        },
+        "name": "bpe-test/tests/test_008.rs",
+        "start": 19,
+        "startLoc": {
+          "column": 4,
+          "line": 19,
+          "position": 484
+        }
+      },
+      "tokens": 969
+    },
+    {
+      "firstFile": {
+        "end": 159,
+        "endLoc": {
+          "column": 26,
+          "line": 159,
+          "position": 4333
+        },
+        "name": "bpe-test/tests/test_007.rs",
+        "start": 19,
+        "startLoc": {
+          "column": 4,
+          "line": 19,
+          "position": 494
+        }
+      },
+      "format": "rust",
+      "fragment": "    LIMIT -1\n    \"#;\n\n#[test]\npub fn test() {\n    env::set_var(\"BPE_HOME\", env::current_dir().unwrap());\n    start();\n    let sum_store = Arc::new(AtomicI64::new(0));\n    let sum_clone = Arc::clone(&sum_store);\n    let id = init_func(sum_clone);\n    if id == 0 {\n        log::warn!(\"init failed\");\n    } else {\n        let u8data = gen_u8_bytes(id);\n        exec_with_time_it(move || gen_new_data(&u8data));\n        let sum = sum_store.load(Ordering::SeqCst);\n        log::info!(\"sum: {sum}\");\n    }\n    stop();\n}\n\nfn init_func(sum_store: Arc<AtomicI64>) -> u16 {\n    let core_ids = core_affinity::get_core_ids().unwrap();\n    core_affinity::set_for_current(core_ids[core_ids.len() - 1]);\n    log::info!(\"thread:{} started\", thread::current().name().unwrap());\n    if let Some(id) = define_record() {\n        if let Some(mapper_id) =\n            def_mapper(FILTER_SQL, move |params| func_callback(&sum_store, params))\n        {\n            log::info!(\"define mapper: {mapper_id}\");\n            id\n        } else {\n            log::warn!(\"def_mapper_bind_aggregate failed\");\n            0\n        }\n    } else {\n        0\n    }\n}\n\n#[inline]\nfn func_callback(sum_store: &Arc<AtomicI64>, param: CallbackParams) {\n    if param.size() > 0 {\n        sum_store.fetch_add(1, Ordering::SeqCst);\n        let ptr = param.u8_ptr();\n        let v1 = fetch_f64(ptr);\n        let v2 = fetch_f64(ptr.wrapping_add(8));\n        let v3 = fetch_f64(ptr.wrapping_add(16));\n        let v4 = fetch_f64(ptr.wrapping_add(24));\n        log::info!(\"data: {v1}|{v2}|{v3}|{v4}\");\n    } else {\n        log::warn!(\"got null data\");\n    }\n}\n\nfn gen_new_data(u8data: &U8Bytes) {\n    let ret = new_data(u8data);\n    if ret {\n        log::debug!(\"send success\");\n    } else {\n        log::warn!(\"send failed\");\n    }\n}\n\nfn define_record() -> Option<u16> {\n    if let Some(id) = def_incoming(\n        \"demo\",\n        vec![\n            Column::new_double(\"a\"),\n            Column::new_double(\"b\"),\n            Column::new_double(\"c\"),\n            Column::new_double(\"d\"),\n            Column::new_double(\"e\"),\n            Column::new_double(\"f\"),\n            Column::new_double(\"g\"),\n            Column::new_double(\"h\"),\n            Column::new_double(\"i\"),\n        ],\n    ) {\n        log::info!(\"defined incoming: {id}\");\n        Some(id)\n    } else {\n        log::warn!(\"failed to define incoming record\");\n        None\n    }\n}\n\n#[inline]\nfn gen_u8_bytes(id: u16) -> U8Bytes {\n    let mut u8array = [0_u8; 512];\n    let slice = u8array.as_mut_slice();\n    let now = now();\n    //log::info!(\"now: {now}\");\n    fill_f64(&mut slice[0..8], 1.1);\n    fill_f64(&mut slice[8..16], 2.2);\n    fill_f64(&mut slice[16..24], 3.3);\n    fill_f64(&mut slice[24..32], 4.4);\n    fill_f64(&mut slice[32..40], 5.5);\n    fill_f64(&mut slice[40..48], now as f64 / 500_f64);\n    U8Bytes::new_from_vec(id, 512, Vec::from(u8array))\n}\n\n#[inline]\nfn now() -> u64 {\n    SystemTime::now()\n        .duration_since(SystemTime::UNIX_EPOCH)\n        .unwrap()\n        .as_nanos() as u64\n}\n\npub fn exec_with_time_it<F>(mut f: F)\nwhere\n    F: FnMut(),\n{\n    let start = SystemTime::now();\n    for _n in 1..=LOOP_SIZE {\n        f();\n    }\n    let end = SystemTime::now();\n    let duration = end\n        .duration_since(start)\n        .unwrap_or_else(|_e| Duration::new(0, 0));\n    log::info!(\"cost time: {duration:?}\");\n    log::info!(\"cost time: {:?}ms\", duration.as_millis());\n    log::info!(\"cost time: {:?}ns\", duration.as_nanos());\n    log::info!(\n        \"cost time: {:?}ns per operation\",\n        duration.as_nanos() as f64 / LOOP_SIZE_F64\n    );\n}\n\n#[inline]\npub(crate) fn fill_f64(slice: &mut [u8], data: f64) {\n    let p_val = ptr::addr_of!(*slice);\n    let p_f64 = p_val as *mut f64;\n    unsafe { *p_f64 = data };\n}\n\n#[inline]\npub(crate) fn fetch_f64(p_val: *const u8) -> f64 {\n    let p_f64 = p_val as *const f64;",
+      "lines": 141,
+      "secondFile": {
+        "end": 160,
+        "endLoc": {
+          "column": 1,
+          "line": 160,
+          "position": 4221
+        },
+        "name": "bpe-test/tests/test_012.rs",
+        "start": 18,
+        "startLoc": {
+          "column": 4,
+          "line": 18,
+          "position": 403
+        }
+      },
+      "tokens": 960
+    },
+    {
+      "firstFile": {
+        "end": 74,
+        "endLoc": {
+          "column": 16,
+          "line": 74,
+          "position": 2116
+        },
+        "name": "bpe-test/tests/test_007.rs",
+        "start": 33,
+        "startLoc": {
+          "column": 54,
+          "line": 33,
+          "position": 894
+        }
+      },
+      "format": "rust",
+      "fragment": "        exec_with_time_it(move || gen_new_data(&u8data));\n        let sum = sum_store.load(Ordering::SeqCst);\n        log::info!(\"sum: {sum}\");\n    }\n    stop();\n}\n\nfn init_func(sum_store: Arc<AtomicI64>) -> u16 {\n    let core_ids = core_affinity::get_core_ids().unwrap();\n    core_affinity::set_for_current(core_ids[core_ids.len() - 1]);\n    log::info!(\"thread:{} started\", thread::current().name().unwrap());\n    if let Some(id) = define_record() {\n        if let Some(mapper_id) =\n            def_mapper(FILTER_SQL, move |params| func_callback(&sum_store, params))\n        {\n            log::info!(\"define mapper: {mapper_id}\");\n            id\n        } else {\n            log::warn!(\"def_mapper_bind_aggregate failed\");\n            0\n        }\n    } else {\n        0\n    }\n}\n\n#[inline]\nfn func_callback(sum_store: &Arc<AtomicI64>, param: CallbackParams) {\n    if param.size() > 0 {\n        sum_store.fetch_add(1, Ordering::SeqCst);\n        let ptr = param.u8_ptr();\n        let v1 = fetch_f64(ptr);\n        let v2 = fetch_f64(ptr.wrapping_add(8));\n        let v3 = fetch_f64(ptr.wrapping_add(16));\n        let v4 = fetch_f64(ptr.wrapping_add(24));\n        log::info!(\"data: {v1}|{v2}|{v3}|{v4}\");\n    } else {\n        log::warn!(\"got null data\");\n    }\n}\n\nfn gen_new_data(u8data: &U8Bytes) {",
+      "lines": 42,
+      "secondFile": {
+        "end": 73,
+        "endLoc": {
+          "column": 16,
+          "line": 73,
+          "position": 2072
+        },
+        "name": "bpe-test/tests/test_014.rs",
+        "start": 32,
+        "startLoc": {
+          "column": 49,
+          "line": 32,
+          "position": 850
+        }
+      },
+      "tokens": 288
+    },
+    {
+      "firstFile": {
+        "end": 68,
+        "endLoc": {
+          "column": 48,
+          "line": 68,
+          "position": 2040
+        },
+        "name": "bpe-test/tests/test_007.rs",
+        "start": 42,
+        "startLoc": {
+          "column": 62,
+          "line": 42,
+          "position": 1175
+        }
+      },
+      "format": "rust",
+      "fragment": "    core_affinity::set_for_current(core_ids[core_ids.len() - 1]);\n    log::info!(\"thread:{} started\", thread::current().name().unwrap());\n    if let Some(id) = define_record() {\n        if let Some(mapper_id) =\n            def_mapper(FILTER_SQL, move |params| func_callback(&sum_store, params))\n        {\n            log::info!(\"define mapper: {mapper_id}\");\n            id\n        } else {\n            log::warn!(\"def_mapper_bind_aggregate failed\");\n            0\n        }\n    } else {\n        0\n    }\n}\n\n#[inline]\nfn func_callback(sum_store: &Arc<AtomicI64>, param: CallbackParams) {\n    if param.size() > 0 {\n        sum_store.fetch_add(1, Ordering::SeqCst);\n        let ptr = param.u8_ptr();\n        let v1 = fetch_f64(ptr);\n        let v2 = fetch_f64(ptr.wrapping_add(8));\n        let v3 = fetch_f64(ptr.wrapping_add(16));\n        let v4 = fetch_f64(ptr.wrapping_add(24));\n        log::info!(\"data: {v1}|{v2}|{v3}|{v4}\");",
+      "lines": 27,
+      "secondFile": {
+        "end": 68,
+        "endLoc": {
+          "column": 48,
+          "line": 68,
+          "position": 2018
+        },
+        "name": "bpe-test/tests/test_010.rs",
+        "start": 42,
+        "startLoc": {
+          "column": 45,
+          "line": 42,
+          "position": 1153
+        }
+      },
+      "tokens": 198
+    },
+    {
+      "firstFile": {
+        "end": 87,
+        "endLoc": {
+          "column": 20,
+          "line": 87,
+          "position": 2397
+        },
+        "name": "bpe-test/tests/test_007.rs",
+        "start": 67,
+        "startLoc": {
+          "column": 26,
+          "line": 67,
+          "position": 1968
+        }
+      },
+      "format": "rust",
+      "fragment": "        let v4 = fetch_f64(ptr.wrapping_add(24));\n        log::info!(\"data: {v1}|{v2}|{v3}|{v4}\");\n    } else {\n        log::warn!(\"got null data\");\n    }\n}\n\nfn gen_new_data(u8data: &U8Bytes) {\n    let ret = new_data(u8data);\n    if ret {\n        log::debug!(\"send success\");\n    } else {\n        log::warn!(\"send failed\");\n    }\n}\n\nfn define_record() -> Option<u16> {\n    if let Some(id) = def_incoming(\n        \"demo\",\n        vec![\n            Column::new_double(\"a\"),",
+      "lines": 21,
+      "secondFile": {
+        "end": 87,
+        "endLoc": {
+          "column": 20,
+          "line": 87,
+          "position": 2375
+        },
+        "name": "bpe-test/tests/test_010.rs",
+        "start": 67,
+        "startLoc": {
+          "column": 26,
+          "line": 67,
+          "position": 1946
+        }
+      },
+      "tokens": 103
+    },
+    {
+      "firstFile": {
+        "end": 107,
+        "endLoc": {
+          "column": 23,
+          "line": 107,
+          "position": 2916
+        },
+        "name": "bpe-test/tests/test_007.rs",
+        "start": 75,
+        "startLoc": {
+          "column": 23,
+          "line": 75,
+          "position": 2159
+        }
+      },
+      "format": "rust",
+      "fragment": "    let ret = new_data(u8data);\n    if ret {\n        log::debug!(\"send success\");\n    } else {\n        log::warn!(\"send failed\");\n    }\n}\n\nfn define_record() -> Option<u16> {\n    if let Some(id) = def_incoming(\n        \"demo\",\n        vec![\n            Column::new_double(\"a\"),\n            Column::new_double(\"b\"),\n            Column::new_double(\"c\"),\n            Column::new_double(\"d\"),\n            Column::new_double(\"e\"),\n            Column::new_double(\"f\"),\n            Column::new_double(\"g\"),\n            Column::new_double(\"h\"),\n            Column::new_double(\"i\"),\n        ],\n    ) {\n        log::info!(\"defined incoming: {id}\");\n        Some(id)\n    } else {\n        log::warn!(\"failed to define incoming record\");\n        None\n    }\n}\n\n#[inline]\nfn gen_u8_bytes(id: u16) -> U8Bytes {",
+      "lines": 33,
+      "secondFile": {
+        "end": 108,
+        "endLoc": {
+          "column": 23,
+          "line": 108,
+          "position": 2995
+        },
+        "name": "bpe-test/tests/test_014.rs",
+        "start": 76,
+        "startLoc": {
+          "column": 24,
+          "line": 76,
+          "position": 2238
+        }
+      },
+      "tokens": 168
+    },
+    {
+      "firstFile": {
+        "end": 107,
+        "endLoc": {
+          "column": 27,
+          "line": 107,
+          "position": 2920
+        },
+        "name": "bpe-test/tests/test_007.rs",
+        "start": 89,
+        "startLoc": {
+          "column": 30,
+          "line": 89,
+          "position": 2481
+        }
+      },
+      "format": "rust",
+      "fragment": "            Column::new_double(\"c\"),\n            Column::new_double(\"d\"),\n            Column::new_double(\"e\"),\n            Column::new_double(\"f\"),\n            Column::new_double(\"g\"),\n            Column::new_double(\"h\"),\n            Column::new_double(\"i\"),\n        ],\n    ) {\n        log::info!(\"defined incoming: {id}\");\n        Some(id)\n    } else {\n        log::warn!(\"failed to define incoming record\");\n        None\n    }\n}\n\n#[inline]\nfn gen_u8_bytes(id: u16) -> U8Bytes {",
+      "lines": 19,
+      "secondFile": {
+        "end": 109,
+        "endLoc": {
+          "column": 32,
+          "line": 109,
+          "position": 3042
+        },
+        "name": "bpe-test/tests/test_015.rs",
+        "start": 91,
+        "startLoc": {
+          "column": 28,
+          "line": 91,
+          "position": 2598
+        }
+      },
+      "tokens": 97
+    },
+    {
+      "firstFile": {
+        "end": 111,
+        "endLoc": {
+          "column": 31,
+          "line": 111,
+          "position": 3058
+        },
+        "name": "bpe-test/tests/test_007.rs",
+        "start": 95,
+        "startLoc": {
+          "column": 30,
+          "line": 95,
+          "position": 2703
+        }
+      },
+      "format": "rust",
+      "fragment": "            Column::new_double(\"i\"),\n        ],\n    ) {\n        log::info!(\"defined incoming: {id}\");\n        Some(id)\n    } else {\n        log::warn!(\"failed to define incoming record\");\n        None\n    }\n}\n\n#[inline]\nfn gen_u8_bytes(id: u16) -> U8Bytes {\n    let mut u8array = [0_u8; 512];\n    let slice = u8array.as_mut_slice();\n    let now = now();\n    //log::info!(\"now: {now}\");",
+      "lines": 17,
+      "secondFile": {
+        "end": 111,
+        "endLoc": {
+          "column": 31,
+          "line": 111,
+          "position": 3018
+        },
+        "name": "bpe-test/tests/test_010.rs",
+        "start": 95,
+        "startLoc": {
+          "column": 28,
+          "line": 95,
+          "position": 2663
+        }
+      },
+      "tokens": 79
+    },
+    {
+      "firstFile": {
+        "end": 161,
+        "endLoc": {
+          "column": 1,
+          "line": 161,
+          "position": 4367
+        },
+        "name": "bpe-test/tests/test_007.rs",
+        "start": 117,
+        "startLoc": {
+          "column": 53,
+          "line": 117,
+          "position": 3304
+        }
+      },
+      "format": "rust",
+      "fragment": "    fill_f64(&mut slice[40..48], now as f64 / 500_f64);\n    U8Bytes::new_from_vec(id, 512, Vec::from(u8array))\n}\n\n#[inline]\nfn now() -> u64 {\n    SystemTime::now()\n        .duration_since(SystemTime::UNIX_EPOCH)\n        .unwrap()\n        .as_nanos() as u64\n}\n\npub fn exec_with_time_it<F>(mut f: F)\nwhere\n    F: FnMut(),\n{\n    let start = SystemTime::now();\n    for _n in 1..=LOOP_SIZE {\n        f();\n    }\n    let end = SystemTime::now();\n    let duration = end\n        .duration_since(start)\n        .unwrap_or_else(|_e| Duration::new(0, 0));\n    log::info!(\"cost time: {duration:?}\");\n    log::info!(\"cost time: {:?}ms\", duration.as_millis());\n    log::info!(\"cost time: {:?}ns\", duration.as_nanos());\n    log::info!(\n        \"cost time: {:?}ns per operation\",\n        duration.as_nanos() as f64 / LOOP_SIZE_F64\n    );\n}\n\n#[inline]\npub(crate) fn fill_f64(slice: &mut [u8], data: f64) {\n    let p_val = ptr::addr_of!(*slice);\n    let p_f64 = p_val as *mut f64;\n    unsafe { *p_f64 = data };\n}\n\n#[inline]\npub(crate) fn fetch_f64(p_val: *const u8) -> f64 {\n    let p_f64 = p_val as *const f64;\n    unsafe { *p_f64 }\n}",
+      "lines": 45,
+      "secondFile": {
+        "end": 161,
+        "endLoc": {
+          "column": 1,
+          "line": 161,
+          "position": 4307
+        },
+        "name": "bpe-test/tests/test_010.rs",
+        "start": 117,
+        "startLoc": {
+          "column": 43,
+          "line": 117,
+          "position": 3244
+        }
+      },
+      "tokens": 285
+    },
+    {
+      "firstFile": {
+        "end": 161,
+        "endLoc": {
+          "column": 1,
+          "line": 161,
+          "position": 4367
+        },
+        "name": "bpe-test/tests/test_007.rs",
+        "start": 117,
+        "startLoc": {
+          "column": 53,
+          "line": 117,
+          "position": 3304
+        }
+      },
+      "format": "rust",
+      "fragment": "    fill_f64(&mut slice[40..48], now as f64 / 500_f64);\n    U8Bytes::new_from_vec(id, 512, Vec::from(u8array))\n}\n\n#[inline]\nfn now() -> u64 {\n    SystemTime::now()\n        .duration_since(SystemTime::UNIX_EPOCH)\n        .unwrap()\n        .as_nanos() as u64\n}\n\npub fn exec_with_time_it<F>(mut f: F)\nwhere\n    F: FnMut(),\n{\n    let start = SystemTime::now();\n    for _n in 1..=LOOP_SIZE {\n        f();\n    }\n    let end = SystemTime::now();\n    let duration = end\n        .duration_since(start)\n        .unwrap_or_else(|_e| Duration::new(0, 0));\n    log::info!(\"cost time: {duration:?}\");\n    log::info!(\"cost time: {:?}ms\", duration.as_millis());\n    log::info!(\"cost time: {:?}ns\", duration.as_nanos());\n    log::info!(\n        \"cost time: {:?}ns per operation\",\n        duration.as_nanos() as f64 / LOOP_SIZE_F64\n    );\n}\n\n#[inline]\npub(crate) fn fill_f64(slice: &mut [u8], data: f64) {\n    let p_val = ptr::addr_of!(*slice);\n    let p_f64 = p_val as *mut f64;\n    unsafe { *p_f64 = data };\n}\n\n#[inline]\npub(crate) fn fetch_f64(p_val: *const u8) -> f64 {\n    let p_f64 = p_val as *const f64;\n    unsafe { *p_f64 }\n}",
+      "lines": 45,
+      "secondFile": {
+        "end": 166,
+        "endLoc": {
+          "column": 1,
+          "line": 166,
+          "position": 4613
+        },
+        "name": "bpe-test/tests/test_014.rs",
+        "start": 122,
+        "startLoc": {
+          "column": 64,
+          "line": 122,
+          "position": 3550
+        }
+      },
+      "tokens": 285
+    },
+    {
+      "firstFile": {
+        "end": 30,
+        "endLoc": {
+          "column": 7,
+          "line": 30,
+          "position": 852
+        },
+        "name": "bpe-test/tests/test_009.rs",
+        "start": 15,
+        "startLoc": {
+          "column": 27,
+          "line": 15,
+          "position": 319
+        }
+      },
+      "format": "rust",
+      "fragment": "const LOOP_SIZE: usize = 20;\nconst LOOP_SIZE_F64: f64 = LOOP_SIZE as f64;\n\n// -- WHERE _sametime(demo.a, 'utc_delta', 'sec')\n// -- WHERE _interval(demo.a, 'sec', 10)\n// -- WHERE _acc_size(demo.a, 10)\nconst FILTER_SQL: &str = r#\"\n    SELECT demo.f, demo.a, demo.b, demo.c, _sub(_add(demo.d, demo.d), demo.e)\n    FROM demo\n    WHERE demo.a > 1 AND demo.b > 2 AND demo.c > 3 AND demo.d > 4 AND demo.e > 5\n    LIMIT -10\n    \"#;\nconst AGGREGATE_SQL: &str = r#\"\n    select _firstd(stream.a), _lastd(stream.a), _mind(stream.a), _maxd(stream.a)\n    from stream\n    \"#;",
+      "lines": 16,
+      "secondFile": {
+        "end": 30,
+        "endLoc": {
+          "column": 7,
+          "line": 30,
+          "position": 853
+        },
+        "name": "bpe-test/tests/test_013.rs",
+        "start": 15,
+        "startLoc": {
+          "column": 28,
+          "line": 15,
+          "position": 320
+        }
+      },
+      "tokens": 132
+    },
+    {
+      "firstFile": {
+        "end": 161,
+        "endLoc": {
+          "column": 1,
+          "line": 161,
+          "position": 4307
+        },
+        "name": "bpe-test/tests/test_010.rs",
+        "start": 19,
+        "startLoc": {
+          "column": 4,
+          "line": 19,
+          "position": 489
+        }
+      },
+      "format": "rust",
+      "fragment": "    LIMIT -5\n    \"#;\n\n#[test]\npub fn test() {\n    env::set_var(\"BPE_HOME\", env::current_dir().unwrap());\n    start();\n    let sum_store = Arc::new(AtomicI64::new(0));\n    let sum_clone = Arc::clone(&sum_store);\n    let id = init_func(sum_clone);\n    if id == 0 {\n        log::warn!(\"init failed\");\n    } else {\n        let u8data = gen_u8_bytes(id);\n        exec_with_time_it(move || gen_new_data(&u8data));\n        let sum = sum_store.load(Ordering::SeqCst);\n        log::info!(\"sum: {sum}\");\n    }\n    stop();\n}\n\nfn init_func(sum_store: Arc<AtomicI64>) -> u16 {\n    let core_ids = core_affinity::get_core_ids().unwrap();\n    core_affinity::set_for_current(core_ids[0]);\n    log::info!(\"thread:{} started\", thread::current().name().unwrap());\n    if let Some(id) = define_record() {\n        if let Some(mapper_id) =\n            def_mapper(FILTER_SQL, move |params| func_callback(&sum_store, params))\n        {\n            log::info!(\"define mapper: {mapper_id}\");\n            id\n        } else {\n            log::warn!(\"def_mapper_bind_aggregate failed\");\n            0\n        }\n    } else {\n        0\n    }\n}\n\n#[inline]\nfn func_callback(sum_store: &Arc<AtomicI64>, param: CallbackParams) {\n    if param.size() > 0 {\n        sum_store.fetch_add(1, Ordering::SeqCst);\n        let ptr = param.u8_ptr();\n        let v1 = fetch_i64(ptr);\n        let v2 = fetch_i64(ptr.wrapping_add(8));\n        let v3 = fetch_i64(ptr.wrapping_add(16));\n        let v4 = fetch_i64(ptr.wrapping_add(24));\n        log::info!(\"data: {v1}|{v2}|{v3}|{v4}\");\n    } else {\n        log::warn!(\"got null data\");\n    }\n}\n\nfn gen_new_data(u8data: &U8Bytes) {\n    let ret = new_data(u8data);\n    if ret {\n        log::debug!(\"send success\");\n    } else {\n        log::warn!(\"send failed\");\n    }\n}\n\nfn define_record() -> Option<u16> {\n    if let Some(id) = def_incoming(\n        \"demo\",\n        vec![\n            Column::new_long(\"a\"),\n            Column::new_long(\"b\"),\n            Column::new_long(\"c\"),\n            Column::new_long(\"d\"),\n            Column::new_long(\"e\"),\n            Column::new_long(\"f\"),\n            Column::new_long(\"g\"),\n            Column::new_long(\"h\"),\n            Column::new_long(\"i\"),\n        ],\n    ) {\n        log::info!(\"defined incoming: {id}\");\n        Some(id)\n    } else {\n        log::warn!(\"failed to define incoming record\");\n        None\n    }\n}\n\n#[inline]\nfn gen_u8_bytes(id: u16) -> U8Bytes {\n    let mut u8array = [0_u8; 512];\n    let slice = u8array.as_mut_slice();\n    let now = now();\n    //log::info!(\"now: {now}\");\n    fill_i64(&mut slice[0..8], 1);\n    fill_i64(&mut slice[8..16], 2);\n    fill_i64(&mut slice[16..24], 3);\n    fill_i64(&mut slice[24..32], 4);\n    fill_i64(&mut slice[32..40], 5);\n    fill_i64(&mut slice[40..48], now as i64);\n    U8Bytes::new_from_vec(id, 512, Vec::from(u8array))\n}\n\n#[inline]\nfn now() -> u64 {\n    SystemTime::now()\n        .duration_since(SystemTime::UNIX_EPOCH)\n        .unwrap()\n        .as_nanos() as u64\n}\n\npub fn exec_with_time_it<F>(mut f: F)\nwhere\n    F: FnMut(),\n{\n    let start = SystemTime::now();\n    for _n in 1..=LOOP_SIZE {\n        f();\n    }\n    let end = SystemTime::now();\n    let duration = end\n        .duration_since(start)\n        .unwrap_or_else(|_e| Duration::new(0, 0));\n    log::info!(\"cost time: {duration:?}\");\n    log::info!(\"cost time: {:?}ms\", duration.as_millis());\n    log::info!(\"cost time: {:?}ns\", duration.as_nanos());\n    log::info!(\n        \"cost time: {:?}ns per operation\",\n        duration.as_nanos() as f64 / LOOP_SIZE_F64\n    );\n}\n\n#[inline]\npub(crate) fn fill_i64(slice: &mut [u8], data: i64) {\n    let p_val = ptr::addr_of!(*slice);\n    let p_i64 = p_val as *mut i64;\n    unsafe { *p_i64 = data };\n}\n\n#[inline]\npub(crate) fn fetch_i64(p_val: *const u8) -> i64 {\n    let p_i64 = p_val as *const i64;\n    unsafe { *p_i64 }\n}",
+      "lines": 143,
+      "secondFile": {
+        "end": 161,
+        "endLoc": {
+          "column": 1,
+          "line": 161,
+          "position": 4243
+        },
+        "name": "bpe-test/tests/test_011.rs",
+        "start": 19,
+        "startLoc": {
+          "column": 4,
+          "line": 19,
+          "position": 425
+        }
+      },
+      "tokens": 960
+    },
+    {
+      "firstFile": {
+        "end": 161,
+        "endLoc": {
+          "column": 1,
+          "line": 161,
+          "position": 4307
+        },
+        "name": "bpe-test/tests/test_010.rs",
+        "start": 116,
+        "startLoc": {
+          "column": 33,
+          "line": 116,
+          "position": 3197
+        }
+      },
+      "format": "rust",
+      "fragment": "    fill_i64(&mut slice[32..40], 5);\n    fill_i64(&mut slice[40..48], now as i64);\n    U8Bytes::new_from_vec(id, 512, Vec::from(u8array))\n}\n\n#[inline]\nfn now() -> u64 {\n    SystemTime::now()\n        .duration_since(SystemTime::UNIX_EPOCH)\n        .unwrap()\n        .as_nanos() as u64\n}\n\npub fn exec_with_time_it<F>(mut f: F)\nwhere\n    F: FnMut(),\n{\n    let start = SystemTime::now();\n    for _n in 1..=LOOP_SIZE {\n        f();\n    }\n    let end = SystemTime::now();\n    let duration = end\n        .duration_since(start)\n        .unwrap_or_else(|_e| Duration::new(0, 0));\n    log::info!(\"cost time: {duration:?}\");\n    log::info!(\"cost time: {:?}ms\", duration.as_millis());\n    log::info!(\"cost time: {:?}ns\", duration.as_nanos());\n    log::info!(\n        \"cost time: {:?}ns per operation\",\n        duration.as_nanos() as f64 / LOOP_SIZE_F64\n    );\n}\n\n#[inline]\npub(crate) fn fill_i64(slice: &mut [u8], data: i64) {\n    let p_val = ptr::addr_of!(*slice);\n    let p_i64 = p_val as *mut i64;\n    unsafe { *p_i64 = data };\n}\n\n#[inline]\npub(crate) fn fetch_i64(p_val: *const u8) -> i64 {\n    let p_i64 = p_val as *const i64;\n    unsafe { *p_i64 }\n}",
+      "lines": 46,
+      "secondFile": {
+        "end": 162,
+        "endLoc": {
+          "column": 1,
+          "line": 162,
+          "position": 4464
+        },
+        "name": "bpe-test/tests/test_017.rs",
+        "start": 117,
+        "startLoc": {
+          "column": 43,
+          "line": 117,
+          "position": 3354
+        }
+      },
+      "tokens": 300
+    },
+    {
+      "firstFile": {
+        "end": 100,
+        "endLoc": {
+          "column": 5,
+          "line": 100,
+          "position": 3087
+        },
+        "name": "bpe-test/tests/test_013.rs",
+        "start": 24,
+        "startLoc": {
+          "column": 79,
+          "line": 24,
+          "position": 693
+        }
+      },
+      "format": "rust",
+      "fragment": "    WHERE demo.a > 1 AND demo.b > 2 AND demo.c > 3 AND demo.d > 4 AND demo.e > 5\n    LIMIT -10\n    \"#;\nconst AGGREGATE_SQL: &str = r#\"\n    select _firstl(stream.a), _lastl(stream.a), _minl(stream.a), _maxl(stream.a)\n    from stream\n    \"#;\n\n#[test]\npub fn test() {\n    env::set_var(\"BPE_HOME\", env::current_dir().unwrap());\n    start();\n    let sum_store = Arc::new(AtomicI64::new(0));\n    let sum_clone = Arc::clone(&sum_store);\n    let (id1, id2) = init_func(sum_clone);\n    if id1 == 0 || id2 == 0 {\n        log::warn!(\"init failed\");\n    } else {\n        let mut u8data = gen_u8_bytes(id1);\n        exec_with_time_it(move || gen_new_data(&mut u8data));\n        let sum = sum_store.load(Ordering::SeqCst);\n        log::info!(\"sum: {sum}\");\n    }\n    stop();\n}\n\nfn init_func(sum_store: Arc<AtomicI64>) -> (u16, u16) {\n    let core_ids = core_affinity::get_core_ids().unwrap();\n    core_affinity::set_for_current(core_ids[core_ids.len() - 1]);\n    log::info!(\"thread:{} started\", thread::current().name().unwrap());\n    if let Some((id1, id2)) = define_records() {\n        log::info!(\"define record: {id1}/{id2}\");\n        if let Some(aggregate_id) = def_aggregate(\n            AGGREGATE_SQL,\n            #[inline]\n            move |param| {\n                func_callback(&sum_store, param);\n            },\n        ) {\n            log::info!(\"define aggregate: {aggregate_id}\");\n            if let Some(mapper_id) = def_mapper_bind_aggregate(FILTER_SQL, aggregate_id) {\n                log::info!(\"define mapper: {mapper_id}\");\n                return (id1, id2);\n            } else {\n                log::warn!(\"def_mapper_bind_aggregate failed\");\n            }\n        } else {\n            log::warn!(\"def_aggregate failed\");\n        }\n    }\n    (0, 0)\n}\n\n#[inline]\nfn func_callback(sum_store: &Arc<AtomicI64>, param: CallbackParams) {\n    if param.size() > 0 {\n        sum_store.fetch_add(1, Ordering::SeqCst);\n        let ptr = param.u8_ptr();\n        let v1 = fetch_i64(ptr);\n        let v2 = fetch_i64(ptr.wrapping_add(8));\n        let v3 = fetch_i64(ptr.wrapping_add(16));\n        let v4 = fetch_i64(ptr.wrapping_add(24));\n        log::info!(\"data: {v1}|{v2}|{v3}|{v4}\");\n        let _v = v1 + v2 + v3 + v4;\n    } else {\n        log::warn!(\"got null data\");\n    }\n}\n\nfn gen_new_data(u8data: &mut U8Bytes) {\n    update_now(u8data);\n    let ret = new_data(u8data);\n    if ret {\n        log::debug!(\"send success\");\n    } else {\n        log::warn!(\"send failed\");\n    }",
+      "lines": 77,
+      "secondFile": {
+        "end": 97,
+        "endLoc": {
+          "column": 5,
+          "line": 97,
+          "position": 2968
+        },
+        "name": "bpe-test/tests/test_018.rs",
+        "start": 21,
+        "startLoc": {
+          "column": 84,
+          "line": 21,
+          "position": 574
+        }
+      },
+      "tokens": 573
+    },
+    {
+      "firstFile": {
+        "end": 166,
+        "endLoc": {
+          "column": 1,
+          "line": 166,
+          "position": 4613
+        },
+        "name": "bpe-test/tests/test_014.rs",
+        "start": 122,
+        "startLoc": {
+          "column": 40,
+          "line": 122,
+          "position": 3526
+        }
+      },
+      "format": "rust",
+      "fragment": "    fill_f64(&mut slice[40..48], walker + (now as f64 / 500_f64));\n    U8Bytes::new_from_vec(id, 512, Vec::from(u8array))\n}\n\n#[inline]\nfn now() -> u64 {\n    SystemTime::now()\n        .duration_since(SystemTime::UNIX_EPOCH)\n        .unwrap()\n        .as_nanos() as u64\n}\n\npub fn exec_with_time_it<F>(mut f: F)\nwhere\n    F: FnMut(),\n{\n    let start = SystemTime::now();\n    for _n in 1..=LOOP_SIZE {\n        f();\n    }\n    let end = SystemTime::now();\n    let duration = end\n        .duration_since(start)\n        .unwrap_or_else(|_e| Duration::new(0, 0));\n    log::info!(\"cost time: {duration:?}\");\n    log::info!(\"cost time: {:?}ms\", duration.as_millis());\n    log::info!(\"cost time: {:?}ns\", duration.as_nanos());\n    log::info!(\n        \"cost time: {:?}ns per operation\",\n        duration.as_nanos() as f64 / LOOP_SIZE_F64\n    );\n}\n\n#[inline]\npub(crate) fn fill_f64(slice: &mut [u8], data: f64) {\n    let p_val = ptr::addr_of!(*slice);\n    let p_f64 = p_val as *mut f64;\n    unsafe { *p_f64 = data };\n}\n\n#[inline]\npub(crate) fn fetch_f64(p_val: *const u8) -> f64 {\n    let p_f64 = p_val as *const f64;\n    unsafe { *p_f64 }\n}",
+      "lines": 45,
+      "secondFile": {
+        "end": 167,
+        "endLoc": {
+          "column": 1,
+          "line": 167,
+          "position": 4697
+        },
+        "name": "bpe-test/tests/test_015.rs",
+        "start": 123,
+        "startLoc": {
+          "column": 47,
+          "line": 123,
+          "position": 3610
+        }
+      },
+      "tokens": 294
+    },
+    {
+      "firstFile": {
+        "end": 180,
+        "endLoc": {
+          "column": 1,
+          "line": 180,
+          "position": 4991
+        },
+        "name": "bpe-test/tests/test_015.rs",
+        "start": 18,
+        "startLoc": {
+          "column": 38,
+          "line": 18,
+          "position": 439
+        }
+      },
+      "format": "rust",
+      "fragment": "    WHERE demo.a > 1 AND demo.b > 2.3 AND demo.c > 3 AND demo.d > 4.3 AND demo.e > 5.3\n    LIMIT -100\n    \"#;\n\n#[test]\npub fn test() {\n    env::set_var(\"BPE_HOME\", env::current_dir().unwrap());\n    start();\n    let sum_store = Arc::new(AtomicI64::new(0));\n    let sum_clone = Arc::clone(&sum_store);\n    let id = init_func(sum_clone);\n    if id == 0 {\n        log::warn!(\"init failed\");\n    } else {\n        exec_with_time_it(move || gen_new_data(id));\n        let sum = sum_store.load(Ordering::SeqCst);\n        log::info!(\"sum: {sum}\");\n    }\n    stop();\n}\n\nfn init_func(sum_store: Arc<AtomicI64>) -> u16 {\n    let core_ids = core_affinity::get_core_ids().unwrap();\n    core_affinity::set_for_current(core_ids[core_ids.len() - 1]);\n    log::info!(\"thread:{} started\", thread::current().name().unwrap());\n    if let Some(id) = define_record() {\n        if let Some(mapper_id) =\n            def_mapper(FILTER_SQL, move |params| func_callback(&sum_store, params))\n        {\n            log::info!(\"define mapper: {mapper_id}\");\n            id\n        } else {\n            log::warn!(\"def_mapper_bind_aggregate failed\");\n            0\n        }\n    } else {\n        0\n    }\n}\n\n#[inline]\nfn func_callback(sum_store: &Arc<AtomicI64>, param: CallbackParams) {\n    if param.size() > 0 {\n        sum_store.fetch_add(1, Ordering::SeqCst);\n        let ptr = param.u8_ptr();\n        let v1 = fetch_i64(ptr);\n        let v2 = fetch_f64(ptr.wrapping_add(8));\n        let v3 = fetch_i64(ptr.wrapping_add(16));\n        let v4 = fetch_f64(ptr.wrapping_add(24));\n        log::info!(\"data: {v1}|{v2}|{v3}|{v4}\");\n        let _ = v1 as f64 + v2 + v3 as f64 + v4;\n    } else {\n        log::warn!(\"got null data\");\n    }\n}\n\nfn gen_new_data(id: u16) {\n    static WALKER: AtomicI64 = AtomicI64::new(0);\n    let u8data = gen_u8_bytes(id, WALKER.fetch_add(1, Ordering::SeqCst));\n    let ret = new_data(&u8data);\n    if ret {\n        log::debug!(\"send success\");\n    } else {\n        log::warn!(\"send failed\");\n    }\n}\n\nfn define_record() -> Option<u16> {\n    if let Some(id) = def_incoming(\n        \"demo\",\n        vec![\n            Column::new_long(\"a\"),\n            Column::new_double(\"b\"),\n            Column::new_long(\"c\"),\n            Column::new_double(\"d\"),\n            Column::new_double(\"e\"),\n            Column::new_double(\"f\"),\n            Column::new_double(\"g\"),\n            Column::new_double(\"h\"),\n            Column::new_double(\"i\"),\n        ],\n    ) {\n        log::info!(\"defined incoming: {id}\");\n        Some(id)\n    } else {\n        log::warn!(\"failed to define incoming record\");\n        None\n    }\n}\n\n#[inline]\nfn gen_u8_bytes(id: u16, walker: i64) -> U8Bytes {\n    let mut u8array = [0_u8; 512];\n    let slice = u8array.as_mut_slice();\n    let now = now();\n    // log::info!(\n    //     \"now: {now}/{walker}/{}/{}\",\n    //     now as f64 / 500_f64,\n    //     walker as f64 + (now as f64 / 500_f64)\n    // );\n    fill_i64(&mut slice[0..8], walker + 1);\n    fill_f64(&mut slice[8..16], walker as f64 + 2.2);\n    fill_i64(&mut slice[16..24], walker + 3);\n    fill_f64(&mut slice[24..32], walker as f64 + 4.4);\n    fill_f64(&mut slice[32..40], walker as f64 + 5.5);\n    fill_f64(&mut slice[40..48], walker as f64 + (now as f64 / 500_f64));\n    U8Bytes::new_from_vec(id, 512, Vec::from(u8array))\n}\n\n#[inline]\nfn now() -> u64 {\n    SystemTime::now()\n        .duration_since(SystemTime::UNIX_EPOCH)\n        .unwrap()\n        .as_nanos() as u64\n}\n\npub fn exec_with_time_it<F>(mut f: F)\nwhere\n    F: FnMut(),\n{\n    let start = SystemTime::now();\n    for _n in 1..=LOOP_SIZE {\n        f();\n    }\n    let end = SystemTime::now();\n    let duration = end\n        .duration_since(start)\n        .unwrap_or_else(|_e| Duration::new(0, 0));\n    log::info!(\"cost time: {duration:?}\");\n    log::info!(\"cost time: {:?}ms\", duration.as_millis());\n    log::info!(\"cost time: {:?}ns\", duration.as_nanos());\n    log::info!(\n        \"cost time: {:?}ns per operation\",\n        duration.as_nanos() as f64 / LOOP_SIZE_F64\n    );\n}\n\n#[inline]\npub(crate) fn fill_i64(slice: &mut [u8], data: i64) {\n    let p_val = ptr::addr_of!(*slice);\n    let p_i64 = p_val as *mut i64;\n    unsafe { *p_i64 = data };\n}\n\n#[inline]\npub(crate) fn fetch_i64(p_val: *const u8) -> i64 {\n    let p_i64 = p_val as *const i64;\n    unsafe { *p_i64 }\n}\n\n#[inline]\npub(crate) fn fill_f64(slice: &mut [u8], data: f64) {\n    let p_val = ptr::addr_of!(*slice);\n    let p_f64 = p_val as *mut f64;\n    unsafe { *p_f64 = data };\n}\n\n#[inline]\npub(crate) fn fetch_f64(p_val: *const u8) -> f64 {\n    let p_f64 = p_val as *const f64;\n    unsafe { *p_f64 }\n}",
+      "lines": 163,
+      "secondFile": {
+        "end": 180,
+        "endLoc": {
+          "column": 1,
+          "line": 180,
+          "position": 4991
+        },
+        "name": "bpe-test/tests/test_016.rs",
+        "start": 18,
+        "startLoc": {
+          "column": 38,
+          "line": 18,
+          "position": 439
+        }
+      },
+      "tokens": 1147
+    },
+    {
+      "firstFile": {
+        "end": 68,
+        "endLoc": {
+          "column": 11,
+          "line": 68,
+          "position": 2008
+        },
+        "name": "bpe-test/tests/test_015.rs",
+        "start": 19,
+        "startLoc": {
+          "column": 4,
+          "line": 19,
+          "position": 492
+        }
+      },
+      "format": "rust",
+      "fragment": "    LIMIT -100\n    \"#;\n\n#[test]\npub fn test() {\n    env::set_var(\"BPE_HOME\", env::current_dir().unwrap());\n    start();\n    let sum_store = Arc::new(AtomicI64::new(0));\n    let sum_clone = Arc::clone(&sum_store);\n    let id = init_func(sum_clone);\n    if id == 0 {\n        log::warn!(\"init failed\");\n    } else {\n        exec_with_time_it(move || gen_new_data(id));\n        let sum = sum_store.load(Ordering::SeqCst);\n        log::info!(\"sum: {sum}\");\n    }\n    stop();\n}\n\nfn init_func(sum_store: Arc<AtomicI64>) -> u16 {\n    let core_ids = core_affinity::get_core_ids().unwrap();\n    core_affinity::set_for_current(core_ids[core_ids.len() - 1]);\n    log::info!(\"thread:{} started\", thread::current().name().unwrap());\n    if let Some(id) = define_record() {\n        if let Some(mapper_id) =\n            def_mapper(FILTER_SQL, move |params| func_callback(&sum_store, params))\n        {\n            log::info!(\"define mapper: {mapper_id}\");\n            id\n        } else {\n            log::warn!(\"def_mapper_bind_aggregate failed\");\n            0\n        }\n    } else {\n        0\n    }\n}\n\n#[inline]\nfn func_callback(sum_store: &Arc<AtomicI64>, param: CallbackParams) {\n    if param.size() > 0 {\n        sum_store.fetch_add(1, Ordering::SeqCst);\n        let ptr = param.u8_ptr();\n        let v1 = fetch_i64(ptr);\n        let v2 = fetch_f64(ptr.wrapping_add(8));\n        let v3 = fetch_i64(ptr.wrapping_add(16));\n        let v4 = fetch_f64(ptr.wrapping_add(24));\n        log::info!(\"data: {v1}|{v2}|{v3}|{v4}\");\n        let _ = v1 as f64 + v2 + v3 as f64 + v4;",
+      "lines": 50,
+      "secondFile": {
+        "end": 68,
+        "endLoc": {
+          "column": 11,
+          "line": 68,
+          "position": 2005
+        },
+        "name": "bpe-test/tests/test_017.rs",
+        "start": 19,
+        "startLoc": {
+          "column": 4,
+          "line": 19,
+          "position": 489
+        }
+      },
+      "tokens": 372
+    },
+    {
+      "firstFile": {
+        "end": 109,
+        "endLoc": {
+          "column": 23,
+          "line": 109,
+          "position": 3033
+        },
+        "name": "bpe-test/tests/test_015.rs",
+        "start": 68,
+        "startLoc": {
+          "column": 43,
+          "line": 68,
+          "position": 2040
+        }
+      },
+      "format": "rust",
+      "fragment": "        let _ = v1 as f64 + v2 + v3 as f64 + v4;\n    } else {\n        log::warn!(\"got null data\");\n    }\n}\n\nfn gen_new_data(id: u16) {\n    static WALKER: AtomicI64 = AtomicI64::new(0);\n    let u8data = gen_u8_bytes(id, WALKER.fetch_add(1, Ordering::SeqCst));\n    let ret = new_data(&u8data);\n    if ret {\n        log::debug!(\"send success\");\n    } else {\n        log::warn!(\"send failed\");\n    }\n}\n\nfn define_record() -> Option<u16> {\n    if let Some(id) = def_incoming(\n        \"demo\",\n        vec![\n            Column::new_long(\"a\"),\n            Column::new_double(\"b\"),\n            Column::new_long(\"c\"),\n            Column::new_double(\"d\"),\n            Column::new_double(\"e\"),\n            Column::new_double(\"f\"),\n            Column::new_double(\"g\"),\n            Column::new_double(\"h\"),\n            Column::new_double(\"i\"),\n        ],\n    ) {\n        log::info!(\"defined incoming: {id}\");\n        Some(id)\n    } else {\n        log::warn!(\"failed to define incoming record\");\n        None\n    }\n}\n\n#[inline]\nfn gen_u8_bytes(id: u16, walker: i64) -> U8Bytes {",
+      "lines": 42,
+      "secondFile": {
+        "end": 109,
+        "endLoc": {
+          "column": 23,
+          "line": 109,
+          "position": 3002
+        },
+        "name": "bpe-test/tests/test_017.rs",
+        "start": 68,
+        "startLoc": {
+          "column": 29,
+          "line": 68,
+          "position": 2023
+        }
+      },
+      "tokens": 232
+    },
+    {
+      "firstFile": {
+        "end": 112,
+        "endLoc": {
+          "column": 20,
+          "line": 112,
+          "position": 3156
+        },
+        "name": "bpe-test/tests/test_015.rs",
+        "start": 97,
+        "startLoc": {
+          "column": 30,
+          "line": 97,
+          "position": 2820
+        }
+      },
+      "format": "rust",
+      "fragment": "            Column::new_double(\"i\"),\n        ],\n    ) {\n        log::info!(\"defined incoming: {id}\");\n        Some(id)\n    } else {\n        log::warn!(\"failed to define incoming record\");\n        None\n    }\n}\n\n#[inline]\nfn gen_u8_bytes(id: u16, walker: i64) -> U8Bytes {\n    let mut u8array = [0_u8; 512];\n    let slice = u8array.as_mut_slice();\n    let now = now();",
+      "lines": 16,
+      "secondFile": {
+        "end": 112,
+        "endLoc": {
+          "column": 20,
+          "line": 112,
+          "position": 3125
+        },
+        "name": "bpe-test/tests/test_017.rs",
+        "start": 97,
+        "startLoc": {
+          "column": 28,
+          "line": 97,
+          "position": 2789
+        }
+      },
+      "tokens": 82
+    }
+  ],
+  "statistics": {
+    "detectionDate": "2026-08-14T17:44:19.450Z",
+    "formats": {
+      "rust": {
+        "clones": 78,
+        "duplicatedLines": 3028,
+        "duplicatedTokens": 20169,
+        "lines": 9512,
+        "newClones": 0,
+        "newDuplicatedLines": 0,
+        "percentage": 31.833473507148863,
+        "percentageTokens": 32.75145334675717,
+        "sources": 66,
+        "tokens": 61582
+      }
+    },
+    "total": {
+      "clones": 78,
+      "duplicatedLines": 3028,
+      "duplicatedTokens": 20169,
+      "lines": 9512,
+      "newClones": 0,
+      "newDuplicatedLines": 0,
+      "percentage": 31.833473507148863,
+      "percentageTokens": 32.75145334675717,
+      "sources": 66,
+      "tokens": 61582
+    }
+  }
+}

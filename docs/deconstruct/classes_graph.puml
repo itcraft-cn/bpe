@@ -1,216 +1,243 @@
-@startuml BPE Class Diagram
-!theme plain
+@startuml classes_graph
 
-title Bamboo Pipe Engine - Core Class Diagram
+' ============================================
+' BPE (Bamboo Pipe Engine) 主干类图
+' 数据流：new_data -> store -> mapper -> jit filter -> callback/aggregate
+' ============================================
 
-package "Public API" {
-    class U8Bytes {
-        - id: u16
-        - data_len: usize
-        - bytes: [u8; U8_DATA_MAX_SIZE]
-        + new(id: u16, data_len: usize, bytes: [u8; U8_DATA_MAX_SIZE])
-        + new_from_vec(id: u16, data_len: usize, vec: Vec<u8>)
-        + new_from_slice(id: u16, data_len: usize, slice: &[u8])
-        + id(): u16
-        + data_len(): usize
-        + bytes(): &[u8]
-        + bytes_mut(): &mut [u8]
+skinparam classAttributeIconSize 0
+skinparam classFontSize 11
+
+package "API 层 (core.rs)" {
+    class start
+    class stop
+    class def_incoming
+    class def_stream
+    class def_mapper
+    class def_mapper_bind_aggregate
+    class def_aggregate
+    class new_data
+}
+
+package "bpe-core" {
+
+    package "数据定义" {
+        class U8Bytes {
+            id: u16
+            data_len: usize
+            bytes: [u8; 8192]
+            +new_from_vec() 
+            +id() / data_len() / bytes()
+        }
+        class Column {
+            name: String
+            data_type: ColumnType
+            idx: u16
+            offset: usize
+            +new_long / new_double / new
+        }
+        enum ColumnType {
+            Long
+            Double
+        }
+        enum RecordType {
+            Incoming
+            Stream
+        }
+        class Record {
+            id: u16
+            columns: Vec<Column>
+            columns_map: HashMap<String,u16>
+            +insert_record / get_record / fetch_record_id
+            +fetch_column_id / column
+        }
+        class id {
+            RECORD_WALKER: AtomicU16
+            MAPPER_WALKER: AtomicU16
+            AGGREGATE_WALKER: AtomicU16
+            +next_record_id / next_mapper_id / next_aggregate_id
+        }
     }
-    
-    class Column {
-        - name: String
-        - data_type: ColumnType
-        - idx: u16
-        - offset: usize
-        + new_long(name: &str)
-        + new_double(name: &str)
+
+    package "存储层" {
+        class WrappedArray {
+            data: *mut u8
+            max_records: usize
+            mask: usize
+            walker: usize
+            step: usize
+            +write_data / sub_data / first_idx / last_idx
+        }
+        class store {
+            PTR_MAP / VEC_SIZE / RECORD_SIZE
+            +init_store / insert / find_or_insert_array
+        }
     }
-    
-    enum ColumnType {
-        Long
-        Double
+
+    package "SQL 层" {
+        class select {
+            +parse_select / parse_select_statement
+        }
+        class sql_base {
+            enum ExprEntity { Val, Field, FieldWithTab, Function }
+            enum ValType { Bool, Int, Float }
+            class ParsedSql {
+                records: Vec<u16>
+                filter: JitFunction<FilterFunc>
+                limit: usize
+                fetch_asc: bool
+                fields: Vec<ExprEntity>
+            }
+        }
     }
-    
-    class CallbackParams {
-        - u8_ptr: *const u8
-        - mask: usize
-        - offset: usize
-        - size: usize
-        - step: usize
-        + new(...)
-        + u8_ptr(): *const u8
-        + size(): usize
-        + step(): usize
+
+    package "执行层" {
+        class exec {
+            enum Executor { ConstLong, ConstDouble, Fetch, Compute }
+            class Executors
+            +create_executor / conv_as_executor
+        }
+        class calc_func {
+            +add / sub / mul / div / mod_
+        }
+        class element {
+            enum Element { Long(i64), Double(f64) }
+            +add / sub / mul / div / mod_
+        }
+        enum SupportFunc {
+            Add Sub Mul Div Mod
+            MinL MaxL SumL Count MinD MaxD SumD Avg FirstL FirstD LastL LastD
+        }
+    }
+
+    package "JIT 层 (inkwell/LLVM-19)" {
+        class FuncGenerator {
+            context: &Context
+            module: Module
+            builder: Builder
+            execution_engine: ExecutionEngine
+            +new / compile
+        }
+        class GenContext
+        class jit_filter {
+            +gen_select_filter_func / parse_exp / parse_binary_exp
+        }
+        class llvm_misc {
+            +logic_op / logic_compare / build_float_cmp / build_int_cmp
+            +choose_fetch_val_fn / conv_rust_type_to_llvm_struct
+        }
+        class jit_aux {
+            RetVal { data_type: u64, data: u64 }
+            +fetch_column_i64 / fetch_column_f64 / int2float
+        }
+        class jit_base {
+            BinaryExpression
+        }
+    }
+
+    package "Mapper / Aggregate" {
+        class mapper {
+            PTR_MAPPER_MAP / PTR_VAL_DATA_REF
+            class Mapper { id, parsed_sql, executors }
+            class WrappedMapper { mapper, fn_holder }
+            +define_mapper / call_mapper / invoke / loop_filter
+        }
+        class aggregate {
+            class Aggregate { id, stream_id, executors }
+            class WrappedAggregate { aggregate, fn_holder }
+            +define_aggregate / call_aggregate / compute_data
+        }
+        class agg_func {
+            +f_max_l / f_min_l / f_sum_l / f_count_l / f_avg_l ...
+        }
+        class callback {
+            enum FnHolder { Func, FfiFunc, Lambda }
+            +callback
+        }
+        class CallbackParams {
+            u8_ptr / mask / offset / size / step
+        }
+    }
+
+    package "基础设施" {
+        class aux {
+            SimpleU16Map { ptr_array: [u64; 65536] }
+            +fill_ptr / fetch_ptr / bitmap_chk_id / bitmap_set_id
+        }
+        class cfg {
+            BpeConfig { map: HashMap }
+            +load_config / get_config
+        }
+        class logger
+        class consts
+        class error { ParseSqlError }
     }
 }
 
-package "Data Model" {
-    class Record {
-        - _name: String
-        - id: u16
-        - _record_type: RecordType
-        - columns: Vec<Column>
-        - columns_map: HashMap<String, u16>
-        + insert_record(name: &str, record_type: RecordType, columns: Vec<Column>): Option<u16>
-        + get_record(id: u16): Option<&'static Record>
-        + column(column_id: u16): &Column
-        + column_id(column_name: &str): Option<&u16>
+package "Wrapper 层" {
+    class bpe_java_wrapper {
+        Java_cn_itcraft_bpe4j_Bpe_*
+        JavaFfiFunc { vm, callback }
+        const U8_DATA_MAX_SIZE = 512
     }
-    
-    enum RecordType {
-        Incoming
-        Stream
+    class bpe_py_wrapper {
+        bpe4py module
+        PythonFfiFunc { callback: PyObject }
+        const U8_DATA_MAX_SIZE = 512
     }
 }
 
-package "Storage" {
-    class WrappedArray {
-        - data: *mut u8
-        - max_records: usize
-        - mask: usize
-        - walker: usize
-        - step: usize
-        + new(size: usize, step: usize)
-        + u64ptr(): u64
-        + sub_data(offset: usize): *const u8
-        + walker(): usize
-        + mask(): usize
-        + step(): usize
+package "Java 侧 (bpe4j)" {
+    class JavaBpe {
+        CONVERTERS: ByteConverter[65536]
+        +start / newDataSync / newDataAsync / defMapper
+    }
+    class JavaBpeThread {
+        queue: MpscAtomicArrayQueue(10240)
+        +fillQueue / runBpe
+    }
+    class Bytes {
+        +readLong / writeLong (Unsafe)
     }
 }
 
-package "JIT Engine" {
-    class FuncGenerator {
-        + context: &'ctx Context
-        + module: Module<'ctx>
-        + builder: Builder<'ctx>
-        + execution_engine: ExecutionEngine<'ctx>
-        + type_wrapper: Option<StructType<'ctx>>
-        + new(): Self
-        + compile<T>(name: &str): Option<JitFunction<'_, T>>
-    }
-    
-    class GenContext {
-        + func_generator: &'ctx FuncGenerator<'ctx>
-        + param_u64ptr: IntValue<'ctx>
-        + i2f_func: FunctionValue<'ctx>
-    }
-    
-    class BinaryExpression {
-        + l_val_type: BasicValueEnum<'a>
-        + r_val_type: BasicValueEnum<'a>
-        + l_val: BasicValueEnum<'a>
-        + r_val: BasicValueEnum<'a>
-    }
-}
+' ============ 关联关系 ============
 
-package "SQL Processing" {
-    class Mapper {
-        - id: u16
-        - parsed_sql: ParsedSql
-        - executors: Executors
-        + id(): u16
-        + filter(): &JitFunction<'_, FilterFunc>
-        + fetch(...)
-    }
-    
-    class WrappedMapper {
-        - mapper: Mapper
-        - fn_holder: FnHolder
-    }
-    
-    class ParsedSql {
-        - records: Vec<u16>
-        - filter: JitFunction<'_, FilterFunc>
-        - limit: isize
-        - fields: Vec<ExprEntity>
-    }
-    
-    class ExprEntity {
-        Val(ValType)
-        Field(u16)
-        FieldWithTab(u16, u16)
-        Function(String, Vec<ExprEntity>)
-    }
-}
+start --> Record : def_incoming/def_stream
+start --> mapper : def_mapper
+start --> aggregate : def_aggregate
+new_data --> store : check_id_in_store
+new_data --> WrappedArray : find_or_insert_array
+new_data --> mapper : call_mapper
 
-package "Execution" {
-    class Executor {
-        ConstLong(i64)
-        ConstDouble(f64)
-        Fetch(u16, u16)
-        Compute(SupportFunc, Executors)
-        + fetch(...): Element
-    }
-    
-    class Executors {
-        - raw_ptr: *const Executor
-        - size: usize
-        + new(executors: &[Executor])
-        + index_of(idx: i32): &Executor
-    }
-    
-    class Element {
-        Long(i64)
-        Double(f64)
-        + len(): usize
-        + copy_to_target(u8_ptr: *mut u8, offset: usize)
-        + add(other: Element): Element
-        + sub(other: Element): Element
-        + mul(other: Element): Element
-        + div(other: Element): Element
-    }
-}
+mapper --> sql_base : parse_select (ParsedSql)
+mapper --> jit_base : FuncGenerator::new (Box::leak)
+sql_base --> select : parse_select_statement
+select --> jit_filter : gen_select_filter_func
+jit_filter --> llvm_misc : parse_exp/bin_op_calc
+jit_filter --> jit_aux : fetch_column_i64/f64 调用
+jit_aux --> Record : get_column (offset 寻址)
+jit_aux --> Column : offset()
 
-package "Aggregate" {
-    class Aggregate {
-        - id: u16
-        - stream_id: u16
-        - executors: Vec<Executor>
-        + id(): u16
-        + stream_id(): u16
-    }
-    
-    class WrappedAggregate {
-        - aggregate: Aggregate
-        - fn_holder: FnHolder
-    }
-}
+mapper --> exec : create_executor
+exec --> calc_func : compute_func
+calc_func --> element : Element 运算
+exec --> SupportFunc : 函数枚举
 
-package "Callback" {
-    enum FnHolder {
-        Func(NormalFunc)
-        FfiFunc(Box<dyn FfiFunc>)
-        Lambda(LambdaFunc)
-    }
-}
+mapper --> callback : invoke -> callback(FnHolder)
+callback --> CallbackParams
+mapper ..> aggregate : def_mapper_bind_aggregate 绑定
+aggregate --> exec : create_executor
+aggregate --> agg_func : f_* 聚合原语
+aggregate --> callback : call_aggregate -> callback
 
-package "Support Functions" {
-    enum SupportFunc {
-        Add, Sub, Mul, Div, Mod
-        MaxL, MinL, SumL, Count
-        MaxD, MinD, SumD, Avg
-        FirstL, FirstD, LastL, LastD
-    }
-}
+WrappedArray --> store : alloc::alloc 环形缓冲
+aux --> WrappedArray : SimpleU16Map 全局指针表
 
-U8Bytes --> ColumnType
-Column --> ColumnType
-Record --> Column
-Record --> RecordType
-WrappedArray --> U8Bytes : stores
-Mapper --> ParsedSql
-Mapper --> Executors
-WrappedMapper --> Mapper
-WrappedMapper --> FnHolder
-Executor --> Element
-Executors --> Executor
-Element --> ColumnType
-Aggregate --> Executor
-WrappedAggregate --> Aggregate
-WrappedAggregate --> FnHolder
-FuncGenerator --> GenContext
-FuncGenerator --> BinaryExpression
-ParsedSql --> ExprEntity
-Executor --> SupportFunc
+bpe_java_wrapper --> bpe : JNI 导出
+bpe_py_wrapper --> bpe : PyO3 导出
+JavaBpe --> bpe_java_wrapper : JNI native 方法
+JavaBpeThread --> JavaBpe : MPSC 队列消费
+Bytes --> JavaBpe : ByteConverter 编解码
+
 @enduml

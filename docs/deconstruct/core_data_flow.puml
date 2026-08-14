@@ -1,80 +1,67 @@
-@startuml BPE Data Flow
-!theme plain
+@startuml core_data_flow
 
-title Bamboo Pipe Engine - Core Data Flow
+' ============================================
+' BPE 核心数据流
+' 一条记录从 new_data 到回调的完整路径
+' ============================================
 
+skinparam activityShape八角形
+skinparam ArrowColor #666666
+
+|#FFE8CC 数据入口|
 start
+:new_data(&U8Bytes);
+if (check_id_in_store(id)) then (id 未定义)
+  :log::warn + return false|
+else (id 已定义)
+endif
 
-partition "1. System Initialization" {
-    :start();
-    :load_config();
-    :init_logger();
-    :init_func_generator();
-    note right: LLVM Context initialized\nonce globally
-    :init_data();
-    :init_store();
-    :init_mapper();
-    :init_aggregate();
-}
+|#CCE5FF 存储层|
+:find_or_insert_array(id)
+→ 懒创建 WrappedArray (环形缓冲);
 
-partition "2. Record Definition" {
-    :def_incoming(name, columns);
-    :Record::insert_record();
-    :Generate record ID;
-    :Store record definition;
-    :Update name map;
-}
+:insert(array, data)
+→ write_data(base = (walker & mask)*step)
+→ walker += step;
 
-partition "3. Mapper Definition" {
-    :def_mapper(sql, callback);
-    :parse_select(sql);
-    :Parse SQL query;
-    :FuncGenerator::new();
-    :gen_select_filter_func();
-    note right: JIT compile WHERE clause\nto native code
-    :create_executor();
-    :Store WrappedMapper;
-}
+|#E6FFCC 执行层|
+:call_mapper(array, record_id);
 
-partition "4. Data Processing" {
-    :new_data(U8Bytes);
-    :find_or_insert_array(id);
-    :insert(array, data);
-    note right: Insert into circular buffer
-    :call_mapper(array, id);
-    
-    if (Mapper found?) then (yes)
-        :loop_filter();
-        while (More records to process?) is (yes)
-            :Apply JIT filter;
-            if (Filter passes?) then (yes)
-                :mapper.fetch();
-                :Extract fields;
-                :Copy to output buffer;
-            endif
-        endwhile (no)
-        :callback(fn_holder, params);
-    else (no)
-    endif
-}
+if (search_mapper(record_id) 存在?) then (否)
+  :return  (无 mapper 或 id 不匹配);
+else (是)
+endif
 
-partition "5. Aggregate Processing" {
-    :def_aggregate(sql, callback);
-    :parse_select(sql);
-    :gen_aggregate();
-    :Store WrappedAggregate;
-    
-    note right: When mapper triggers aggregate
-    :call_aggregate();
-    :init_data();
-    :compute_data();
-    while (More elements?) is (yes)
-        :fetch_arg_val();
-        :choose_func();
-        note right: Max/Min/Sum/Avg/First/Last
-    endwhile (no)
-    :callback();
-}
+:loop_filter 窗口扫描
+→ idx: last_idx → first_idx
+→ position = ((walker-1-idx)*step) & mask
+→ filter.call(sub_data_ptr);  ← JIT 过滤 (LLVM);
+
+if (JIT filter 返回 true?) then (是)
+  :mapper.fetch 提取字段
+  → Executor 求值 (Const/Fetch/Compute)
+  → 写入 PTR_VAL_DATA_REF 缓冲;
+  :n += 1;
+  if (n == limit?) then (是)
+    :break 提前退出;
+  else (否)
+  endif
+else (否)
+endif
+
+repeat while (idx 未到 first_idx) is (继续)
+
+|#FFD9E6 回调层|
+:callback(FnHolder, CallbackParams{u8_ptr, size, ...});
+
+if (FnHolder::Lambda 且绑定聚合?) then (是)
+  :call_aggregate(wrapped, param);
+  :init_data 初始化聚合缓冲 (仅 MaxL/MinL/MaxD/MinD);
+  :compute_data 逐条聚合 (sum/count/avg/min/max/first/last);
+  :callback(FnHolder, CallbackParams{聚合缓冲, size=1});
+else (普通回调 / FFI 回调)
+  :Rust 闭包 / Java 回调 / Python 回调;
+endif
 
 stop
 
