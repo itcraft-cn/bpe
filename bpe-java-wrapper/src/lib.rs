@@ -1,10 +1,12 @@
-use bpe::{CallbackParams, Column, FfiFunc, U8Bytes};
+#![allow(non_snake_case)]
+
+use bpe::{CallbackParams, Column, FfiFunc, U8Bytes, Window};
 use jni::{
     objects::{
         GlobalRef, JByteArray, JClass, JIntArray, JObject, JObjectArray, JPrimitiveArray, JString,
         JValueGen,
     },
-    sys::{jboolean, jint},
+    sys::{jboolean, jint, jlong},
     JNIEnv, JavaVM,
 };
 use std::{slice, sync::Once};
@@ -156,6 +158,160 @@ pub extern "system" fn Java_cn_itcraft_bpe4j_Bpe_defMapperBindAggregate<'local>(
 }
 
 #[no_mangle]
+/// defWindowAggregate: sql, windowType, periodMs, lengthMs, slideMs, tsField, lagMs, callback
+pub extern "system" fn Java_cn_itcraft_bpe4j_Bpe_defWindowAggregate<'local>(
+    env: JNIEnv<'local>,
+    _class: JClass<'local>,
+    j_sql: JString<'local>,
+    j_window_type: jint,
+    j_period_ms: jlong,
+    j_length_ms: jlong,
+    j_slide_ms: jlong,
+    j_ts_field: JString<'local>,
+    j_lag_ms: jlong,
+    j_callback: JObject<'local>,
+) -> jint {
+    def_window_action(env, j_sql, j_window_type, j_period_ms, j_length_ms, j_slide_ms, j_ts_field, None, j_lag_ms, j_callback, |sql, window, ts, _key, lag, ffi| {
+        bpe::def_window_aggregate_ffi(sql, window, ts, lag, ffi)
+    })
+}
+
+/// defKeyedWindowAggregate: sql, windowType, periodMs, lengthMs, slideMs, tsField, keyField, lagMs, callback
+#[no_mangle]
+pub extern "system" fn Java_cn_itcraft_bpe4j_Bpe_defKeyedWindowAggregate<'local>(
+    env: JNIEnv<'local>,
+    _class: JClass<'local>,
+    j_sql: JString<'local>,
+    j_window_type: jint,
+    j_period_ms: jlong,
+    j_length_ms: jlong,
+    j_slide_ms: jlong,
+    j_ts_field: JString<'local>,
+    j_key_field: JString<'local>,
+    j_lag_ms: jlong,
+    j_callback: JObject<'local>,
+) -> jint {
+    def_window_action(env, j_sql, j_window_type, j_period_ms, j_length_ms, j_slide_ms, j_ts_field, Some(j_key_field), j_lag_ms, j_callback, bpe::def_keyed_window_aggregate_ffi)
+}
+
+#[allow(clippy::too_many_arguments)]
+fn def_window_action<'local, F>(
+    env: JNIEnv<'local>,
+    j_sql: JString<'local>,
+    j_window_type: jint,
+    j_period_ms: jlong,
+    j_length_ms: jlong,
+    j_slide_ms: jlong,
+    j_ts_field: JString<'local>,
+    j_key_field: Option<JString<'local>>,
+    j_lag_ms: jlong,
+    j_callback: JObject<'local>,
+    f: F,
+) -> jint
+where
+    F: Fn(&str, Window, Option<&str>, Option<&str>, u64, Box<dyn FfiFunc>) -> Option<u16>,
+{
+    let window = match j_window_type {
+        1 => Window::Tumbling {
+            period_ms: j_period_ms as u64,
+        },
+        2 => Window::Sliding {
+            length_ms: j_length_ms as u64,
+            slide_ms: j_slide_ms as u64,
+        },
+        _ => {
+            log::warn!("unknown window_type: {j_window_type}");
+            return -1;
+        }
+    };
+    let sql = match conv(&env, j_sql) {
+        Ok(s) => s,
+        Err(e) => {
+            log::warn!("conv sql failed: {e:?}");
+            return -1;
+        }
+    };
+    let ts_field = if j_ts_field.is_null() {
+        None
+    } else {
+        match conv(&env, j_ts_field) {
+            Ok(s) => Some(s),
+            Err(_) => return -1,
+        }
+    };
+    let key_field = match j_key_field {
+        Some(jk) => {
+            if jk.is_null() {
+                None
+            } else {
+                match conv(&env, jk) {
+                    Ok(s) => Some(s),
+                    Err(_) => return -1,
+                }
+            }
+        }
+        None => None,
+    };
+    let vm = match env.get_java_vm() {
+        Ok(vm) => vm,
+        Err(e) => {
+            log::warn!("failed to get java vm: {e:?}");
+            return -1;
+        }
+    };
+    let callback = match env.new_global_ref(j_callback) {
+        Ok(cb) => cb,
+        Err(e) => {
+            log::warn!("failed to create global ref: {e:?}");
+            return -1;
+        }
+    };
+    let ffi = Box::new(JavaFfiFunc { vm, callback });
+    match f(
+        sql.as_str(),
+        window,
+        ts_field.as_deref(),
+        key_field.as_deref(),
+        j_lag_ms as u64,
+        ffi,
+    ) {
+        Some(id) => id as jint,
+        None => -1,
+    }
+}
+
+/// defDimension: allocates a dimension table
+#[no_mangle]
+pub extern "system" fn Java_cn_itcraft_bpe4j_Bpe_defDimension<'local>(
+    _env: JNIEnv<'local>,
+    _class: JClass<'local>,
+) -> jint {
+    bpe::def_dimension().map(|id| id as jint).unwrap_or(-1)
+}
+
+/// updateDimension(id, key, value)
+#[no_mangle]
+pub extern "system" fn Java_cn_itcraft_bpe4j_Bpe_updateDimension<'local>(
+    _env: JNIEnv<'local>,
+    _class: JClass<'local>,
+    j_id: jint,
+    j_key: jlong,
+    j_value: jlong,
+) {
+    bpe::update_dimension(j_id as u16, j_key, j_value);
+}
+
+/// removeDimension(id, key)
+#[no_mangle]
+pub extern "system" fn Java_cn_itcraft_bpe4j_Bpe_removeDimension<'local>(
+    _env: JNIEnv<'local>,
+    _class: JClass<'local>,
+    j_id: jint,
+    j_key: jlong,
+) {
+    bpe::remove_dimension(j_id as u16, j_key);
+}
+
 pub extern "system" fn Java_cn_itcraft_bpe4j_Bpe_defAggregate<'local>(
     env: JNIEnv<'local>,
     _class: JClass<'local>,

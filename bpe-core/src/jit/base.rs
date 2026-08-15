@@ -2,8 +2,8 @@ use crate::{
     jit::aux::{
         fetch_column_f64, fetch_column_i64, int2float, jit_abs, jit_add, jit_ceil, jit_div,
         jit_exp, jit_floor, jit_greatest, jit_least, jit_ln, jit_log10, jit_mod, jit_mul,
-        jit_pow, jit_round, jit_sign, jit_sqrt, jit_sub, jit_to_double, jit_to_long, jit_trunc,
-        llvm_log_float, llvm_log_int,
+        jit_pow, jit_dim_get, jit_dim_has, jit_round, jit_sign, jit_sqrt, jit_sub, jit_to_double,
+        jit_to_long, jit_trunc, llvm_log_float, llvm_log_int,
     },
 };
 use globalvar::{def_global_ptr, get_global_mut};
@@ -270,4 +270,6 @@ fn register_scalar_funcs<'ctx>(
     reg2!("func_pow", jit_pow);
     reg2!("func_greatest", jit_greatest);
     reg2!("func_least", jit_least);
+    reg2!("func_dim_has", jit_dim_has);
+    reg2!("func_dim_get", jit_dim_get);
 }

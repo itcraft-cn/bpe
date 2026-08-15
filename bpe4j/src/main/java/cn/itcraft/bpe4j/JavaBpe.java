@@ -108,4 +108,50 @@ public class JavaBpe {
     public static int defAggregate(String sql, BpeCallback callback) {
         return Bpe.defAggregate(sql, callback);
     }
+
+    /** Fixed (tumbling) window type for {@link #defWindowAggregate}. */
+    public static final int WINDOW_TUMBLING = 1;
+    /** Sliding (hopping) window type for {@link #defWindowAggregate}. */
+    public static final int WINDOW_SLIDING = 2;
+
+    /**
+     * Defines a time-window aggregate. The callback receives the aggregate result
+     * bytes (same layout as {@link #defAggregate}) when a window ends.
+     *
+     * @param windowType {@link #WINDOW_TUMBLING} or {@link #WINDOW_SLIDING}
+     * @param tsField    event-time column name (Long ms), or null for processing time
+     * @param lagMs      out-of-order tolerance (watermark) / delay
+     */
+    public static int defWindowAggregate(String sql, int windowType, long periodMs, long lengthMs,
+                                         long slideMs, String tsField, long lagMs,
+                                         BpeCallback callback) {
+        return Bpe.defWindowAggregate(sql, windowType, periodMs, lengthMs, slideMs, tsField, lagMs,
+                                      callback);
+    }
+
+    /**
+     * Defines a per-key time-window aggregate. The callback receives rows of
+     * {@code [key(long)][field0]...[fieldN]} for every key in the window.
+     */
+    public static int defKeyedWindowAggregate(String sql, int windowType, long periodMs,
+                                              long lengthMs, long slideMs, String tsField,
+                                              String keyField, long lagMs, BpeCallback callback) {
+        return Bpe.defKeyedWindowAggregate(sql, windowType, periodMs, lengthMs, slideMs, tsField,
+                                           keyField, lagMs, callback);
+    }
+
+    /** Allocates a dimension table (used by {@code _dim_has/_dim_get} in SQL). */
+    public static int defDimension() {
+        return Bpe.defDimension();
+    }
+
+    /** Inserts/updates a key -> value entry in a dimension table. */
+    public static void updateDimension(int id, long key, long value) {
+        Bpe.updateDimension(id, key, value);
+    }
+
+    /** Removes a key from a dimension table. */
+    public static void removeDimension(int id, long key) {
+        Bpe.removeDimension(id, key);
+    }
 }

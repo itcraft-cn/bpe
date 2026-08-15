@@ -9,7 +9,7 @@ use crate::{
     mapper::{call_mapper, define_mapper, define_mapper_bind_aggregate, init_mapper},
     param::CallbackParams,
     store::{find_or_insert_array, get_record_size, init_store, insert, WrappedArray},
-    window::{define_window_aggregate, Window},
+    window::{define_keyed_window_aggregate, define_window_aggregate, Window},
 };
 use std::sync::Once;
 
@@ -152,6 +152,62 @@ where
     F: Fn(CallbackParams) + Send + 'static,
 {
     define_window_aggregate(sql, window, ts_field, lag_ms, FnHolder::Func(Box::new(func)))
+}
+
+/// FFI variant of `def_window_aggregate` for language bindings.
+pub fn def_window_aggregate_ffi(
+    sql: &str,
+    window: Window,
+    ts_field: Option<&str>,
+    lag_ms: u64,
+    ffi: Box<dyn FfiFunc>,
+) -> Option<u16> {
+    define_window_aggregate(sql, window, ts_field, lag_ms, FnHolder::FfiFunc(ffi))
+}
+
+/// FFI variant of `def_keyed_window_aggregate` for language bindings.
+pub fn def_keyed_window_aggregate_ffi(
+    sql: &str,
+    window: Window,
+    ts_field: Option<&str>,
+    key_field: Option<&str>,
+    lag_ms: u64,
+    ffi: Box<dyn FfiFunc>,
+) -> Option<u16> {
+    match key_field {
+        Some(k) => define_keyed_window_aggregate(sql, window, ts_field, k, lag_ms, FnHolder::FfiFunc(ffi)),
+        None => {
+            log::warn!("def_keyed_window_aggregate_ffi requires a key_field");
+            None
+        }
+    }
+}
+
+/// Defines a per-key time-window aggregate: like `def_window_aggregate`, but the
+/// window result is delivered once per distinct value of the `key_field` column.
+///
+/// The callback receives rows laid out as `[key i64][field0]...[fieldN]` per key;
+/// `size()` is the number of keys in the window and `step()` is `(1+N)*8`.
+/// An empty window (no keys) still fires with `size()==0`.
+pub fn def_keyed_window_aggregate<F>(
+    sql: &str,
+    window: Window,
+    ts_field: Option<&str>,
+    key_field: &str,
+    lag_ms: u64,
+    func: F,
+) -> Option<u16>
+where
+    F: Fn(CallbackParams) + Send + 'static,
+{
+    define_keyed_window_aggregate(
+        sql,
+        window,
+        ts_field,
+        key_field,
+        lag_ms,
+        FnHolder::Func(Box::new(func)),
+    )
 }
 
 /// Defines an aggregate function that uses a foreign function interface (FFI) function.

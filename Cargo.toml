@@ -6,6 +6,7 @@ members = [
     "bpe-test",
     "bpe-sample"
 ]
+exclude = ["bpe-py-wrapper"]
 # https://substrate.stackexchange.com/questions/9011/warning-some-crates-are-on-edition-2021-which-defaults-to-resolver-2
 resolver = "2"
 

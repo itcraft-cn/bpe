@@ -1,4 +1,4 @@
-use crate::{data::Record, element::Element, exec::Executors};
+use crate::{data::Record, dimension, element::Element, exec::Executors};
 
 // ============================================================================
 // Pure element-level operations. Shared by the interpreter (exec.rs) and the
@@ -406,6 +406,56 @@ pub(crate) fn least(
         least_elem(v1, v2)
     } else {
         Element::Long(0)
+    }
+}
+
+/// `_dim_has(dim_id, key) -> Long(1/0)`: key exists in the dimension table.
+pub(crate) fn dim_has(
+    sub_data_ptr: *const u8,
+    id: u16,
+    v_ptr: u64,
+    record: &Record,
+    position: usize,
+    executors: &Executors,
+) -> Element {
+    if let Some((dim_id, key)) = fetch_2_arg(sub_data_ptr, id, v_ptr, record, position, executors) {
+        let did = elem_to_dim_id(dim_id);
+        let k = elem_to_i64(key);
+        Element::Long(if dimension::dim_contains(did, k) { 1 } else { 0 })
+    } else {
+        Element::Long(0)
+    }
+}
+
+/// `_dim_get(dim_id, key) -> Long(value)`: value for the key, 0 if absent.
+pub(crate) fn dim_get(
+    sub_data_ptr: *const u8,
+    id: u16,
+    v_ptr: u64,
+    record: &Record,
+    position: usize,
+    executors: &Executors,
+) -> Element {
+    if let Some((dim_id, key)) = fetch_2_arg(sub_data_ptr, id, v_ptr, record, position, executors) {
+        let did = elem_to_dim_id(dim_id);
+        let k = elem_to_i64(key);
+        Element::Long(dimension::dim_get(did, k))
+    } else {
+        Element::Long(0)
+    }
+}
+
+fn elem_to_dim_id(e: Element) -> u16 {
+    match e {
+        Element::Long(v) => v as u16,
+        Element::Double(v) => v as u16,
+    }
+}
+
+fn elem_to_i64(e: Element) -> i64 {
+    match e {
+        Element::Long(v) => v,
+        Element::Double(v) => v as i64,
     }
 }
 

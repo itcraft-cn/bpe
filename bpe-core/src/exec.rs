@@ -122,6 +122,8 @@ fn compute_func(
         SupportFunc::Pow => calc_func::pow(sub_data_ptr, id, v_ptr, record, position, executors),
         SupportFunc::Greatest => calc_func::greatest(sub_data_ptr, id, v_ptr, record, position, executors),
         SupportFunc::Least => calc_func::least(sub_data_ptr, id, v_ptr, record, position, executors),
+        SupportFunc::DimHas => calc_func::dim_has(sub_data_ptr, id, v_ptr, record, position, executors),
+        SupportFunc::DimGet => calc_func::dim_get(sub_data_ptr, id, v_ptr, record, position, executors),
         _ => Element::Long(0),
     }
 }

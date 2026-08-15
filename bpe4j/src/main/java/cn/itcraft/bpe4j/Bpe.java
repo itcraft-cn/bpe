@@ -24,4 +24,18 @@ final class Bpe {
     native static int defMapperBindAggregate(String sql, int aggregateId);
 
     native static int defAggregate(String sql, BpeCallback callback);
+
+    native static int defWindowAggregate(String sql, int windowType, long periodMs, long lengthMs,
+                                         long slideMs, String tsField, long lagMs,
+                                         BpeCallback callback);
+
+    native static int defKeyedWindowAggregate(String sql, int windowType, long periodMs,
+                                              long lengthMs, long slideMs, String tsField,
+                                              String keyField, long lagMs, BpeCallback callback);
+
+    native static int defDimension();
+
+    native static void updateDimension(int id, long key, long value);
+
+    native static void removeDimension(int id, long key);
 }

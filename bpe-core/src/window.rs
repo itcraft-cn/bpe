@@ -8,21 +8,25 @@
 //!   a record may belong to several overlapping windows.
 //!
 //! Event time comes from a Long (milliseconds) column (`ts_field`), falling back
-//! to processing time when no column is configured. The window module reuses the
-//! aggregate computation core (`init_data`/`compute_data`) and the JIT filter
-//! pipeline, so window results are consistent with the per-record aggregates.
+//! to processing time when no column is configured. In event-time mode a
+//! watermark (max observed event time minus `lag_ms`) drives early firing and
+//! drops records that arrive later than the watermark (out-of-order tolerance).
+//! The wall clock is kept as a fallback so idle windows still fire.
+//!
+//! Optional per-key grouping (`key_field`): the window result is delivered once
+//! per key, rows are `[key i64][field0]...[fieldN]` with `size()=#keys`.
 //!
 //! Threading: window buckets and the registry are guarded by `WINDOW_LOCK`; a
 //! daemon timer thread (started on the first window definition) scans for due
-//! windows every `TICK_MS`. The aggregate computation itself runs outside the
-//! lock on a per-instance result buffer, so the regular (window-less) hot path
-//! is untouched and never takes the lock.
+//! windows every `TICK_MS`. Aggregate computation runs outside the lock on a
+//! per-instance result buffer, so the regular (window-less) hot path is
+//! untouched and never takes the lock.
 
 use crate::{
     aggregate::{compute_data, gen_aggregate, init_data, WrappedAggregate},
     aux::fetch_ptr,
     callback::{callback, FnHolder},
-    consts::{FIELD_SIZE, U8_DATA_MAX_SIZE},
+    consts::FIELD_SIZE,
     data::{Record, U8Bytes},
     id::next_window_id,
     param::CallbackParams,
@@ -33,6 +37,7 @@ use crate::{
     store::get_record_size,
 };
 use globalvar::{def_global_ptr, get_global, get_global_mut};
+use hashbrown::HashMap;
 use inkwell::execution_engine::JitFunction;
 use std::{
     alloc::{self, Layout},
@@ -57,6 +62,10 @@ pub enum Window {
 
 /// Timer resolution: how often due windows are checked.
 const TICK_MS: u64 = 20;
+/// Size of the aggregate result/state area per instance (see aggregate.rs).
+const AGG_BUF_SIZE: usize = 8192;
+/// Per-key working buffer: 4KB state area + room for many fields.
+const KEY_BUF_SIZE: usize = 8192;
 
 static mut PTR_WINDOW_AGGS: u64 = 0;
 static mut PTR_PARSE_OPTIONS: u64 = 0;
@@ -111,18 +120,19 @@ pub(crate) struct WindowAggregate {
     wrapped: WrappedAggregate,
     filter: JitFunction<'static, FilterFunc>,
     ts_offset: Option<usize>,
+    /// Per-key grouping column offset (None = window-level aggregation).
+    key_offset: Option<usize>,
     window: Window,
     lag_ms: u64,
     buckets: Vec<WindowBucket>,
     result_buf: *mut u8,
     stream_offsets: Vec<usize>,
     step_total: usize,
+    /// Max observed event time, drives the event-time watermark.
+    max_seen_ts: i64,
 }
 
-/// Defines a window aggregate.
-/// `sql` selects aggregate fields from one record (e.g.
-/// `SELECT _count(s.a), _suml(s.a) FROM s WHERE s.a > 100`); the WHERE clause is
-/// JIT-filtered per record before it is placed into time buckets.
+/// Defines a window aggregate (window-level result).
 pub(crate) fn define_window_aggregate(
     sql: &str,
     window: Window,
@@ -130,8 +140,31 @@ pub(crate) fn define_window_aggregate(
     lag_ms: u64,
     func_holder: FnHolder,
 ) -> Option<u16> {
+    define_window_aggregate_impl(sql, window, ts_field, None, lag_ms, func_holder)
+}
+
+/// Defines a per-key window aggregate (one result row per key).
+pub(crate) fn define_keyed_window_aggregate(
+    sql: &str,
+    window: Window,
+    ts_field: Option<&str>,
+    key_field: &str,
+    lag_ms: u64,
+    func_holder: FnHolder,
+) -> Option<u16> {
+    define_window_aggregate_impl(sql, window, ts_field, Some(key_field), lag_ms, func_holder)
+}
+
+fn define_window_aggregate_impl(
+    sql: &str,
+    window: Window,
+    ts_field: Option<&str>,
+    key_field: Option<&str>,
+    lag_ms: u64,
+    func_holder: FnHolder,
+) -> Option<u16> {
     if matches!(window, Window::None) {
-        log::warn!("def_window_aggregate requires a real window (Tumbling/Sliding)");
+        log::warn!("window aggregate requires a real window (Tumbling/Sliding)");
         return None;
     }
     init_window();
@@ -144,22 +177,26 @@ pub(crate) fn define_window_aggregate(
         Some(name) => Record::fetch_column_id(stream_id, name).map(|cid| stream.column(*cid).offset()),
         None => None,
     };
+    let key_offset = match key_field {
+        Some(name) => Some(stream.column(*Record::fetch_column_id(stream_id, name)?).offset()),
+        None => None,
+    };
     let filter = parsed.filter().clone();
     let stream_offsets = build_stream_offsets(stream);
     let step_total = aggregate.executors().len() * FIELD_SIZE;
-    let result_buf =
-        unsafe { alloc::alloc(Layout::from_size_align(U8_DATA_MAX_SIZE, 1).unwrap()) };
-    let id = next_window_id();
+    let result_buf = unsafe { alloc::alloc(Layout::from_size_align(AGG_BUF_SIZE, 1).unwrap()) };
     let agg = Box::leak(Box::new(WindowAggregate {
         wrapped: WrappedAggregate::new(aggregate, func_holder),
         filter,
         ts_offset,
+        key_offset,
         window,
         lag_ms,
         buckets: vec![],
         result_buf,
         stream_offsets,
         step_total,
+        max_seen_ts: i64::MIN,
     }));
     {
         let _guard = WINDOW_LOCK.lock().unwrap_or_else(|e| e.into_inner());
@@ -167,7 +204,7 @@ pub(crate) fn define_window_aggregate(
         aggs.push(agg);
     }
     start_timer();
-    Some(id)
+    Some(next_window_id())
 }
 
 /// Builds the stream-column-offset table used by the aggregate input reader:
@@ -211,6 +248,16 @@ impl WindowAggregate {
         }
     }
 
+    /// Event-time watermark: max observed ts minus the out-of-order tolerance.
+    /// Only meaningful in event-time mode.
+    fn watermark(&self) -> i64 {
+        if self.ts_offset.is_some() {
+            self.max_seen_ts - self.lag_ms as i64
+        } else {
+            i64::MIN
+        }
+    }
+
     /// The half-open windows [start, end) covering a timestamp, aligned to the
     /// window definition. For sliding windows every record may cover several
     /// windows; the first start satisfies `s > ts - length` (i.e. s + length > ts).
@@ -241,11 +288,19 @@ impl WindowAggregate {
     /// Filters the record (JIT) and places it into every covering time bucket.
     /// Empty buckets are created even when the filter rejects the record, so an
     /// empty window still fires (with size 0) once its end time passes.
+    /// Records older than the watermark are dropped (out-of-order tolerance).
     fn add_record(&mut self, data: &U8Bytes) {
         let ts = self.event_ts(data);
+        if ts > self.max_seen_ts {
+            self.max_seen_ts = ts;
+        }
         let v_ptr = data.bytes().as_ptr() as u64;
         let matched = unsafe { self.filter.call(v_ptr) };
+        let watermark = self.watermark();
         for (start, end) in self.covering_windows(ts) {
+            if end < watermark {
+                continue; // late record beyond the watermark: dropped
+            }
             if matched {
                 self.add_to_bucket(start, end, data);
             } else {
@@ -284,17 +339,26 @@ impl WindowAggregate {
             self.buckets.push(b);
         }
     }
+
+    fn window_max_length(&self) -> u64 {
+        match self.window {
+            Window::Tumbling { period_ms } => period_ms,
+            Window::Sliding { length_ms, .. } => length_ms,
+            Window::None => 0,
+        }
+    }
 }
 
 /// Timer thread body: every tick, collect due buckets under the lock, then
 /// compute the aggregates outside the lock and deliver the callbacks.
+struct Pending {
+    agg: *const WindowAggregate,
+    start_ms: i64,
+    end_ms: i64,
+    records: Vec<u8>,
+}
+
 fn check_and_trigger() {
-    struct Pending {
-        agg: *const WindowAggregate,
-        start_ms: i64,
-        end_ms: i64,
-        records: Vec<u8>,
-    }
     let mut pending: Vec<Pending> = vec![];
     {
         let _guard = WINDOW_LOCK.lock().unwrap_or_else(|e| e.into_inner());
@@ -303,9 +367,12 @@ fn check_and_trigger() {
         for agg_ref in aggs.iter_mut() {
             let agg_ptr = *agg_ref as *const WindowAggregate;
             let agg_mut: &mut WindowAggregate = &mut **agg_ref;
+            let watermark = agg_mut.watermark();
             let mut i = 0;
             while i < agg_mut.buckets.len() {
-                let due = agg_mut.buckets[i].end_ms + agg_mut.lag_ms as i64 <= now;
+                // event-time watermark OR wall-clock fallback
+                let due = agg_mut.buckets[i].end_ms < watermark
+                    || agg_mut.buckets[i].end_ms + agg_mut.lag_ms as i64 <= now;
                 if due {
                     let b = agg_mut.buckets.remove(i);
                     pending.push(Pending {
@@ -325,13 +392,25 @@ fn check_and_trigger() {
     }
     // compute and deliver outside the lock
     for p in pending {
-        let agg = unsafe { &*p.agg };
-        let count = p.records.len() / get_record_size();
-        let stream = Record::get_record(agg.wrapped.aggregate().stream_id());
-        let Some(stream) = stream else { continue };
+        deliver_window(&p);
+    }
+}
+
+/// Computes the aggregate result for one due window and invokes the callback.
+/// Window-level: one result row. Per-key: one row per key.
+fn deliver_window(p: &Pending) {
+    let agg = unsafe { &*p.agg };
+    let count = p.records.len() / get_record_size();
+    let stream = match Record::get_record(agg.wrapped.aggregate().stream_id()) {
+        Some(s) => s,
+        None => return,
+    };
+    if let Some(key_off) = agg.key_offset {
+        deliver_keyed(p, agg, stream, count, key_off);
+    } else {
         let buf = agg.result_buf;
         if !init_data(buf, &agg.wrapped) {
-            continue;
+            return;
         }
         if count > 0 {
             let param = CallbackParams::new(p.records.as_ptr(), 0, 0, count, get_record_size());
@@ -351,14 +430,48 @@ fn check_and_trigger() {
     }
 }
 
-impl WindowAggregate {
-    fn window_max_length(&self) -> u64 {
-        match self.window {
-            Window::Tumbling { period_ms } => period_ms,
-            Window::Sliding { length_ms, .. } => length_ms,
-            Window::None => 0,
-        }
+/// Per-key delivery: group the window records by the key column, compute the
+/// aggregate per group into a row `[key i64][field0]...[fieldN]`, and deliver
+/// all rows in one callback (`size()=#keys`, `step()=(1+N)*8`).
+fn deliver_keyed(p: &Pending, agg: &WindowAggregate, stream: &Record, count: usize, key_off: usize) {
+    let rec_size = get_record_size();
+    let mut groups: HashMap<i64, Vec<u8>> = HashMap::new();
+    for i in 0..count {
+        let rec = &p.records[i * rec_size..(i + 1) * rec_size];
+        let key: i64 = unsafe { fetch_ptr(rec.as_ptr().add(key_off)) };
+        groups.entry(key).or_default().extend_from_slice(rec);
     }
+    let row_size = FIELD_SIZE + agg.step_total; // key + fields
+    let mut out = vec![0_u8; groups.len() * row_size];
+    let mut work = vec![0_u8; KEY_BUF_SIZE]; // per-key aggregate work area (state included)
+    let work_ptr = work.as_mut_ptr();
+    let mut off = 0;
+    for (key, recs) in groups.iter() {
+        let rec_count = recs.len() / rec_size;
+        unsafe { *(out.as_mut_ptr().add(off) as *mut i64) = *key };
+        if !init_data(work_ptr, &agg.wrapped) {
+            return;
+        }
+        if rec_count > 0 {
+            let param = CallbackParams::new(recs.as_ptr(), 0, 0, rec_count, rec_size);
+            compute_data(work_ptr, &agg.wrapped, stream, param, &agg.stream_offsets);
+        }
+        // copy the dense field results into the output row
+        out[off + FIELD_SIZE..off + row_size].copy_from_slice(unsafe {
+            std::slice::from_raw_parts(work_ptr, agg.step_total)
+        });
+        off += row_size;
+    }
+    let param = CallbackParams::new_with_window(
+        out.as_ptr(),
+        0,
+        0,
+        groups.len(),
+        row_size,
+        p.start_ms,
+        p.end_ms,
+    );
+    callback(agg.wrapped.fn_holder(), param);
 }
 
 /// Starts the timer thread if it is not already running.

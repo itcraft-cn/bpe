@@ -2,6 +2,7 @@ use crate::{
     aux::fetch_ptr,
     calc_func,
     data::Record,
+    dimension,
     element::Element,
     jit::consts::{T_ERR, T_F64, T_I64},
     Column,
@@ -174,3 +175,26 @@ jit_binary!(jit_mod, |a: Element, b: Element| a.mod_(b));
 jit_binary!(jit_pow, calc_func::pow_elem);
 jit_binary!(jit_greatest, calc_func::greatest_elem);
 jit_binary!(jit_least, calc_func::least_elem);
+
+/// `_dim_has(dim_id, key)`: dim_id is a constant Long, key the lookup value.
+pub(crate) unsafe extern "C" fn jit_dim_has(_type1: u64, val1: u64, type2: u64, val2: u64) -> RetVal {
+    let dim_id = val1 as u16;
+    let key = match element_from_bits(type2, val2) {
+        Element::Long(v) => v,
+        Element::Double(v) => v as i64,
+    };
+    RetVal::new(
+        T_I64,
+        if dimension::dim_contains(dim_id, key) { 1 } else { 0 },
+    )
+}
+
+/// `_dim_get(dim_id, key)`.
+pub(crate) unsafe extern "C" fn jit_dim_get(_type1: u64, val1: u64, type2: u64, val2: u64) -> RetVal {
+    let dim_id = val1 as u16;
+    let key = match element_from_bits(type2, val2) {
+        Element::Long(v) => v,
+        Element::Double(v) => v as i64,
+    };
+    RetVal::new(T_I64, dimension::dim_get(dim_id, key) as u64)
+}

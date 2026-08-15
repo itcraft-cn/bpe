@@ -49,6 +49,11 @@ pub(crate) enum SupportFunc {
     Greatest,
     #[strum(serialize = "least")]
     Least,
+    // dimension lookup funcs (dim_id constant, key column)
+    #[strum(serialize = "dim_has")]
+    DimHas,
+    #[strum(serialize = "dim_get")]
+    DimGet,
     // aggregate func
     #[strum(serialize = "minl")]
     MinL,
