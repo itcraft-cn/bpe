@@ -1,5 +1,10 @@
-use crate::jit::aux::{
-    fetch_column_f64, fetch_column_i64, int2float, llvm_log_float, llvm_log_int,
+use crate::{
+    jit::aux::{
+        fetch_column_f64, fetch_column_i64, int2float, jit_abs, jit_add, jit_ceil, jit_div,
+        jit_exp, jit_floor, jit_greatest, jit_least, jit_ln, jit_log10, jit_mod, jit_mul,
+        jit_pow, jit_round, jit_sign, jit_sqrt, jit_sub, jit_to_double, jit_to_long, jit_trunc,
+        llvm_log_float, llvm_log_int,
+    },
 };
 use globalvar::{def_global_ptr, get_global_mut};
 use inkwell::{
@@ -7,7 +12,7 @@ use inkwell::{
     context::Context,
     execution_engine::{ExecutionEngine, JitFunction, UnsafeFunctionPointer},
     module::Module,
-    types::{FunctionType, StructType},
+    types::{FunctionType, IntType, StructType},
     values::{BasicValueEnum, FunctionValue, IntValue},
     OptimizationLevel,
 };
@@ -120,6 +125,8 @@ impl FuncGenerator<'_> {
                 log_float_fn_type,
                 llvm_log_float as *const () as usize,
             );
+            // Register scalar functions so WHERE clauses can call them via `_name(...)`
+            register_scalar_funcs(&func_generator, fetch_ret_val_type, i64_type);
             func_generator.type_wrapper.replace(fetch_ret_val_type); // Store the return type
             func_generator
         } else {
@@ -200,4 +207,67 @@ fn reg_rust_fn<'ctx>(
     func_generator
         .execution_engine
         .add_global_mapping(&rust_fn, fn_addr); // Map the function address in the execution engine
+}
+
+/// Registers the scalar functions (unary: `(t1,v1) -> RetVal`, binary: `(t1,v1,t2,v2) -> RetVal`)
+/// into the LLVM module under `func_{name}`, so JIT-compiled WHERE clauses can call
+/// `_name(...)` the same way SELECT fields do in the interpreter.
+fn register_scalar_funcs<'ctx>(
+    func_generator: &FuncGenerator<'ctx>,
+    ret_val_type: StructType<'ctx>,
+    i64_type: IntType<'ctx>,
+) {
+    let unary_fn_type = ret_val_type.fn_type(
+        &[i64_type.into(), i64_type.into()],
+        false,
+    );
+    let binary_fn_type = ret_val_type.fn_type(
+        &[
+            i64_type.into(),
+            i64_type.into(),
+            i64_type.into(),
+            i64_type.into(),
+        ],
+        false,
+    );
+    macro_rules! reg {
+        ($name:literal, $fn_addr:expr) => {
+            reg_rust_fn(
+                func_generator,
+                $name,
+                unary_fn_type,
+                $fn_addr as *const () as usize,
+            )
+        };
+    }
+    macro_rules! reg2 {
+        ($name:literal, $fn_addr:expr) => {
+            reg_rust_fn(
+                func_generator,
+                $name,
+                binary_fn_type,
+                $fn_addr as *const () as usize,
+            )
+        };
+    }
+    reg!("func_abs", jit_abs);
+    reg!("func_ceil", jit_ceil);
+    reg!("func_floor", jit_floor);
+    reg!("func_round", jit_round);
+    reg!("func_trunc", jit_trunc);
+    reg!("func_sign", jit_sign);
+    reg!("func_sqrt", jit_sqrt);
+    reg!("func_exp", jit_exp);
+    reg!("func_ln", jit_ln);
+    reg!("func_log10", jit_log10);
+    reg!("func_to_long", jit_to_long);
+    reg!("func_to_double", jit_to_double);
+    reg2!("func_add", jit_add);
+    reg2!("func_sub", jit_sub);
+    reg2!("func_mul", jit_mul);
+    reg2!("func_div", jit_div);
+    reg2!("func_mod", jit_mod);
+    reg2!("func_pow", jit_pow);
+    reg2!("func_greatest", jit_greatest);
+    reg2!("func_least", jit_least);
 }

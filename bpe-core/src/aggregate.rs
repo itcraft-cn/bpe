@@ -1,7 +1,8 @@
 use crate::{
     agg_func::{
         f_avg_d, f_avg_l, f_count_l, f_first_d, f_first_l, f_last_d, f_last_l, f_max_d_d,
-        f_max_d_l, f_max_l, f_min_d_d, f_min_d_l, f_min_l, f_sum_d_d, f_sum_d_l, f_sum_l,
+        f_max_d_l, f_max_l, f_min_d_d, f_min_d_l, f_min_l, f_stddev_finalize, f_stddev_step,
+        f_sum_d_d, f_sum_d_l, f_sum_l, f_var_finalize,
     },
     aux::{fetch_ptr, fill_ptr, SimpleU16Map},
     callback::{callback, FnHolder},
@@ -20,6 +21,13 @@ use crate::{
 };
 use globalvar::{def_global_ptr, get_global, get_global_mut};
 use std::alloc::{self, Layout};
+
+/// Base offset of the variance/stddev Welford state area inside the aggregate
+/// result buffer. The output slots (col_idx * FIELD_SIZE) stay untouched, so the
+/// callback layout is unchanged.
+const AGG_STATE_BASE: usize = 4096;
+/// Per-function Welford state size: [count: f64][mean: f64][m2: f64]
+const AGG_STATE_SIZE: usize = 24;
 
 static mut PTR_AGGREGATE_MAP: u64 = 0;
 static mut PTR_PARSE_OPTIONS: u64 = 0;
@@ -193,6 +201,15 @@ fn init_for_some_func(func: &SupportFunc, aggregate_data_ptr: *mut u8, offset: u
         SupportFunc::FirstL | SupportFunc::FirstD | SupportFunc::LastL | SupportFunc::LastD => {
             fill_ptr(unsafe { aggregate_data_ptr.add(offset) }, 0_i64);
         }
+        SupportFunc::Stddev | SupportFunc::StddevSamp | SupportFunc::Variance | SupportFunc::VarSamp => {
+            // zero the Welford state area [count, mean, m2]
+            let state = unsafe {
+                aggregate_data_ptr.add(AGG_STATE_BASE + (offset / FIELD_SIZE) * AGG_STATE_SIZE)
+            };
+            fill_ptr(state, 0.0_f64);
+            fill_ptr(unsafe { state.add(8) }, 0.0_f64);
+            fill_ptr(unsafe { state.add(16) }, 0.0_f64);
+        }
         _ => {}
     }
 }
@@ -250,7 +267,10 @@ fn compute_data(
                         call_once_compute(&wrapped_agg_param, func, element, offset);
                         // Compute
                     }
-                    _ => loop_compute(aggregate_data_ptr, stream, col_idx, executor, &param, offsets), // Handle other functions
+                    _ => {
+                        loop_compute(aggregate_data_ptr, stream, col_idx, executor, &param, offsets); // Handle other functions
+                        finalize_func(func, aggregate_data_ptr, col_idx); // write back variance/stddev results
+                    }
                 }
             }
             _ => {}
@@ -265,6 +285,29 @@ fn call_once_compute(
     offset: usize,
 ) {
     choose_func(func, element, wrapped_agg_param, offset, 0);
+}
+
+/// Writes back the final variance/stddev result from the Welford state area
+/// into the dense output slot after all records of the window are processed.
+fn finalize_func(func: &SupportFunc, aggregate_data_ptr: *mut u8, col_idx: usize) {
+    let offset = col_idx * FIELD_SIZE;
+    let state =
+        unsafe { aggregate_data_ptr.add(AGG_STATE_BASE + col_idx * AGG_STATE_SIZE) };
+    match func {
+        SupportFunc::Stddev => {
+            f_stddev_finalize(unsafe { aggregate_data_ptr.add(offset) }, state, false)
+        }
+        SupportFunc::StddevSamp => {
+            f_stddev_finalize(unsafe { aggregate_data_ptr.add(offset) }, state, true)
+        }
+        SupportFunc::Variance => {
+            f_var_finalize(unsafe { aggregate_data_ptr.add(offset) }, state, false)
+        }
+        SupportFunc::VarSamp => {
+            f_var_finalize(unsafe { aggregate_data_ptr.add(offset) }, state, true)
+        }
+        _ => {}
+    }
 }
 
 fn loop_compute(
@@ -385,6 +428,17 @@ fn choose_func(
                 f_avg_d(aggregate_data_ptr, offset, v, data_idx);
             }
         },
+        SupportFunc::Stddev | SupportFunc::StddevSamp | SupportFunc::Variance | SupportFunc::VarSamp => {
+            // Welford step; input is converted to f64, final result is written back by finalize_func
+            let state = unsafe {
+                aggregate_data_ptr.add(AGG_STATE_BASE + (offset / FIELD_SIZE) * AGG_STATE_SIZE)
+            };
+            let x = match &element {
+                Element::Long(v) => *v as f64,
+                Element::Double(v) => *v,
+            };
+            f_stddev_step(state, x);
+        }
         SupportFunc::FirstL => match &element {
             Element::Long(v) => {
                 f_first_l(aggregate_data_ptr, offset, v);
@@ -421,8 +475,7 @@ fn choose_func(
     };
 }
 
-fn fetch_arg_val(sub_data: *const u8, executor: &Executor, stream: &Record, offsets: &[usize]) -> Element {
-    match executor {
+fn fetch_arg_val(sub_data: *const u8, executor: &Executor, stream: &Record, offsets: &[usize]) -> Element {    match executor {
         Executor::Fetch(_record_id, field_id) => {
             // column type from the stream layout, value position from the mapper output offsets
             let column = stream.column(*field_id);

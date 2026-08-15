@@ -1,41 +1,86 @@
-use strum_macros::EnumString;
+use strum_macros::{Display, EnumString};
 
-#[derive(Debug, Clone, EnumString)]
+/// Supported SQL functions, referenced in SQL as `_name(...)` (e.g. `_suml`, `_abs`).
+/// `Display` yields the canonical (snake_case) name used to resolve the JIT module
+/// function (`func_{name}`); `EnumString` matches SQL names case-insensitively.
+#[derive(Debug, Clone, EnumString, Display)]
+#[strum(ascii_case_insensitive)]
 pub(crate) enum SupportFunc {
     // calc func
-    #[strum(ascii_case_insensitive)]
+    #[strum(serialize = "add")]
     Add,
-    #[strum(ascii_case_insensitive)]
+    #[strum(serialize = "sub")]
     Sub,
-    #[strum(ascii_case_insensitive)]
+    #[strum(serialize = "mul")]
     Mul,
-    #[strum(ascii_case_insensitive)]
+    #[strum(serialize = "div")]
     Div,
-    #[strum(ascii_case_insensitive)]
+    #[strum(serialize = "mod")]
     Mod,
+    // scalar func (1-arg)
+    #[strum(serialize = "abs")]
+    Abs,
+    #[strum(serialize = "ceil")]
+    Ceil,
+    #[strum(serialize = "floor")]
+    Floor,
+    #[strum(serialize = "round")]
+    Round,
+    #[strum(serialize = "sqrt")]
+    Sqrt,
+    #[strum(serialize = "exp")]
+    Exp,
+    #[strum(serialize = "ln")]
+    Ln,
+    #[strum(serialize = "log10")]
+    Log10,
+    #[strum(serialize = "sign")]
+    Sign,
+    #[strum(serialize = "trunc")]
+    Trunc,
+    #[strum(serialize = "to_long")]
+    ToLong,
+    #[strum(serialize = "to_double")]
+    ToDouble,
+    // scalar func (2-arg)
+    #[strum(serialize = "pow")]
+    Pow,
+    #[strum(serialize = "greatest")]
+    Greatest,
+    #[strum(serialize = "least")]
+    Least,
     // aggregate func
-    #[strum(ascii_case_insensitive)]
+    #[strum(serialize = "minl")]
     MinL,
-    #[strum(ascii_case_insensitive)]
+    #[strum(serialize = "maxl")]
     MaxL,
-    #[strum(ascii_case_insensitive)]
+    #[strum(serialize = "suml")]
     SumL,
-    #[strum(ascii_case_insensitive)]
+    #[strum(serialize = "count")]
     Count,
-    #[strum(ascii_case_insensitive)]
+    #[strum(serialize = "mind")]
     MinD,
-    #[strum(ascii_case_insensitive)]
+    #[strum(serialize = "maxd")]
     MaxD,
-    #[strum(ascii_case_insensitive)]
+    #[strum(serialize = "sumd")]
     SumD,
-    #[strum(ascii_case_insensitive)]
+    #[strum(serialize = "avg")]
     Avg,
-    #[strum(ascii_case_insensitive)]
+    #[strum(serialize = "firstl")]
     FirstL,
-    #[strum(ascii_case_insensitive)]
+    #[strum(serialize = "firstd")]
     FirstD,
-    #[strum(ascii_case_insensitive)]
+    #[strum(serialize = "lastl")]
     LastL,
-    #[strum(ascii_case_insensitive)]
+    #[strum(serialize = "lastd")]
     LastD,
+    // aggregate func (variance/stddev, output is f64)
+    #[strum(serialize = "stddev")]
+    Stddev,
+    #[strum(serialize = "stddev_samp")]
+    StddevSamp,
+    #[strum(serialize = "variance")]
+    Variance,
+    #[strum(serialize = "var_samp")]
+    VarSamp,
 }

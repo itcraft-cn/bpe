@@ -1,5 +1,6 @@
 use crate::{
     data::Record,
+    func_enum::SupportFunc,
     jit::{
         base::{BinaryExpression, FuncGenerator, GenContext},
         consts::{B_TRUE, T_B64, T_F64, T_I64},
@@ -12,12 +13,13 @@ use crate::{
 };
 use inkwell::{
     execution_engine::JitFunction,
-    values::{BasicValueEnum, StructValue},
+    values::{BasicMetadataValueEnum, BasicValueEnum, StructValue},
     FloatPredicate, IntPredicate,
 };
-use sql_parse::{BinaryOperator, Expression, Identifier, IdentifierPart, UnaryOperator};
+use sql_parse::{BinaryOperator, Expression, Function, Identifier, IdentifierPart, UnaryOperator};
 use std::{
     ops::Range,
+    str::FromStr,
     sync::atomic::{AtomicU64, Ordering},
 };
 
@@ -142,6 +144,11 @@ fn parse_exp<'ctx>(
         Expression::Identifier(id_vec) => parse_identifier(context, record, issues, id_vec), // Parse column identifier
         Expression::Integer(group) => parse_val(context, T_I64, group.0), // Parse integer literal
         Expression::Float(group) => parse_val(context, T_F64, group.0.to_bits()), // Parse float literal
+        Expression::Function(f, expr_vec, _) => {
+            // Parse scalar function calls (e.g. _abs(a) > 10) by calling the
+            // registered Rust-side function in the LLVM module
+            parse_function(context, f, expr_vec, record, issues, walker)
+        }
         _ => parse_unsupported(expr, issues), // Handle unsupported expression types
     }
 }
@@ -241,6 +248,79 @@ fn parse_negative_val<'ctx>(
         }
     } else {
         None
+    }
+}
+
+/// Parses a scalar function call (e.g. `_abs(demo.a)`, `_pow(demo.a, 2)`) into an LLVM
+/// call to the registered Rust-side `func_{name}` function.
+/// Arguments are evaluated recursively and passed as {type tag, value} pairs;
+/// the return value is a {type tag, value} struct like every other expression.
+fn parse_function<'ctx>(
+    context: &GenContext<'ctx>,
+    f: &Function<'_>,
+    args: &Vec<Expression<'_>>,
+    record: &Record,
+    issues: &mut Vec<String>,
+    walker: &mut AtomicU64,
+) -> Option<StructValue<'ctx>> {
+    let name = match f {
+        Function::Other(n) => n.to_string(),
+        _ => {
+            issues.push(format!("unsupported func: {f:?}"));
+            return None;
+        }
+    };
+    if !name.starts_with('_') {
+        issues.push(format!("unsupported func: {name:?}"));
+        return None;
+    }
+    let real_name = &name[1..];
+    let func = match SupportFunc::from_str(real_name) {
+        Ok(func) => {
+            let llvm_name = format!("func_{func}");
+            match context.func_generator.module.get_function(&llvm_name) {
+                Some(f) => f,
+                None => {
+                    issues.push(format!("func [{name}] is not registered in the JIT module"));
+                    return None;
+                }
+            }
+        }
+        Err(_) => {
+            issues.push(format!("unknown func: {name:?}"));
+            return None;
+        }
+    };
+    // evaluate each argument and pass {type tag, value} pairs to the Rust function
+    let mut call_args: Vec<BasicMetadataValueEnum> = vec![];
+    for arg in args {
+        let val = parse_exp(context, arg, record, issues, walker)?;
+        let type_field = val.get_field_at_index(0)?.into_int_value();
+        let val_field = val.get_field_at_index(1)?.into_int_value();
+        call_args.push(type_field.into());
+        call_args.push(val_field.into());
+    }
+    let call_site =
+        match context
+            .func_generator
+            .builder
+            .build_call(func, &call_args, "func_ret")
+        {
+            Ok(c) => c,
+            Err(e) => {
+                issues.push(format!("func [{name}] call failed (arity/type mismatch): {e:?}"));
+                return None;
+            }
+        };
+    let ret = call_site.try_as_basic_value().unwrap_basic();
+    match ret {
+        BasicValueEnum::StructValue(struct_value) => {
+            conv_rust_type_to_llvm_struct(context, struct_value)
+        }
+        _ => {
+            issues.push(format!("func [{name}] returned an unexpected value"));
+            None
+        }
     }
 }
 

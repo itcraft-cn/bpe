@@ -108,3 +108,49 @@ pub(crate) fn f_last_l(aggregate_data_ptr: *mut u8, offset: usize, v: &i64) {
 pub(crate) fn f_last_d(aggregate_data_ptr: *mut u8, offset: usize, v: &f64) {
     fill_ptr(unsafe { aggregate_data_ptr.add(offset) }, *v);
 }
+
+// ============================================================================
+// Variance / stddev via Welford's online algorithm.
+// State layout (24 bytes at state_ptr): [count: f64][mean: f64][m2: f64]
+// ============================================================================
+
+#[inline]
+pub(crate) fn f_stddev_step(state_ptr: *mut u8, v: f64) {
+    let count: f64 = fetch_ptr(state_ptr);
+    let mean: f64 = fetch_ptr(unsafe { state_ptr.add(8) });
+    let m2: f64 = fetch_ptr(unsafe { state_ptr.add(16) });
+    let n = count + 1.0;
+    let delta = v - mean;
+    let new_mean = mean + delta / n;
+    let new_m2 = m2 + delta * (v - new_mean);
+    fill_ptr(state_ptr, n);
+    fill_ptr(unsafe { state_ptr.add(8) }, new_mean);
+    fill_ptr(unsafe { state_ptr.add(16) }, new_m2);
+}
+
+/// Writes the final variance into the output slot. `sample=true` uses n-1.
+#[inline]
+pub(crate) fn f_var_finalize(out: *mut u8, state_ptr: *const u8, sample: bool) {
+    let count: f64 = fetch_ptr(state_ptr);
+    let m2: f64 = fetch_ptr(unsafe { state_ptr.add(16) });
+    if count <= 1.0 {
+        // undefined for n < 2 (population var of a single value is 0, sample is undefined)
+        fill_ptr(out, 0.0_f64);
+        return;
+    }
+    let var = if sample { m2 / (count - 1.0) } else { m2 / count };
+    fill_ptr(out, var);
+}
+
+/// Writes the final stddev into the output slot.
+#[inline]
+pub(crate) fn f_stddev_finalize(out: *mut u8, state_ptr: *const u8, sample: bool) {
+    let count: f64 = fetch_ptr(state_ptr);
+    let m2: f64 = fetch_ptr(unsafe { state_ptr.add(16) });
+    if count <= 1.0 {
+        fill_ptr(out, 0.0_f64);
+        return;
+    }
+    let var = if sample { m2 / (count - 1.0) } else { m2 / count };
+    fill_ptr(out, var.sqrt());
+}

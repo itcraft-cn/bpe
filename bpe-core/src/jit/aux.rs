@@ -1,6 +1,8 @@
 use crate::{
     aux::fetch_ptr,
+    calc_func,
     data::Record,
+    element::Element,
     jit::consts::{T_ERR, T_F64, T_I64},
     Column,
 };
@@ -103,3 +105,72 @@ unsafe fn pointer_to_str_safe(ptr: *const u8, len: usize) -> Result<&'static str
     // Validate and convert to string slice
     str::from_utf8(slice)
 }
+
+// ============================================================================
+// Scalar function support for the JIT filter path.
+// Each scalar function is registered in the LLVM module as `func_{name}` with
+// signature `(i64 type1, i64 val1[, i64 type2, i64 val2]) -> RetVal{type, value}`.
+// The implementation delegates to the pure element-level ops in calc_func, so
+// the JIT path and the interpreter path (exec.rs) always agree.
+// ============================================================================
+
+/// Converts a {type tag, bit pattern} pair into an Element.
+fn element_from_bits(type_tag: u64, bits: u64) -> Element {
+    match type_tag {
+        T_I64 => Element::Long(bits as i64),
+        T_F64 => Element::Double(f64::from_bits(bits)),
+        _ => {
+            log::warn!("invalid element type tag: {type_tag}");
+            Element::Long(0)
+        }
+    }
+}
+
+/// Converts an Element into a {type tag, bit pattern} RetVal.
+fn retval_from_element(e: Element) -> RetVal {
+    match e {
+        Element::Long(v) => RetVal::new(T_I64, v as u64),
+        Element::Double(v) => RetVal::new(T_F64, v.to_bits()),
+    }
+}
+
+macro_rules! jit_unary {
+    ($fname:ident, $op:expr) => {
+        pub(crate) unsafe extern "C" fn $fname(type1: u64, val1: u64) -> RetVal {
+            retval_from_element(($op)(element_from_bits(type1, val1)))
+        }
+    };
+}
+
+macro_rules! jit_binary {
+    ($fname:ident, $op:expr) => {
+        pub(crate) unsafe extern "C" fn $fname(type1: u64, val1: u64, type2: u64, val2: u64) -> RetVal {
+            retval_from_element(($op)(
+                element_from_bits(type1, val1),
+                element_from_bits(type2, val2),
+            ))
+        }
+    };
+}
+
+jit_unary!(jit_abs, calc_func::abs_elem);
+jit_unary!(jit_ceil, calc_func::ceil_elem);
+jit_unary!(jit_floor, calc_func::floor_elem);
+jit_unary!(jit_round, calc_func::round_elem);
+jit_unary!(jit_trunc, calc_func::trunc_elem);
+jit_unary!(jit_sign, calc_func::sign_elem);
+jit_unary!(jit_sqrt, calc_func::sqrt_elem);
+jit_unary!(jit_exp, calc_func::exp_elem);
+jit_unary!(jit_ln, calc_func::ln_elem);
+jit_unary!(jit_log10, calc_func::log10_elem);
+jit_unary!(jit_to_long, calc_func::to_long_elem);
+jit_unary!(jit_to_double, calc_func::to_double_elem);
+
+jit_binary!(jit_add, |a: Element, b: Element| a.add(b));
+jit_binary!(jit_sub, |a: Element, b: Element| a.sub(b));
+jit_binary!(jit_mul, |a: Element, b: Element| a.mul(b));
+jit_binary!(jit_div, |a: Element, b: Element| a.div(b));
+jit_binary!(jit_mod, |a: Element, b: Element| a.mod_(b));
+jit_binary!(jit_pow, calc_func::pow_elem);
+jit_binary!(jit_greatest, calc_func::greatest_elem);
+jit_binary!(jit_least, calc_func::least_elem);
