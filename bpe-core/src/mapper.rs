@@ -138,7 +138,7 @@ fn register_mapper(mapper: Mapper, func_holder: FnHolder) -> Option<u16> {
 
 /// Calls all mappers registered for the specified record ID by looking up the mapper list
 /// and record, then invoking each mapper with the provided array and parameters.
-//#[inline]
+#[inline]
 pub(crate) fn call_mapper(array: &WrappedArray, id: u16) {
     let opt_mappers = search_mapper(id); // Look up the mapper list by record ID
     let opt_record = Record::get_record(id); // Look up the record by ID

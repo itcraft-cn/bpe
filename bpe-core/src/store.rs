@@ -44,7 +44,7 @@ fn insert_into_slice(array: &mut WrappedArray, data: &U8Bytes) {
     array.write_data(base, &data[0..size], size);
 }
 
-//#[inline]
+#[inline]
 pub(crate) fn find_or_insert_array<'a>(id: u16) -> &'a mut WrappedArray {
     let map = get_global_mut::<SimpleU16Map>(unsafe { PTR_MAP });
     map.entry(id)

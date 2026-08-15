@@ -84,7 +84,7 @@ pub fn new_data(data: &U8Bytes) -> bool {
 
 /// Processes data by inserting it into the array and triggering the mapper.
 /// This function is marked as inline for performance optimization.
-//#[inline]
+#[inline]
 fn process_data(array: &mut WrappedArray, data: &U8Bytes) {
     insert(array, data); // Insert the data into the storage array
     update_hitmap(array, data); // Run each mapper's JIT filter once, record hits

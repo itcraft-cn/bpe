@@ -232,8 +232,19 @@ Measured with criterion on the full pipeline
 
 | Test Case | Median | ~Throughput (single core) |
 |---|---|---|
-| new_data + filter (4 fields, LIMIT 10) | ~0.64 µs/op | ~1.6M rec/s |
-| new_data + filter + aggregate | ~1.4 µs/op | ~0.7M rec/s |
+| new_data + filter (4 fields, LIMIT 10) | ~0.35 µs/op | ~2.8M rec/s |
+| new_data + filter + aggregate | ~1.17 µs/op | ~0.9M rec/s |
+
+Optimization history (perf_diff scenario: insert + 6-condition filter + 5-field
+computed select, window full): 8.4 µs/op before the incremental-filter rework
+→ 0.31 µs/op now (≈27×), via:
+
+1. **Incremental hit bitmap**: the JIT filter runs once per record at insert
+   time (not once per window scan); the result is stored as 1 bit/slot.
+2. **64-bit bitmap scanning**: zero words are skipped and set bits located with
+   TZCNT/LZCNT (SIMD-friendly bit operations).
+3. **Pre-resolved field readers & evaluation plans**: SELECT fields compile to
+   direct (offset, type) reads / flattened expression trees.
 
 The hot path is lock-free and allocation-free on the Rust side: continuous
 circular-buffer memory, pre-computed column offsets, JIT-compiled filters, and a

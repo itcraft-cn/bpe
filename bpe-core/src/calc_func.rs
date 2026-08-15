@@ -98,7 +98,7 @@ pub(crate) fn least_elem(a: Element, b: Element) -> Element {
     }
 }
 
-//#[inline]
+#[inline]
 fn to_f64(e: Element) -> f64 {
     match e {
         Element::Long(v) => v as f64,

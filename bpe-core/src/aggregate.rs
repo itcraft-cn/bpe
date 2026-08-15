@@ -74,7 +74,7 @@ pub(crate) fn define_aggregate(sql: &str, func_holder: FnHolder) -> Option<u16> 
 /// This function retrieves the stream associated with the aggregate and prepares the data pointer
 /// for aggregate computation. `offsets` maps each stream column id referenced by the aggregate
 /// to the byte offset of the same-named field in the mapper's SELECT output.
-//#[inline]
+#[inline]
 pub(crate) fn call_aggregate(
     wrapped: &WrappedAggregate,
     offsets: &[usize],
@@ -95,7 +95,7 @@ pub(crate) fn call_aggregate(
 /// and finally calling the callback function with the computed data.
 /// The aggregate state is always initialized (per-window semantics) before the callback,
 /// so even an empty window (size == 0) yields deterministic initial values.
-//#[inline]
+#[inline]
 fn call_with_aggregate_data(
     aggregate_data_ptr: *mut u8, // Pointer to memory where aggregate data will be stored
     wrapped: &WrappedAggregate,  // The wrapped aggregate structure
@@ -126,7 +126,7 @@ fn call_with_aggregate_data(
 /// Initializes aggregate data by setting up initial values for each executor in the aggregate.
 /// Results are stored at dense offsets (col_idx * FIELD_SIZE), independent of the stream layout.
 /// Returns true if all initializations succeed, false if any fail.
-//#[inline]
+#[inline]
 pub(crate) fn init_data(aggregate_data_ptr: *mut u8, wrapped: &WrappedAggregate) -> bool {
     // Iterate through each executor in the aggregate with its column index
     for (col_idx, executor) in wrapped.aggregate().executors().iter().enumerate() {
@@ -140,7 +140,7 @@ pub(crate) fn init_data(aggregate_data_ptr: *mut u8, wrapped: &WrappedAggregate)
     true // Return true to indicate all initializations succeeded
 }
 
-//#[inline]
+#[inline]
 fn setup_init_val(
     aggregate_data_ptr: *mut u8,
     col_idx: usize,
@@ -171,7 +171,7 @@ fn setup_init_val(
 
 /// Writes the initial value for each aggregate function into the result buffer.
 /// All functions are initialized so the callback never observes uninitialized memory.
-//#[inline]
+#[inline]
 fn init_for_some_func(func: &SupportFunc, aggregate_data_ptr: *mut u8, offset: usize) {
     match func {
         SupportFunc::MaxL => {
@@ -217,7 +217,7 @@ fn init_for_some_func(func: &SupportFunc, aggregate_data_ptr: *mut u8, offset: u
 /// Computes aggregate data by processing each executor in the aggregate.
 /// Results are stored at dense offsets (col_idx * FIELD_SIZE), independent of the stream layout.
 /// Handles constant values, single-argument functions (First/Last), and multi-argument functions.
-//#[inline]
+#[inline]
 pub(crate) fn compute_data(
     aggregate_data_ptr: *mut u8, // Pointer to memory where aggregate data is stored
     wrapped: &WrappedAggregate,  // The wrapped aggregate structure
@@ -333,7 +333,7 @@ fn loop_compute(
     }
 }
 
-//#[inline]
+#[inline]
 fn compute(
     col_idx: usize,
     wrapped_agg_param: &WrappedAggParam,
@@ -358,7 +358,7 @@ fn compute(
     }
 }
 
-//#[inline]
+#[inline]
 fn choose_func(
     func: &SupportFunc,
     element: Element,
