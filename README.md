@@ -228,26 +228,35 @@ Requirements: Rust 2021, LLVM-19, Java 8+ (for bpe4j), Python 3.11/3.12 (for bpe
 ## Performance
 
 Measured with criterion on the full pipeline
-(`new_data → insert → window scan → JIT filter → field fetch → callback`):
+(`new_data → insert → window scan → JIT filter → field fetch → callback`), release build:
 
-| Test Case | Median | ~Throughput (single core) |
+| Scenario | Median | ~Throughput (single core) |
 |---|---|---|
-| new_data + filter (4 fields, LIMIT 10) | ~0.35 µs/op | ~2.8M rec/s |
-| new_data + filter + aggregate (JIT kernel) | ~0.56 µs/op | ~1.8M rec/s |
+| new_data + filter (4 fields, LIMIT 10) | ~0.44 µs/op | ~2.3M rec/s |
+| new_data + filter + aggregate (JIT kernel) | ~0.46 µs/op | ~2.2M rec/s |
 
-Optimization history (perf_diff scenario: insert + 6-condition filter + 5-field
-computed select, window full): 8.4 µs/op before the incremental-filter rework
-→ 0.31 µs/op now (≈27×), via:
+### Full-path breakdown (perf_diff: 6-condition WHERE + 5 computed SELECT fields, window full)
 
-1. **Incremental hit bitmap**: the JIT filter runs once per record at insert
-   time (not once per window scan); the result is stored as 1 bit/slot.
-2. **64-bit bitmap scanning**: zero words are skipped and set bits located with
-   TZCNT/LZCNT (SIMD-friendly bit operations).
+| Stage | Cost | Share |
+|---|---|---|
+| insert (512 B memcpy) | ~14 ns | 4.5% |
+| filter + bitmap scan | ~106 ns | 34% |
+| field fetch + callback (10 × 5 fields) | ~194 ns | 62% |
+| **total** | **~314 ns/op** | — |
+
+Aggregate-only path (bind `def_aggregate`, 5 fields × LIMIT 10): ~78 ns/op (~13M rec/s).
+
+### Optimization history (perf_diff scenario, 8.4 µs/op → 0.31 µs/op, ≈27×)
+
+1. **Incremental hit bitmap**: the JIT filter runs once per record at insert time
+   (not once per window scan); result stored as 1 bit/slot.
+2. **64-bit bitmap scanning**: zero words skipped, set bits located via
+   TZCNT/LZCNT (SIMD-friendly).
 3. **Pre-resolved field readers & evaluation plans**: SELECT fields compile to
    direct (offset, type) reads / flattened expression trees.
 4. **JIT aggregate kernels**: the whole batch aggregation compiles into a single
    LLVM loop (direct loads, inlined arithmetic, phi accumulators) — the
-   bind/`def_aggregate` path went from ~82 µs/op to ~66 ns/op.
+   bind/`def_aggregate` path went from ~82 µs/op to ~78 ns/op (>1000×).
 
 The hot path is lock-free and allocation-free on the Rust side: continuous
 circular-buffer memory, pre-computed column offsets, JIT-compiled filters, and a
