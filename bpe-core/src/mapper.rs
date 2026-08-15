@@ -5,7 +5,7 @@ use crate::{
     consts::FIELD_SIZE,
     data::{ColumnType, Record, U8Bytes},
     error::ParseSqlError,
-    exec::{create_executor, Executors},
+    exec::{conv_executor_to_plan, create_executor, eval_plan, Executor, Executors, EvalPlan},
     id::next_mapper_id,
     param::CallbackParams,
     sql::{
@@ -236,7 +236,7 @@ fn gen_mapper(parsed_sql: ParsedSql) -> Result<Mapper, ParseSqlError> {
     }
     let vec_executors = rs_executors.unwrap();
     let select_fields = build_select_fields(&parsed_sql);
-    let field_readers = build_field_readers(&parsed_sql);
+    let field_readers = build_field_readers(&parsed_sql, &vec_executors);
     Ok(Mapper::new(
         id,
         parsed_sql,
@@ -247,9 +247,10 @@ fn gen_mapper(parsed_sql: ParsedSql) -> Result<Mapper, ParseSqlError> {
 }
 
 /// Builds the pre-resolved field readers: plain column reads become direct
-/// (offset, type) readers; constants are inlined; expressions fall back to the
-/// executor index (fields and executors are ordered identically).
-fn build_field_readers(parsed_sql: &ParsedSql) -> Vec<FieldReader> {
+/// (offset, type) readers; constants are inlined; expressions are converted to
+/// evaluation plans (leaf offsets pre-resolved), falling back to the executor
+/// index for unsupported functions (fields and executors are ordered identically).
+fn build_field_readers(parsed_sql: &ParsedSql, executors: &[Executor]) -> Vec<FieldReader> {
     let mut readers = vec![];
     let mut executor_idx = 0usize;
     let record = Record::get_record(parsed_sql.records()[0]);
@@ -276,7 +277,13 @@ fn build_field_readers(parsed_sql: &ParsedSql) -> Vec<FieldReader> {
             ExprEntity::Val(ValType::Bool(b)) => readers.push(FieldReader::ConstLong(*b as i64)),
             ExprEntity::Val(ValType::Int(v)) => readers.push(FieldReader::ConstLong(*v)),
             ExprEntity::Val(ValType::Float(f)) => readers.push(FieldReader::ConstDouble(*f)),
-            ExprEntity::Function(..) => readers.push(FieldReader::Computed(executor_idx)),
+            ExprEntity::Function(..) => {
+                let executor = &executors[executor_idx];
+                match record.and_then(|rec| conv_executor_to_plan(executor, rec).ok()) {
+                    Some(plan) => readers.push(FieldReader::Computed(plan)),
+                    None => readers.push(FieldReader::Fallback(executor_idx)),
+                }
+            }
         }
         executor_idx += 1;
     }
@@ -443,8 +450,10 @@ enum FieldReader {
     DoubleAt(usize),
     ConstLong(i64),
     ConstDouble(f64),
-    /// Computed expression: fall back to the executor tree (index into `executors`).
-    Computed(usize),
+    /// Computed expression: evaluation plan (leaf offsets pre-resolved).
+    Computed(EvalPlan),
+    /// Expression that cannot be pre-resolved (aggregate etc.): executor fallback.
+    Fallback(usize),
 }
 
 impl Mapper {
@@ -533,7 +542,21 @@ impl Mapper {
                     unsafe { fill_ptr((target as *mut u8).add(offset), *v) };
                     offset += FIELD_SIZE;
                 }
-                FieldReader::Computed(i) => {
+                FieldReader::Computed(plan) => {
+                    let val = eval_plan(
+                        plan,
+                        sub_data_ptr,
+                        id,
+                        v_ptr,
+                        record,
+                        position,
+                        &self.executors,
+                    );
+                    let val_len = val.len();
+                    val.copy_to_target(target as *mut u8, offset);
+                    offset += val_len;
+                }
+                FieldReader::Fallback(i) => {
                     let val = self.executors.index_of(*i as i32).fetch(
                         id,
                         v_ptr,

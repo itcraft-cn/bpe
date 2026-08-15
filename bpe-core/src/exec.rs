@@ -208,3 +208,131 @@ fn parse_args_fetchers(
         Ok(args_fetchers)
     }
 }
+
+/// A pre-resolved expression evaluation plan: leaves (column reads, constants)
+/// are resolved to direct offsets at definition time, so the fetch hot path
+/// avoids record lookups, executor dispatch and argument-fetch wrappers.
+/// Aggregates and unsupported expressions fall back to `Fallback(idx)`.
+#[derive(Debug, Clone)]
+pub(crate) enum EvalPlan {
+    LongAt(usize),
+    DoubleAt(usize),
+    ConstLong(i64),
+    ConstDouble(f64),
+    Unary(SupportFunc, Box<EvalPlan>),
+    Binary(SupportFunc, Box<EvalPlan>, Box<EvalPlan>),
+    DimHas(u16, Box<EvalPlan>),
+    DimGet(u16, Box<EvalPlan>),
+}
+
+/// Converts an executor subtree into an evaluation plan.
+/// Returns Err for unsupported functions (aggregates), which the caller maps
+/// to `EvalPlan::Fallback` with the executor index.
+pub(crate) fn conv_executor_to_plan(executor: &Executor, record: &Record) -> Result<EvalPlan, ()> {
+    let plan = match executor {
+        Executor::ConstLong(v) => EvalPlan::ConstLong(*v),
+        Executor::ConstDouble(v) => EvalPlan::ConstDouble(*v),
+        Executor::Fetch(_, field_id) => {
+            let col = record.column(*field_id);
+            match col.data_type() {
+                ColumnType::Long => EvalPlan::LongAt(col.offset()),
+                ColumnType::Double => EvalPlan::DoubleAt(col.offset()),
+            }
+        }
+        Executor::Compute(func, executors) => match func {
+            SupportFunc::Abs
+            | SupportFunc::Ceil
+            | SupportFunc::Floor
+            | SupportFunc::Round
+            | SupportFunc::Trunc
+            | SupportFunc::Sign
+            | SupportFunc::Sqrt
+            | SupportFunc::Exp
+            | SupportFunc::Ln
+            | SupportFunc::Log10
+            | SupportFunc::ToLong
+            | SupportFunc::ToDouble => {
+                let arg = conv_executor_to_plan(&executors.index_of(0), record)?;
+                EvalPlan::Unary(func.clone(), Box::new(arg))
+            }
+            SupportFunc::Add
+            | SupportFunc::Sub
+            | SupportFunc::Mul
+            | SupportFunc::Div
+            | SupportFunc::Mod
+            | SupportFunc::Pow
+            | SupportFunc::Greatest
+            | SupportFunc::Least => {
+                let l = conv_executor_to_plan(&executors.index_of(0), record)?;
+                let r = conv_executor_to_plan(&executors.index_of(1), record)?;
+                EvalPlan::Binary(func.clone(), Box::new(l), Box::new(r))
+            }
+            SupportFunc::DimHas => {
+                // dim_id is a constant Long argument; key is the second argument
+                let dim_id = match executors.index_of(0) {
+                    Executor::ConstLong(v) => *v as u16,
+                    _ => return Err(()),
+                };
+                let key = conv_executor_to_plan(&executors.index_of(1), record)?;
+                EvalPlan::DimHas(dim_id, Box::new(key))
+            }
+            SupportFunc::DimGet => {
+                let dim_id = match executors.index_of(0) {
+                    Executor::ConstLong(v) => *v as u16,
+                    _ => return Err(()),
+                };
+                let key = conv_executor_to_plan(&executors.index_of(1), record)?;
+                EvalPlan::DimGet(dim_id, Box::new(key))
+            }
+            _ => return Err(()),
+        },
+    };
+    Ok(plan)
+}
+
+/// Evaluates a plan against a record. `executors` is only touched for `Fallback`.
+pub(crate) fn eval_plan(
+    plan: &EvalPlan,
+    sub_data_ptr: *const u8,
+    id: u16,
+    v_ptr: u64,
+    record: &Record,
+    position: usize,
+    executors: &Executors,
+) -> Element {
+    match plan {
+        EvalPlan::LongAt(off) => Element::Long(unsafe { fetch_ptr(sub_data_ptr.add(*off)) }),
+        EvalPlan::DoubleAt(off) => Element::Double(unsafe { fetch_ptr(sub_data_ptr.add(*off)) }),
+        EvalPlan::ConstLong(v) => Element::Long(*v),
+        EvalPlan::ConstDouble(v) => Element::Double(*v),
+        EvalPlan::Unary(f, arg) => {
+            let v = eval_plan(arg, sub_data_ptr, id, v_ptr, record, position, executors);
+            calc_func::unary_elem(f, v)
+        }
+        EvalPlan::Binary(f, l, r) => {
+            let lv = eval_plan(l, sub_data_ptr, id, v_ptr, record, position, executors);
+            let rv = eval_plan(r, sub_data_ptr, id, v_ptr, record, position, executors);
+            calc_func::binary_elem(f, lv, rv)
+        }
+        EvalPlan::DimHas(dim_id, key) => {
+            let k = eval_plan(key, sub_data_ptr, id, v_ptr, record, position, executors);
+            let k = match k {
+                Element::Long(v) => v,
+                Element::Double(v) => v as i64,
+            };
+            Element::Long(if crate::dimension::dim_contains(*dim_id, k) {
+                1
+            } else {
+                0
+            })
+        }
+        EvalPlan::DimGet(dim_id, key) => {
+            let k = eval_plan(key, sub_data_ptr, id, v_ptr, record, position, executors);
+            let k = match k {
+                Element::Long(v) => v,
+                Element::Double(v) => v as i64,
+            };
+            Element::Long(crate::dimension::dim_get(*dim_id, k))
+        }
+    }
+}

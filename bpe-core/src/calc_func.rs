@@ -1,4 +1,6 @@
-use crate::{data::Record, dimension, element::Element, exec::Executors};
+use crate::{
+    data::Record, dimension, element::Element, exec::Executors, func_enum::SupportFunc,
+};
 
 // ============================================================================
 // Pure element-level operations. Shared by the interpreter (exec.rs) and the
@@ -101,6 +103,40 @@ fn to_f64(e: Element) -> f64 {
     match e {
         Element::Long(v) => v as f64,
         Element::Double(v) => v,
+    }
+}
+
+/// Unary scalar dispatch used by the evaluation-plan fast path.
+pub(crate) fn unary_elem(f: &SupportFunc, e: Element) -> Element {
+    match f {
+        SupportFunc::Abs => abs_elem(e),
+        SupportFunc::Ceil => ceil_elem(e),
+        SupportFunc::Floor => floor_elem(e),
+        SupportFunc::Round => round_elem(e),
+        SupportFunc::Trunc => trunc_elem(e),
+        SupportFunc::Sign => sign_elem(e),
+        SupportFunc::Sqrt => sqrt_elem(e),
+        SupportFunc::Exp => exp_elem(e),
+        SupportFunc::Ln => ln_elem(e),
+        SupportFunc::Log10 => log10_elem(e),
+        SupportFunc::ToLong => to_long_elem(e),
+        SupportFunc::ToDouble => to_double_elem(e),
+        _ => Element::Long(0),
+    }
+}
+
+/// Binary scalar dispatch used by the evaluation-plan fast path.
+pub(crate) fn binary_elem(f: &SupportFunc, a: Element, b: Element) -> Element {
+    match f {
+        SupportFunc::Add => a.add(b),
+        SupportFunc::Sub => a.sub(b),
+        SupportFunc::Mul => a.mul(b),
+        SupportFunc::Div => a.div(b),
+        SupportFunc::Mod => a.mod_(b),
+        SupportFunc::Pow => pow_elem(a, b),
+        SupportFunc::Greatest => greatest_elem(a, b),
+        SupportFunc::Least => least_elem(a, b),
+        _ => Element::Long(0),
     }
 }
 
