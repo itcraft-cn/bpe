@@ -10,18 +10,24 @@ static mut PTR_RECORD_MAP: u64 = 0;
 static mut PTR_NAME_MAP: u64 = 0;
 static mut PTR_ID_STORE: u64 = 0;
 
+/// 8-byte aligned payload so raw column reads (i64/f64) from `U8Bytes::bytes()`
+/// and JIT filter calls on the payload pointer are always aligned.
+#[repr(align(8))]
+#[derive(Clone, Copy, Debug)]
+pub(crate) struct AlignedBytes(pub(crate) [u8; U8_DATA_MAX_SIZE]);
+
 #[derive(Clone, Copy, Debug)]
 pub struct U8Bytes {
     id: u16,
     data_len: usize,
-    bytes: [u8; U8_DATA_MAX_SIZE],
+    bytes: AlignedBytes,
 }
 impl U8Bytes {
     pub fn new(id: u16, data_len: usize, bytes: [u8; U8_DATA_MAX_SIZE]) -> U8Bytes {
         U8Bytes {
             id,
             data_len,
-            bytes,
+            bytes: AlignedBytes(bytes),
         }
     }
 
@@ -34,7 +40,7 @@ impl U8Bytes {
         U8Bytes {
             id,
             data_len: len,
-            bytes,
+            bytes: AlignedBytes(bytes),
         }
     }
 
@@ -46,7 +52,7 @@ impl U8Bytes {
         U8Bytes {
             id,
             data_len: len,
-            bytes,
+            bytes: AlignedBytes(bytes),
         }
     }
 
@@ -59,11 +65,11 @@ impl U8Bytes {
     }
 
     pub fn bytes(&self) -> &[u8] {
-        self.bytes.as_slice()
+        self.bytes.0.as_slice()
     }
 
     pub fn bytes_mut(&mut self) -> &mut [u8] {
-        self.bytes.as_mut_slice()
+        self.bytes.0.as_mut_slice()
     }
 }
 

@@ -9,6 +9,7 @@ use crate::{
     mapper::{call_mapper, define_mapper, define_mapper_bind_aggregate, init_mapper},
     param::CallbackParams,
     store::{find_or_insert_array, get_record_size, init_store, insert, WrappedArray},
+    window::{define_window_aggregate, Window},
 };
 use std::sync::Once;
 
@@ -41,6 +42,7 @@ pub fn stop() {
 
 /// Internal function that logs the deactivation of the BPE system.
 fn actual_stop() {
+    crate::window::stop_timer(); // stop the window timer thread
     log::info!("mark as deactived");
 }
 
@@ -75,6 +77,7 @@ pub fn new_data(data: &U8Bytes) -> bool {
     } else {
         let array = find_or_insert_array(id); // Find or create storage array for this record ID
         process_data(array, data); // Insert data and trigger mapper processing
+        crate::window::on_new_data(id, data); // place into time-window buckets (cheap fast path)
         true
     }
 }
@@ -124,6 +127,31 @@ where
     F: Fn(CallbackParams) + Send + 'static,
 {
     define_aggregate(sql, FnHolder::Func(Box::new(func))) // Wrap the function and register the aggregate
+}
+
+/// Defines a time-window aggregate: records passing the WHERE clause are placed
+/// into time buckets (event time from `ts_field` if given, else processing time);
+/// when a window's end time passes (plus `lag_ms` tolerance), the aggregate over
+/// the window's records is computed and delivered to the callback.
+///
+/// The callback receives `CallbackParams` whose `u8_ptr` points to the aggregate
+/// result (same layout as `def_aggregate`), `window_start_ms()/window_end_ms()`
+/// carry the window time range, and `size()` is 1 when the window had records
+/// (0 for an empty window, which still fires with initial values).
+///
+/// Note: the callback runs on the engine's window-timer thread, so it must be
+/// `Send` and should not block for long.
+pub fn def_window_aggregate<F>(
+    sql: &str,
+    window: Window,
+    ts_field: Option<&str>,
+    lag_ms: u64,
+    func: F,
+) -> Option<u16>
+where
+    F: Fn(CallbackParams) + Send + 'static,
+{
+    define_window_aggregate(sql, window, ts_field, lag_ms, FnHolder::Func(Box::new(func)))
 }
 
 /// Defines an aggregate function that uses a foreign function interface (FFI) function.

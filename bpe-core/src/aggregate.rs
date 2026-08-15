@@ -127,7 +127,7 @@ fn call_with_aggregate_data(
 /// Results are stored at dense offsets (col_idx * FIELD_SIZE), independent of the stream layout.
 /// Returns true if all initializations succeed, false if any fail.
 #[inline]
-fn init_data(aggregate_data_ptr: *mut u8, wrapped: &WrappedAggregate) -> bool {
+pub(crate) fn init_data(aggregate_data_ptr: *mut u8, wrapped: &WrappedAggregate) -> bool {
     // Iterate through each executor in the aggregate with its column index
     for (col_idx, executor) in wrapped.aggregate().executors().iter().enumerate() {
         // Set up the initial value for this executor
@@ -218,7 +218,7 @@ fn init_for_some_func(func: &SupportFunc, aggregate_data_ptr: *mut u8, offset: u
 /// Results are stored at dense offsets (col_idx * FIELD_SIZE), independent of the stream layout.
 /// Handles constant values, single-argument functions (First/Last), and multi-argument functions.
 #[inline]
-fn compute_data(
+pub(crate) fn compute_data(
     aggregate_data_ptr: *mut u8, // Pointer to memory where aggregate data is stored
     wrapped: &WrappedAggregate,  // The wrapped aggregate structure
     stream: &Record,             // The stream record containing column information
@@ -508,7 +508,7 @@ pub(crate) fn search_aggregate(id: u16) -> Option<&'static WrappedAggregate> {
     map.get(id)
 }
 
-fn gen_aggregate(parsed_sql: &ParsedSql) -> Result<Aggregate, ParseSqlError> {
+pub(crate) fn gen_aggregate(parsed_sql: &ParsedSql) -> Result<Aggregate, ParseSqlError> {
     let fields = parsed_sql.fields();
     if fields.is_empty() {
         return Err(ParseSqlError::new(String::from("no field in aggregate")));
@@ -562,7 +562,7 @@ pub(crate) struct WrappedAggregate {
     fn_holder: FnHolder,
 }
 impl WrappedAggregate {
-    fn new(aggregate: Aggregate, fn_holder: FnHolder) -> Self {
+    pub(crate) fn new(aggregate: Aggregate, fn_holder: FnHolder) -> Self {
         WrappedAggregate {
             aggregate,
             fn_holder,
@@ -570,6 +570,9 @@ impl WrappedAggregate {
     }
     pub(crate) fn aggregate(&self) -> &Aggregate {
         &self.aggregate
+    }
+    pub(crate) fn fn_holder(&self) -> &FnHolder {
+        &self.fn_holder
     }
 }
 
