@@ -1,5 +1,5 @@
 use crate::{
-    aggregate::{call_aggregate, WrappedAggregate},
+    aggregate::{call_aggregate_jit, WrappedAggregate},
     aux::{fetch_ptr, fill_ptr, SimpleU16Entry, SimpleU16Map},
     callback::{callback, FnHolder},
     consts::FIELD_SIZE,
@@ -7,6 +7,7 @@ use crate::{
     error::ParseSqlError,
     exec::{conv_executor_to_plan, create_executor, eval_plan, Executor, Executors, EvalPlan},
     id::next_mapper_id,
+    jit::aggregate::gen_aggregate_func,
     param::CallbackParams,
     sql::{
         base::{parse_options, ExprEntity, FilterFunc, ParsedSql, ValType},
@@ -65,6 +66,8 @@ pub(crate) fn define_mapper(sql: &str, func_holder: FnHolder) -> Option<u16> {
 /// Defines a mapper that is bound to an aggregate function.
 /// The aggregate field references are resolved against the mapper's SELECT output
 /// by field NAME, so the aggregate reads the correct mapper output columns.
+/// The aggregate kernel is JIT-compiled with these offsets (falls back to the
+/// interpreter when compilation fails).
 pub(crate) fn define_mapper_bind_aggregate(
     sql: &str,
     wrapped: &'static WrappedAggregate,
@@ -74,7 +77,11 @@ pub(crate) fn define_mapper_bind_aggregate(
         let rs = gen_mapper(parsed_sql);
         if let Ok(mapper) = rs {
             let offsets = resolve_aggregate_offsets(&mapper, wrapped);
-            let f = move |param: CallbackParams| call_aggregate(wrapped, offsets.as_slice(), param);
+            let jit = gen_aggregate_func(wrapped.aggregate(), offsets.as_slice());
+            let f = move |param: CallbackParams| {
+                // JitFunction is Clone (cheap handle copy), so the closure stays Fn
+                call_aggregate_jit(wrapped, jit.clone(), offsets.as_slice(), param)
+            };
             register_mapper(mapper, FnHolder::Lambda(Box::new(f)))
         } else {
             log::warn!(

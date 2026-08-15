@@ -64,3 +64,25 @@ perf 差分显示瓶颈不是 JIT 过滤本身，而是**每次 new_data 对窗�
 - EvalPlan::Fallback（聚合表达式）深分派
 - 回调参数构造与 FnHolder 分派
 - 窗口聚合的 per-key 分组 HashMap 分配
+
+## 补充：聚合 JIT（task 续）
+
+**问题**：聚合解释执行（每字段每记录：列查找 + 类型分派 + 函数分派）——perf_agg 82µs/op（比过滤慢 260 倍）。
+
+**方案**：jit/aggregate.rs——把整批聚合编译为单个 LLVM 函数
+`fn(batch, count, step, out)`：
+- 列读取 = 预解析偏移直读（无 record 查找）
+- 算术/比较内联 IR；全部累积字段融合单循环（phi 累加器）
+- first/last 直接取首/末条；count==0 写初值；常量无条件写
+- 类型不兼容字段退化为初值（与解释器一致）
+
+**接入**：窗口聚合（deliver_window/keyed）与 bind 聚合（call_aggregate_jit）均用 JIT，编译失败回退解释器。
+
+**结果**：
+- perf_agg: 82,426 → 66 ns/op（**1247 倍**，1500 万 ops/s）
+- criterion filter+agg: 1166 → 560 ns（2 倍）
+- 全量 45 测试通过（聚合语义与解释器一致）
+
+**过程中修复**：
+- opaque pointer 下 build_load 需 pointee 类型（LLVM 19）
+- GEP 元素类型 i8 保证字节偏移

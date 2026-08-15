@@ -29,6 +29,7 @@ use crate::{
     consts::FIELD_SIZE,
     data::{Record, U8Bytes},
     id::next_window_id,
+    jit::aggregate::{gen_aggregate_func, AggFunc},
     param::CallbackParams,
     sql::{
         base::{parse_options, FilterFunc, ParsedSql},
@@ -130,6 +131,8 @@ pub(crate) struct WindowAggregate {
     step_total: usize,
     /// Max observed event time, drives the event-time watermark.
     max_seen_ts: i64,
+    /// JIT-compiled aggregate kernel (None = fall back to interpreter).
+    agg_jit: Option<JitFunction<'static, AggFunc>>,
 }
 
 /// Defines a window aggregate (window-level result).
@@ -185,6 +188,7 @@ fn define_window_aggregate_impl(
     let stream_offsets = build_stream_offsets(stream);
     let step_total = aggregate.executors().len() * FIELD_SIZE;
     let result_buf = unsafe { alloc::alloc(Layout::from_size_align(AGG_BUF_SIZE, 1).unwrap()) };
+    let agg_jit = gen_aggregate_func(&aggregate, &stream_offsets);
     let agg = Box::leak(Box::new(WindowAggregate {
         wrapped: WrappedAggregate::new(aggregate, func_holder),
         filter,
@@ -197,6 +201,7 @@ fn define_window_aggregate_impl(
         stream_offsets,
         step_total,
         max_seen_ts: i64::MIN,
+        agg_jit,
     }));
     {
         let _guard = WINDOW_LOCK.lock().unwrap_or_else(|e| e.into_inner());
@@ -409,12 +414,21 @@ fn deliver_window(p: &Pending) {
         deliver_keyed(p, agg, stream, count, key_off);
     } else {
         let buf = agg.result_buf;
-        if !init_data(buf, &agg.wrapped) {
-            return;
-        }
-        if count > 0 {
-            let param = CallbackParams::new(p.records.as_ptr(), 0, 0, count, get_record_size());
-            compute_data(buf, &agg.wrapped, stream, param, &agg.stream_offsets);
+        match &agg.agg_jit {
+            Some(jit) => {
+                // JIT kernel: computes init for count==0 and results otherwise
+                unsafe { jit.call(p.records.as_ptr(), count, get_record_size(), buf) };
+            }
+            None => {
+                if !init_data(buf, &agg.wrapped) {
+                    return;
+                }
+                if count > 0 {
+                    let param =
+                        CallbackParams::new(p.records.as_ptr(), 0, 0, count, get_record_size());
+                    compute_data(buf, &agg.wrapped, stream, param, &agg.stream_offsets);
+                }
+            }
         }
         let size = if count > 0 { 1 } else { 0 };
         let param = CallbackParams::new_with_window(
@@ -449,17 +463,25 @@ fn deliver_keyed(p: &Pending, agg: &WindowAggregate, stream: &Record, count: usi
     for (key, recs) in groups.iter() {
         let rec_count = recs.len() / rec_size;
         unsafe { *(out.as_mut_ptr().add(off) as *mut i64) = *key };
-        if !init_data(work_ptr, &agg.wrapped) {
-            return;
-        }
-        if rec_count > 0 {
-            let param = CallbackParams::new(recs.as_ptr(), 0, 0, rec_count, rec_size);
-            compute_data(work_ptr, &agg.wrapped, stream, param, &agg.stream_offsets);
+        let row_out = unsafe { out.as_mut_ptr().add(off + FIELD_SIZE) };
+        match &agg.agg_jit {
+            Some(jit) => {
+                unsafe { jit.call(recs.as_ptr(), rec_count, rec_size, work_ptr) };
+            }
+            None => {
+                if !init_data(work_ptr, &agg.wrapped) {
+                    return;
+                }
+                if rec_count > 0 {
+                    let param = CallbackParams::new(recs.as_ptr(), 0, 0, rec_count, rec_size);
+                    compute_data(work_ptr, &agg.wrapped, stream, param, &agg.stream_offsets);
+                }
+            }
         }
         // copy the dense field results into the output row
-        out[off + FIELD_SIZE..off + row_size].copy_from_slice(unsafe {
-            std::slice::from_raw_parts(work_ptr, agg.step_total)
-        });
+        unsafe {
+            std::ptr::copy_nonoverlapping(work_ptr, row_out, agg.step_total);
+        }
         off += row_size;
     }
     let param = CallbackParams::new_with_window(

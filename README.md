@@ -233,7 +233,7 @@ Measured with criterion on the full pipeline
 | Test Case | Median | ~Throughput (single core) |
 |---|---|---|
 | new_data + filter (4 fields, LIMIT 10) | ~0.35 µs/op | ~2.8M rec/s |
-| new_data + filter + aggregate | ~1.17 µs/op | ~0.9M rec/s |
+| new_data + filter + aggregate (JIT kernel) | ~0.56 µs/op | ~1.8M rec/s |
 
 Optimization history (perf_diff scenario: insert + 6-condition filter + 5-field
 computed select, window full): 8.4 µs/op before the incremental-filter rework
@@ -245,6 +245,9 @@ computed select, window full): 8.4 µs/op before the incremental-filter rework
    TZCNT/LZCNT (SIMD-friendly bit operations).
 3. **Pre-resolved field readers & evaluation plans**: SELECT fields compile to
    direct (offset, type) reads / flattened expression trees.
+4. **JIT aggregate kernels**: the whole batch aggregation compiles into a single
+   LLVM loop (direct loads, inlined arithmetic, phi accumulators) — the
+   bind/`def_aggregate` path went from ~82 µs/op to ~66 ns/op.
 
 The hot path is lock-free and allocation-free on the Rust side: continuous
 circular-buffer memory, pre-computed column offsets, JIT-compiled filters, and a

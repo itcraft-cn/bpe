@@ -20,6 +20,7 @@ use crate::{
     },
 };
 use globalvar::{def_global_ptr, get_global, get_global_mut};
+use inkwell::execution_engine::JitFunction;
 use std::alloc::{self, Layout};
 
 /// Base offset of the variance/stddev Welford state area inside the aggregate
@@ -70,57 +71,42 @@ pub(crate) fn define_aggregate(sql: &str, func_holder: FnHolder) -> Option<u16> 
     }
 }
 
-/// Calls an aggregate function with the provided parameters.
-/// This function retrieves the stream associated with the aggregate and prepares the data pointer
-/// for aggregate computation. `offsets` maps each stream column id referenced by the aggregate
-/// to the byte offset of the same-named field in the mapper's SELECT output.
-#[inline]
-pub(crate) fn call_aggregate(
+/// JIT variant of `call_aggregate`: uses the compiled aggregate kernel when
+/// available (falls back to the interpreter otherwise).
+pub(crate) fn call_aggregate_jit(
     wrapped: &WrappedAggregate,
+    jit: Option<JitFunction<'static, crate::jit::aggregate::AggFunc>>,
     offsets: &[usize],
     param: CallbackParams,
 ) {
-    let id = wrapped.aggregate().stream_id(); // Get the stream ID from the aggregate
-    if let Some(stream) = Record::get_record(id) {
-        // Look up the stream by ID
-        // Get pointer to aggregate data reference
-        let aggregate_data_ptr = unsafe { PTR_VAL_DATA_REF } as *mut u8;
-        call_with_aggregate_data(aggregate_data_ptr, wrapped, stream, param, offsets); // Execute aggregate
-    } else {
-        log::warn!("failed to find stream by id[{id}]"); // Log warning if stream not found
-    }
-}
-
-/// Executes aggregate computation by first initializing the data, then computing the result,
-/// and finally calling the callback function with the computed data.
-/// The aggregate state is always initialized (per-window semantics) before the callback,
-/// so even an empty window (size == 0) yields deterministic initial values.
-#[inline]
-fn call_with_aggregate_data(
-    aggregate_data_ptr: *mut u8, // Pointer to memory where aggregate data will be stored
-    wrapped: &WrappedAggregate,  // The wrapped aggregate structure
-    stream: &Record,             // The stream record containing column information
-    param: CallbackParams,       // Parameters for the callback
-    offsets: &[usize],           // stream field id -> mapper output offset
-) {
-    if !init_data(aggregate_data_ptr, wrapped) {
-        // Initialize aggregate data (always, even for empty windows)
+    let id = wrapped.aggregate().stream_id();
+    let Some(stream) = Record::get_record(id) else {
+        log::warn!("failed to find stream by id[{id}]");
         return;
-    }
-    if param.size() == 0 {
-        callback(
-            &wrapped.fn_holder,
-            CallbackParams::new(aggregate_data_ptr, 1, 0, 0, 1),
-        );
+    };
+    let aggregate_data_ptr = unsafe { PTR_VAL_DATA_REF } as *mut u8;
+    let u8_ptr = param.u8_ptr();
+    let size = param.size();
+    let step = param.step();
+    let out_size = if size > 0 { 1 } else { 0 };
+    if let Some(jit) = jit {
+        // kernel handles count==0 (initial values) and computes results otherwise
+        unsafe { jit.call(u8_ptr, size, step, aggregate_data_ptr) };
+    } else if size > 0 {
+        if !init_data(aggregate_data_ptr, wrapped) {
+            return;
+        }
+        let p = CallbackParams::new(u8_ptr, 0, 0, size, step);
+        compute_data(aggregate_data_ptr, wrapped, stream, p, offsets);
     } else {
-        // Compute the aggregate result using the input parameters
-        compute_data(aggregate_data_ptr, wrapped, stream, param, offsets);
-        // Call the callback function with the computed aggregate data
-        callback(
-            &wrapped.fn_holder,
-            CallbackParams::new(aggregate_data_ptr, 1, 0, 1, 1),
-        );
+        if !init_data(aggregate_data_ptr, wrapped) {
+            return;
+        }
     }
+    callback(
+        wrapped.fn_holder(),
+        CallbackParams::new(aggregate_data_ptr, 1, 0, out_size, 1),
+    );
 }
 
 /// Initializes aggregate data by setting up initial values for each executor in the aggregate.
