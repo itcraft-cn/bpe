@@ -1,249 +1,265 @@
 # Bamboo Pipe Engine (BPE)
 
-A high-performance streaming data processing engine written in Rust with multi-language support. BPE provides real-time Complex Event Processing (CEP) capabilities with SQL-based query interfaces and JIT compilation.
+A high-performance, embeddable streaming rule engine written in Rust, with SQL-based
+queries, LLVM JIT compilation, and multi-language bindings (Rust / Java / Python).
 
-## Overview
+BPE targets **risk-control and alerting workloads**: high-throughput pre-filtering,
+time-window aggregation, per-key grouping, and keyed dimension lookups — all with
+nanosecond-level hot-path latency.
 
-BPE (Bamboo Pipe Engine) is a streaming data processing system that enables real-time analysis of data streams using SQL-like queries. The engine is built with performance in mind, using LLVM-based JIT compilation for optimal execution speed.
+## Feature Overview
 
-## Architecture
+| Capability | Description |
+|---|---|
+| JIT filtering | `WHERE` clauses compiled to native machine code via LLVM-19 |
+| Multiple rules | Multiple mappers per record, all evaluated per record |
+| Scalar functions | 15+ functions (`_abs`, `_pow`, `_sqrt`, `_greatest`, `_to_double`, ...) usable in both `SELECT` and `WHERE` |
+| Aggregate functions | `_suml/_count/_avg/_minl/_maxl/_firstl/_lastl` (+Double variants), `_stddev/_variance` (population & sample) |
+| Time windows | Fixed (`Tumbling`) and sliding (`Sliding`) windows, event-time or processing-time |
+| Watermark | Event-time out-of-order tolerance (`lag_ms`), data-driven early firing + wall-clock fallback |
+| Per-key grouping | `def_keyed_window_aggregate`: window results grouped by a key column |
+| Dimension tables | Keyed lookup tables (blacklists, quotas) via `_dim_has(dim_id, key)` / `_dim_get(dim_id, key)` |
+| Multi-language | Rust (native), Java (JNI/bpe4j), Python (PyO3/bpe4py) |
+| Low overhead | Lock-free single-thread hot path; window-less path has zero added cost |
 
-The BPE project consists of multiple interconnected modules:
+## Quick Start (Rust)
 
-### Core Components
+```toml
+[dependencies]
+bpe = { path = "bpe-core" }
+```
 
-1. **bpe-core** - The main Rust library providing the core streaming data processing engine
-   - Real-time stream processing capabilities
-   - SQL-based query interface with JIT compilation
-   - Memory-efficient circular buffer storage
-   - Aggregate functions (sum, count, avg, min, max, first, last)
+```rust
+use bpe::{def_incoming, def_mapper, new_data, start, stop, Column, U8Bytes};
 
-2. **bpe-java-wrapper (bpe4j)** - Java JNI wrapper for BPE
-   - Provides Java bindings to the Rust core
-   - Uses JNI for cross-language communication
-   - Maven-based build system
+fn main() {
+    // the config root (cfg/config.toml lives under BPE_HOME)
+    std::env::set_var("BPE_HOME", std::env::current_dir().unwrap());
+    start();
 
-3. **bpe-py-wrapper (bpe4py)** - Python wrapper using PyO3
-   - Python bindings via PyO3
-   - Wheel distribution for easy installation
-   - Supports Python 3.7+
+    // 1. define the record schema (Long/Double columns, 8 bytes each)
+    let txn = def_incoming("txn", vec![
+        Column::new_long("ts"),      // event time (ms)
+        Column::new_long("user_id"),
+        Column::new_long("amount"),
+    ]).unwrap();
 
-4. **bpe-sample** - Example usage of the core library
-   - Sample implementations demonstrating BPE capabilities
-   - Usage examples and patterns
+    // 2. high-speed threshold rule: JIT-compiled WHERE, called per record
+    def_mapper(
+        "SELECT txn.user_id, _to_double(txn.amount) FROM txn WHERE txn.amount > 100000 LIMIT 10",
+        |p| {
+            // p.size() matched records, dense fields at p.u8_ptr()
+            eprintln!("large transaction alert: {} matches", p.size());
+        },
+    );
 
-5. **bpe-test** - Test suite for the core library
-   - Unit tests and integration tests
-   - Validation of core functionality
+    // 3. send data (payload is a fixed 512-byte record; columns at 8-byte offsets)
+    let mut payload = vec![0_u8; 512];
+    unsafe {
+        *(payload.as_mut_ptr() as *mut i64) = 1_700_000_000_000_i64;        // ts
+        *(payload.as_mut_ptr().add(8) as *mut i64) = 42_i64;                // user_id
+        *(payload.as_mut_ptr().add(16) as *mut i64) = 500_000_i64;          // amount
+    }
+    new_data(&U8Bytes::new_from_vec(txn, 512, payload));
 
-## Features
+    stop();
+}
+```
 
-### Core Engine
-- Real-time stream processing with SQL-like syntax
-- JIT compilation using LLVM for high performance
-- Memory-efficient circular buffer storage system
-- Configurable data schemas with Long/Double types
-- Built-in aggregate functions (SUM, COUNT, AVG, MIN, MAX, FIRST, LAST)
-- Custom function extensibility
+## Time Windows (risk-control style)
 
-### Multi-language Support
-- Native Rust API for maximum performance
-- Java bindings via JNI
-- Python bindings via PyO3
-- Cross-platform compatibility
+```rust
+use bpe::{def_window_aggregate, def_keyed_window_aggregate, Window};
 
-### Configuration
-- Environment variable support (`BPE_HOME`)
-- TOML-based configuration (`cfg/config.toml`)
-- Runtime-configurable parameters:
-  - Vector size (default: 1MB)
-  - Record size (default: 512 bytes, max: 512 bytes)
-  - Development mode flags
-  - Log directory configuration
+// Fixed window: report every 1 minute the count/sum of transactions
+def_window_aggregate(
+    "SELECT _count(txn.amount), _suml(txn.amount) FROM txn WHERE txn.amount > 0",
+    Window::Tumbling { period_ms: 60_000 },
+    Some("ts"), 0,                      // event time from column "ts"
+    |p| {
+        let start = p.window_start_ms();
+        let end = p.window_end_ms();
+        // aggregate result at p.u8_ptr(): [count i64][sum i64]
+    },
+);
 
-## Building the Project
+// Sliding window: every 60s, look back 5 minutes for abnormal-flag count
+def_window_aggregate(
+    "SELECT _count(txn.risk) FROM txn WHERE txn.risk = 1",
+    Window::Sliding { length_ms: 300_000, slide_ms: 60_000 },
+    Some("ts"), 0,
+    |p| { /* window [start, end) risk count */ },
+);
 
-The project supports multiple build modes through the build script:
+// Per-key: per-user counts within each window (rows [key][field0]...[fieldN])
+def_keyed_window_aggregate(
+    "SELECT _count(txn.amount) FROM txn WHERE txn.amount > 0",
+    Window::Tumbling { period_ms: 60_000 },
+    Some("ts"), "user_id", 0,
+    |p| {
+        for row in 0..p.size() {
+            let r = unsafe { p.u8_ptr().add(row * p.step()) };
+            // key: i64 at r, fields follow
+        }
+    },
+);
+```
+
+Semantics:
+- **Event time**: `ts_field` names a Long (ms) column. Windows align to event time;
+  `lag_ms` is the out-of-order tolerance — a record older than the watermark
+  (`max_seen_ts - lag_ms`) is dropped.
+- **Processing time**: pass `ts_field = None`; windows align to arrival time.
+- **Firing**: a window fires when `end < watermark` (event time advances) or
+  `end + lag_ms <= now` (wall-clock fallback, so idle windows still report).
+- **Empty windows** still fire with `size()==0` (initial aggregate values).
+- Callbacks run on the engine's timer thread; they must be `Send` and fast.
+
+## Dimension Tables
+
+```rust
+use bpe::{def_dimension, update_dimension, def_mapper};
+
+let blacklist = def_dimension().unwrap();
+update_dimension(blacklist, 42, 1);          // key -> value
+
+def_mapper(
+    "SELECT txn.amount FROM txn WHERE _dim_has(0, txn.user_id) > 0 LIMIT 10",
+    |p| { /* only users present in dimension 0 pass */ },
+);
+
+def_mapper(
+    "SELECT _dim_get(0, txn.user_id), txn.amount FROM txn WHERE txn.amount > 0 LIMIT 10",
+    |p| { /* first field = dimension value (0 if absent) */ },
+);
+```
+
+## SQL Function Reference
+
+Functions are invoked with a leading underscore: `_name(args)`.
+
+### Scalar (usable in `SELECT` fields and `WHERE` conditions)
+
+| Function | Description | | Function | Description |
+|---|---|---|---|---|
+| `_add/_sub/_mul/_div/_mod(a,b)` | arithmetic | | `_sign(x)` | sign (-1/0/1) |
+| `_abs(x)` | absolute value | | `_trunc(x)` | truncate fraction |
+| `_ceil/_floor/_round(x)` | rounding | | `_to_long(x)` | cast to i64 |
+| `_sqrt(x)` | square root → f64 | | `_to_double(x)` | cast to f64 |
+| `_exp(x)` | e^x → f64 | | `_pow(a,b)` | power → f64 |
+| `_ln(x)` | natural log → f64 | | `_greatest/_least(a,b)` | max/min |
+| `_log10(x)` | base-10 log → f64 | | `_dim_has/_dim_get(dim_id,key)` | dimension lookup |
+
+### Aggregate (window / aggregate SQL)
+
+| Function | Description | | Function | Description |
+|---|---|---|---|---|
+| `_suml/_sumd(x)` | sum | | `_avg(x)` | mean (f64) |
+| `_count(x)` | count (any column type) | | `_firstl/_firstd(x)` | first value |
+| `_minl/_minl(x)` / `_maxl/_maxd(x)` | min/max | | `_lastl/_lastd(x)` | last value |
+| `_stddev(x)` | population stddev (f64) | | `_stddev_samp(x)` | sample stddev (f64) |
+| `_variance(x)` | population variance (f64) | | `_var_samp(x)` | sample variance (f64) |
+
+## Multi-language Bindings
+
+### Python (bpe4py, PyO3)
+
+```python
+import bpe4py as bpe
+
+bpe.start()
+txn = bpe.def_stream("txn", ["ts", "user_id", "amount"], [0, 0, 0], [8, 8, 8])
+
+def on_window(data, start_ms, end_ms):
+    # data: bytes of the aggregate result; start_ms/end_ms: window range
+    print("window", start_ms, end_ms, "bytes:", len(data))
+
+bpe.def_window_aggregate(
+    "SELECT _count(txn.amount) FROM txn WHERE txn.amount > 0",
+    window_type=1, period_ms=60000, length_ms=0, slide_ms=0,
+    ts_field="ts", lag_ms=0, callback=on_window,
+)
+# bpe.def_keyed_window_aggregate(...), bpe.def_dimension()/update_dimension/remove_dimension
+```
+
+> Building the Python wrapper requires PyO3 0.20 (Python ≤ 3.12): set
+> `PYO3_PYTHON=/path/to/python3.11`.
+
+### Java (bpe4j, JNI)
+
+```java
+JavaBpe.start();
+int txn = JavaBpe.defStream("txn", List.of(
+    new ColumnDefine("ts", ColumnDefine.Type.LONG, 8),
+    new ColumnDefine("user_id", ColumnDefine.Type.LONG, 8),
+    new ColumnDefine("amount", ColumnDefine.Type.LONG, 8)
+));
+JavaBpe.defWindowAggregate(
+    "SELECT _count(txn.amount) FROM txn WHERE txn.amount > 0",
+    JavaBpe.WINDOW_TUMBLING, 60_000, 0, 0, "ts", 0,
+    (data, size) -> { /* aggregate result bytes */ }
+);
+int dim = JavaBpe.defDimension();
+JavaBpe.updateDimension(dim, 42L, 1L);
+```
+
+## Configuration
+
+`cfg/config.toml` (root resolved via `BPE_HOME`):
+
+```toml
+dev_mode = true      # true: console + file logs; false: file only
+vec_size = 1048576   # circular buffer bytes (must be a power of two)
+record_size = 512    # bytes per record slot (max 8192; keep ≥ columns × 8)
+log_dir = "/tmp"     # log directory
+```
+
+## Building
 
 ```bash
-# Build modes:
-# 0 - Simple build (debug)
-# 1 - Simple build (release) 
-# 2 - Full build (debug) - includes Java and Python wrappers
-# 3 - Full build (release) - includes Java and Python wrappers
-
-./build.sh 0  # Debug build
-./build.sh 1  # Release build
-./build.sh 2  # Full debug build (with wrappers)
-./build.sh 3  # Full release build (with wrappers)
+./build.sh 0   # debug build (core)
+./build.sh 1   # release build (core)
+./build.sh 2   # full debug build (core + Java + Python)
+./build.sh 3   # full release build (core + Java + Python)
 ```
 
-## Usage
+Requirements: Rust 2021, LLVM-19, Java 8+ (for bpe4j), Python 3.11/3.12 (for bpe4py).
 
-### Rust
-```rust
-use bpe;
+## Performance
 
-// Initialize the engine
-bpe::start();
+Measured with criterion on the full pipeline
+(`new_data → insert → window scan → JIT filter → field fetch → callback`):
 
-// Define incoming data schema
-let incoming_id = bpe::def_incoming("sensor_data", vec![
-    bpe::Column::new_long("id"),
-    bpe::Column::new_double("temperature"),
-]);
+| Test Case | Median | ~Throughput (single core) |
+|---|---|---|
+| new_data + filter (4 fields, LIMIT 10) | ~0.64 µs/op | ~1.6M rec/s |
+| new_data + filter + aggregate | ~1.4 µs/op | ~0.7M rec/s |
 
-// Define stream schema
-let stream_id = bpe::def_stream("high_temp_alert", vec![
-    bpe::Column::new_long("id"),
-    bpe::Column::new_double("temperature"),
-]);
+The hot path is lock-free and allocation-free on the Rust side: continuous
+circular-buffer memory, pre-computed column offsets, JIT-compiled filters, and a
+reused callback buffer. The window-less path never takes the window lock, so
+plain filtering is unaffected by windowing features.
 
-// Define processing mapper with SQL
-let mapper_id = bpe::def_mapper("SELECT id, temperature FROM sensor_data WHERE temperature > 30.0", 
-    |params| {
-        // Process the filtered data
-        println!("High temperature detected!");
-    });
+## Testing
 
-// Send data to the engine
-let data = bpe::U8Bytes::new_from_vec(incoming_id.unwrap(), 16, vec![/* data bytes */]);
-bpe::new_data(&data);
-
-// Clean up
-bpe::stop();
+```bash
+RUSTFLAGS='-lLLVM-19' cargo test
 ```
 
-### Configuration File (cfg/config.toml)
-```toml
-dev_mode = false
-vec_size = 1048576
-record_size = 512
-log_dir = "logs"
-```
+42 test binaries: unit tests, SQL parsing, filter/aggregate correctness, window
+semantics (fixed/sliding/processing-time/watermark), per-key grouping, dimension
+lookups, and regression tests with assertions.
 
-## Performance Characteristics
+## Documentation
 
-### Benchmarks
-
-| Test Case | Latency | Throughput |
-|-----------|---------|------------|
-| Filter Only | ~78 ns | ~12.8M records/sec/core |
-| Filter + Aggregate | ~156 ns | ~6.4M records/sec/core |
-
-### Performance Design Analysis
-
-BPE achieves nanosecond-level latency through the following design principles:
-
-#### 1. High Cache Hit Rate
-
-**Circular Buffer (WrappedArray)**
-- Single allocation, no memory fragmentation
-- Sequential access, prefetcher-friendly
-- Fixed-size records, predictable access patterns
-
-**Fixed-Size Records (U8Bytes)**
-- Compile-time determined size, no dynamic allocation
-- Column offsets calculated once at definition time
-- Direct memory access via `base_ptr + offset`
-
-#### 2. Continuous Execution
-
-**Branch-Free Hot Path**
-```
-new_data → insert → call_mapper → filter → callback
-```
-- Lock-free design (single-threaded)
-- No dynamic dispatch
-- No error handling branches in hot path
-
-**JIT Compilation**
-- SQL WHERE clause compiled to native machine code
-- Zero interpretation overhead
-- Optimal CPU instruction generation
-
-**Inline Optimization**
-- Heavy use of `#[inline]` on hot path functions
-- Cross-function optimization by compiler
-- Instruction cache friendly
-
-#### 3. High Predictability
-
-**Predictable Execution Path**
-- Fixed processing flow
-- Mappers registered at startup, unchanged at runtime
-- Filter conditions JIT-compiled, fixed at execution
-
-**Predictable Memory Access**
-```rust
-for i in 0..size {
-    let ptr = base + i * step;  // Fixed stride
-    filter(ptr);                // Fixed access pattern
-}
-```
-- CPU prefetcher can predict next access
-- Data loaded into cache proactively
-
-**Branch Prediction Friendly**
-- Simple pass/fail branches in filter
-- CPU branch predictor achieves high accuracy
-
-#### 4. Memory Hierarchy Optimization
-
-**Cache Line Consideration**
-```rust
-pub(crate) struct WrappedArray {
-    data: *mut u8,        // 8 bytes
-    max_records: usize,   // 8 bytes
-    mask: usize,          // 8 bytes  
-    walker: usize,        // 8 bytes (hot data)
-    step: usize,          // 8 bytes
-}
-// Total: 40 bytes, fits in single cache line (64 bytes)
-```
-
-**Data Locality**
-- L1 Cache (32KB) can hold ~64 records of 512 bytes
-- Hot data prioritized in L1: current record, Mapper, Record metadata
-
-### Design Advantages Summary
-
-| Design Feature | Performance Impact | Quantified Effect |
-|----------------|-------------------|-------------------|
-| Continuous Memory | High cache hit rate | 50%+ memory latency reduction |
-| Fixed Layout | High predictability | Accurate CPU branch prediction |
-| JIT Compilation | Zero interpretation overhead | 10x+ faster than interpreted |
-| Lock-free Design | No waiting latency | Deterministic latency |
-| Inline Optimization | Reduced call overhead | 5-10ns saved per call |
-| Pre-computed Offsets | Zero runtime overhead | Computed at compile time |
-
-### Performance Formula
-
-```
-Total Latency = Memory Access + Computation + Branch Delay
-
-Memory Access:
-  - L1 hit: ~1ns
-  - L2 hit: ~4ns
-  - L3 hit: ~12ns
-  - RAM: ~100ns
-
-Computation (JIT):
-  - Simple comparison: ~0.5ns
-  - Arithmetic: ~0.3ns
-
-Branch Delay:
-  - Predicted correctly: ~0ns
-  - Mispredicted: ~10-20ns
-
-BPE Design Minimizes:
-  ✓ Memory Access → Continuous layout, prefetch-friendly
-  ✓ Computation → JIT compiled to optimal machine code
-  ✓ Branch Delay → Simple branches, accurate prediction
-```
+- `docs/design.md` — architecture notes
+- `docs/deconstruct/` — design deconstruction (class/data-flow diagrams, algorithms, memory analysis)
+- `docs/review/` — code review reports
+- `docs/detect/` — problem detection & scoring
+- `docs/refactor/` — refactoring plan and status
+- `docs/code-part-modification/task-*` — per-task change logs
 
 ## Dependencies
 
-- LLVM 19 (for JIT compilation)
-- Rust 2021 edition
-- Various crates for configuration, logging, and cross-language bindings
+- LLVM 19 (JIT via inkwell), sql-parse (SQL dialect), log4rs (logging),
+  hashbrown, core_affinity, strum, config, PyO3 / JNI (bindings).
