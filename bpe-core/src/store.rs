@@ -91,17 +91,22 @@ impl WrappedArray {
         }
     }
 
+    /// Returns the write index of the oldest record still in the window.
+    /// Write indices are monotonically increasing; the actual slot is
+    /// `(write_idx * step) & mask` which wraps via the power-of-two mask.
     pub(crate) fn first_idx(&self) -> usize {
-        let walker = (self.walker / self.step) - 1;
-        if walker > self.max_records {
-            (walker - self.max_records) % self.max_records
+        let count = self.walker();
+        if count > self.max_records {
+            count - self.max_records
         } else {
             0
         }
     }
 
+    /// Returns the write index of the newest record (count - 1).
+    /// Only valid when at least one record has been written.
     pub(crate) fn last_idx(&self) -> usize {
-        ((self.walker / self.step) - 1) % self.max_records
+        self.walker().saturating_sub(1)
     }
 
     pub(crate) fn mask(&self) -> usize {

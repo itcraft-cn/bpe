@@ -21,6 +21,12 @@ use std::{
     sync::atomic::{AtomicU64, Ordering},
 };
 
+/// Unique counter for JIT filter function names.
+/// Function names must be unique across ALL compiled filters: multiple mappers on the
+/// same record otherwise compile a same-named function into separate modules that share
+/// one LLVM context, and the second mapper resolves the wrong filter code.
+static FILTER_FUNC_SEQ: AtomicU64 = AtomicU64::new(0);
+
 /// Generates a JIT-compiled filter function for a SQL SELECT statement based on the WHERE clause.
 /// This function creates an LLVM function that evaluates the filter condition and returns a boolean.
 pub(crate) fn gen_select_filter_func<'ctx>(
@@ -34,7 +40,10 @@ pub(crate) fn gen_select_filter_func<'ctx>(
 
     // Define function type: takes u64 parameter, returns boolean
     let fn_type = bool_type.fn_type(&[i64_type.into()], true);
-    let func_name = &format!("{}_{}", "record_filter", record.id()); // Create unique function name
+    // unique function name per compiled filter (record id alone collides across mappers
+    // sharing the same LLVM context)
+    let seq = FILTER_FUNC_SEQ.fetch_add(1, Ordering::SeqCst);
+    let func_name = &format!("record_filter_{}_{}", record.id(), seq); // Create unique function name
     let func = func_generator.module.add_function(func_name, fn_type, None); // Add function to module
     let block = func_generator.context.append_basic_block(func, "entry"); // Create entry block
     func_generator.builder.position_at_end(block); // Position builder at end of block
@@ -356,9 +365,14 @@ fn gen_call_fetch_column_by_id<'ctx>(
     issues: &mut Vec<String>,
 ) -> Option<StructValue<'ctx>> {
     let name = id.as_str();
-    // Get the column name as a string
-    let column_id = *record.column_id(name).unwrap();
-    // Get the column ID from the record
+    // Get the column name as a string; unknown columns must not panic (return an issue instead)
+    let column_id = match record.column_id(name) {
+        Some(cid) => *cid,
+        None => {
+            issues.push(format!("column [{name}] is not found in record"));
+            return None;
+        }
+    };
     let column = record.column(column_id);
     // Get the column definition
     let i16_type = context.func_generator.context.i16_type();

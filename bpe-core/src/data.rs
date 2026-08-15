@@ -5,7 +5,6 @@ use crate::{
 };
 use globalvar::{def_global_ptr, get_global, get_global_mut};
 use hashbrown::HashMap;
-use std::cmp::Ordering as CmpOrdering;
 
 static mut PTR_RECORD_MAP: u64 = 0;
 static mut PTR_NAME_MAP: u64 = 0;
@@ -29,26 +28,24 @@ impl U8Bytes {
     pub fn new_from_vec(id: u16, data_len: usize, vec: Vec<u8>) -> U8Bytes {
         let mut bytes = [0_u8; U8_DATA_MAX_SIZE];
         let slice = vec.as_slice();
-        match slice.len().cmp(&U8_DATA_MAX_SIZE) {
-            CmpOrdering::Less => copy(slice.len(), &mut bytes, slice),
-            CmpOrdering::Equal | CmpOrdering::Greater => copy(U8_DATA_MAX_SIZE, &mut bytes, slice),
-        }
+        // clamp the effective length so data_len never exceeds the copied bytes
+        let len = data_len.min(slice.len()).min(U8_DATA_MAX_SIZE);
+        copy(len, &mut bytes, slice);
         U8Bytes {
             id,
-            data_len,
+            data_len: len,
             bytes,
         }
     }
 
     pub fn new_from_slice(id: u16, data_len: usize, slice: &[u8]) -> U8Bytes {
         let mut bytes = [0_u8; U8_DATA_MAX_SIZE];
-        match slice.len().cmp(&U8_DATA_MAX_SIZE) {
-            CmpOrdering::Less => copy(slice.len(), &mut bytes, slice),
-            CmpOrdering::Equal | CmpOrdering::Greater => copy(U8_DATA_MAX_SIZE, &mut bytes, slice),
-        }
+        // clamp the effective length so data_len never exceeds the copied bytes
+        let len = data_len.min(slice.len()).min(U8_DATA_MAX_SIZE);
+        copy(len, &mut bytes, slice);
         U8Bytes {
             id,
-            data_len,
+            data_len: len,
             bytes,
         }
     }
@@ -196,18 +193,19 @@ impl Record {
         record_type: RecordType,
         columns: Vec<Column>,
     ) -> Option<u16> {
-        let id = next_record_id();
-        let record_map = get_global_mut::<SimpleU16Map>(unsafe { PTR_RECORD_MAP });
-        record_map.insert(
-            id,
-            Record::new(name, id, record_type, Column::copy_from_columns(&columns)),
-        );
+        // check name uniqueness FIRST, otherwise a duplicate name leaves a zombie record
         let key = String::from(name);
         let name_map = get_global_mut::<HashMap<String, u16>>(unsafe { PTR_NAME_MAP });
         if name_map.contains_key(&key) {
             log::warn!("Record name {name} already exists");
             None
         } else {
+            let id = next_record_id();
+            let record_map = get_global_mut::<SimpleU16Map>(unsafe { PTR_RECORD_MAP });
+            record_map.insert(
+                id,
+                Record::new(name, id, record_type, Column::copy_from_columns(&columns)),
+            );
             name_map.insert(key, id);
             let id_store = get_global_mut::<[u8; ID_MAX_SIZE]>(unsafe { PTR_ID_STORE });
             bitmap_set_id(id_store.as_mut_slice(), id);
@@ -258,7 +256,17 @@ impl Record {
     }
 
     pub(crate) fn column(&self, column_id: u16) -> &Column {
-        unsafe { self.columns.get_unchecked((column_id - 1) as usize) }
+        let idx = column_id as usize;
+        if idx == 0 || idx > self.columns.len() {
+            // defensive guard: never index out of bounds (release would abort otherwise)
+            log::warn!(
+                "column id [{column_id}] is out of range, column count: {}",
+                self.columns.len()
+            );
+            &self.columns[0]
+        } else {
+            unsafe { self.columns.get_unchecked(idx - 1) }
+        }
     }
 }
 

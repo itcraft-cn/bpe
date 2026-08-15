@@ -75,7 +75,9 @@ fn fetch_column(
 /// Used for type conversion in generated LLVM code when comparing mixed types.
 pub(crate) unsafe extern "C" fn int2float(val_type: u64, val: u64) -> f64 {
     if val_type == T_I64 {
-        val as f64 // Convert integer value to float
+        // val holds the bit pattern of an i64; reinterpret as signed before converting,
+        // otherwise negative integers become huge positive floats
+        val as i64 as f64
     } else if val_type == T_F64 {
         f64::from_bits(val) // Reinterpret float bits as float value
     } else {

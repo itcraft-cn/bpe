@@ -5,7 +5,7 @@ use crate::{
     },
     aux::{fetch_ptr, fill_ptr, SimpleU16Map},
     callback::{callback, FnHolder},
-    consts::U8_DATA_MAX_SIZE,
+    consts::{FIELD_SIZE, U8_DATA_MAX_SIZE},
     data::{ColumnType, Record},
     element::Element,
     error::ParseSqlError,
@@ -49,12 +49,10 @@ pub(crate) fn define_aggregate(sql: &str, func_holder: FnHolder) -> Option<u16> 
         let rs = gen_aggregate(&parsed_sql); // Generate aggregate structure
         if let Ok(aggregate) = rs {
             let map = get_global_mut::<SimpleU16Map>(unsafe { PTR_AGGREGATE_MAP }); // Get aggregate map
-                                                                                    // Store the aggregate with its function holder in the map
-            map.insert(
-                aggregate.id(),
-                WrappedAggregate::new(aggregate, func_holder),
-            );
-            Some(1) // Return success indicator
+            let agg_id = aggregate.id(); // capture real aggregate id
+                                          // Store the aggregate with its function holder in the map
+            map.insert(agg_id, WrappedAggregate::new(aggregate, func_holder));
+            Some(agg_id) // Return the real aggregate id
         } else {
             log::warn!("{:?}", rs.err()); // Log error if aggregate generation failed
             None
@@ -66,15 +64,20 @@ pub(crate) fn define_aggregate(sql: &str, func_holder: FnHolder) -> Option<u16> 
 
 /// Calls an aggregate function with the provided parameters.
 /// This function retrieves the stream associated with the aggregate and prepares the data pointer
-/// for aggregate computation.
+/// for aggregate computation. `offsets` maps each stream column id referenced by the aggregate
+/// to the byte offset of the same-named field in the mapper's SELECT output.
 #[inline]
-pub(crate) fn call_aggregate(wrapped: &WrappedAggregate, param: CallbackParams) {
+pub(crate) fn call_aggregate(
+    wrapped: &WrappedAggregate,
+    offsets: &[usize],
+    param: CallbackParams,
+) {
     let id = wrapped.aggregate().stream_id(); // Get the stream ID from the aggregate
     if let Some(stream) = Record::get_record(id) {
         // Look up the stream by ID
         // Get pointer to aggregate data reference
         let aggregate_data_ptr = unsafe { PTR_VAL_DATA_REF } as *mut u8;
-        call_with_aggregate_data(aggregate_data_ptr, wrapped, stream, param); // Execute aggregate
+        call_with_aggregate_data(aggregate_data_ptr, wrapped, stream, param, offsets); // Execute aggregate
     } else {
         log::warn!("failed to find stream by id[{id}]"); // Log warning if stream not found
     }
@@ -82,22 +85,28 @@ pub(crate) fn call_aggregate(wrapped: &WrappedAggregate, param: CallbackParams) 
 
 /// Executes aggregate computation by first initializing the data, then computing the result,
 /// and finally calling the callback function with the computed data.
+/// The aggregate state is always initialized (per-window semantics) before the callback,
+/// so even an empty window (size == 0) yields deterministic initial values.
 #[inline]
 fn call_with_aggregate_data(
     aggregate_data_ptr: *mut u8, // Pointer to memory where aggregate data will be stored
     wrapped: &WrappedAggregate,  // The wrapped aggregate structure
     stream: &Record,             // The stream record containing column information
     param: CallbackParams,       // Parameters for the callback
+    offsets: &[usize],           // stream field id -> mapper output offset
 ) {
+    if !init_data(aggregate_data_ptr, wrapped) {
+        // Initialize aggregate data (always, even for empty windows)
+        return;
+    }
     if param.size() == 0 {
         callback(
             &wrapped.fn_holder,
             CallbackParams::new(aggregate_data_ptr, 1, 0, 0, 1),
         );
-    } else if init_data(aggregate_data_ptr, wrapped, stream) {
-        // Initialize aggregate data
+    } else {
         // Compute the aggregate result using the input parameters
-        compute_data(aggregate_data_ptr, wrapped, stream, param);
+        compute_data(aggregate_data_ptr, wrapped, stream, param, offsets);
         // Call the callback function with the computed aggregate data
         callback(
             &wrapped.fn_holder,
@@ -107,13 +116,14 @@ fn call_with_aggregate_data(
 }
 
 /// Initializes aggregate data by setting up initial values for each executor in the aggregate.
+/// Results are stored at dense offsets (col_idx * FIELD_SIZE), independent of the stream layout.
 /// Returns true if all initializations succeed, false if any fail.
 #[inline]
-fn init_data(aggregate_data_ptr: *mut u8, wrapped: &WrappedAggregate, stream: &Record) -> bool {
+fn init_data(aggregate_data_ptr: *mut u8, wrapped: &WrappedAggregate) -> bool {
     // Iterate through each executor in the aggregate with its column index
     for (col_idx, executor) in wrapped.aggregate().executors().iter().enumerate() {
         // Set up the initial value for this executor
-        let rs = setup_init_val(aggregate_data_ptr, col_idx, executor, stream);
+        let rs = setup_init_val(aggregate_data_ptr, col_idx, executor);
         if rs.is_err() {
             log::warn!("hit error: {:?}", rs.err()); // Log error if initialization failed
             return false; // Return false to indicate failure
@@ -127,12 +137,17 @@ fn setup_init_val(
     aggregate_data_ptr: *mut u8,
     col_idx: usize,
     executor: &Executor,
-    stream: &Record,
 ) -> Result<(), String> {
-    let offset = stream.column((col_idx + 1) as u16).offset();
+    let offset = col_idx * FIELD_SIZE;
     match executor {
-        Executor::ConstLong(_) => Ok(()),
-        Executor::ConstDouble(_) => Ok(()),
+        Executor::ConstLong(v) => {
+            fill_ptr(unsafe { aggregate_data_ptr.add(offset) }, *v);
+            Ok(())
+        }
+        Executor::ConstDouble(v) => {
+            fill_ptr(unsafe { aggregate_data_ptr.add(offset) }, *v);
+            Ok(())
+        }
         Executor::Compute(func, _) => {
             init_for_some_func(func, aggregate_data_ptr, offset);
             Ok(())
@@ -146,6 +161,8 @@ fn setup_init_val(
     }
 }
 
+/// Writes the initial value for each aggregate function into the result buffer.
+/// All functions are initialized so the callback never observes uninitialized memory.
 #[inline]
 fn init_for_some_func(func: &SupportFunc, aggregate_data_ptr: *mut u8, offset: usize) {
     match func {
@@ -161,11 +178,27 @@ fn init_for_some_func(func: &SupportFunc, aggregate_data_ptr: *mut u8, offset: u
         SupportFunc::MinD => {
             fill_ptr(unsafe { aggregate_data_ptr.add(offset) }, f64::MAX);
         }
+        SupportFunc::SumL => {
+            fill_ptr(unsafe { aggregate_data_ptr.add(offset) }, 0_i64);
+        }
+        SupportFunc::SumD => {
+            fill_ptr(unsafe { aggregate_data_ptr.add(offset) }, 0.0_f64);
+        }
+        SupportFunc::Count => {
+            fill_ptr(unsafe { aggregate_data_ptr.add(offset) }, 0_i64);
+        }
+        SupportFunc::Avg => {
+            fill_ptr(unsafe { aggregate_data_ptr.add(offset) }, 0.0_f64);
+        }
+        SupportFunc::FirstL | SupportFunc::FirstD | SupportFunc::LastL | SupportFunc::LastD => {
+            fill_ptr(unsafe { aggregate_data_ptr.add(offset) }, 0_i64);
+        }
         _ => {}
     }
 }
 
 /// Computes aggregate data by processing each executor in the aggregate.
+/// Results are stored at dense offsets (col_idx * FIELD_SIZE), independent of the stream layout.
 /// Handles constant values, single-argument functions (First/Last), and multi-argument functions.
 #[inline]
 fn compute_data(
@@ -173,13 +206,14 @@ fn compute_data(
     wrapped: &WrappedAggregate,  // The wrapped aggregate structure
     stream: &Record,             // The stream record containing column information
     param: CallbackParams,       // Parameters for computation
+    offsets: &[usize],           // stream field id -> mapper output offset
 ) {
     // Create a wrapped parameter structure for aggregate computation
     let wrapped_agg_param = WrappedAggParam::new(aggregate_data_ptr, stream);
     // Process each executor in the aggregate with its column index
     for (col_idx, executor) in wrapped.aggregate().executors().iter().enumerate() {
         // Calculate the memory offset for this column
-        let offset = stream.column((col_idx + 1) as u16).offset();
+        let offset = col_idx * FIELD_SIZE;
         match executor {
             Executor::ConstLong(v) => {
                 // Handle constant long value by filling the memory at offset
@@ -201,7 +235,7 @@ fn compute_data(
                     SupportFunc::FirstL | SupportFunc::FirstD => {
                         // Handle First functions: get the first value
                         let sub_executor = executors.index_of(0); // Get the first sub-executor
-                        let element = fetch_arg_val(param.u8_ptr(), sub_executor, stream); // Get value
+                        let element = fetch_arg_val(param.u8_ptr(), sub_executor, stream, offsets); // Get value
                         call_once_compute(&wrapped_agg_param, func, element, offset);
                         // Compute
                     }
@@ -212,11 +246,11 @@ fn compute_data(
 
                         // Get pointer to the last data element
                         let sub_data = unsafe { param.u8_ptr().add(last * param.step()) };
-                        let element = fetch_arg_val(sub_data, sub_executor, stream); // Get value
+                        let element = fetch_arg_val(sub_data, sub_executor, stream, offsets); // Get value
                         call_once_compute(&wrapped_agg_param, func, element, offset);
                         // Compute
                     }
-                    _ => loop_compute(aggregate_data_ptr, stream, col_idx, executor, &param), // Handle other functions
+                    _ => loop_compute(aggregate_data_ptr, stream, col_idx, executor, &param, offsets), // Handle other functions
                 }
             }
             _ => {}
@@ -239,6 +273,7 @@ fn loop_compute(
     col_idx: usize,
     executor: &Executor,
     param: &CallbackParams,
+    offsets: &[usize],
 ) {
     let u8_ptr = param.u8_ptr();
     let size = param.size();
@@ -250,6 +285,7 @@ fn loop_compute(
             executor,
             unsafe { u8_ptr.add(data_idx * param.step()) },
             data_idx,
+            offsets,
         );
     }
 }
@@ -261,13 +297,14 @@ fn compute(
     executor: &Executor,
     sub_data: *const u8,
     data_idx: usize,
+    offsets: &[usize],
 ) {
     let stream = wrapped_agg_param.stream();
-    let offset = stream.column((col_idx + 1) as u16).offset();
+    let offset = col_idx * FIELD_SIZE;
     match executor {
         Executor::Compute(func, executors) => {
             let sub_executor = executors.index_of(0);
-            let element = fetch_arg_val(sub_data, sub_executor, stream);
+            let element = fetch_arg_val(sub_data, sub_executor, stream, offsets);
             choose_func(func, element, wrapped_agg_param, offset, data_idx);
         }
         _ => {
@@ -312,14 +349,10 @@ fn choose_func(
                 log::warn!("unsupported function: {:?}-{:?}", func, &element);
             }
         },
-        SupportFunc::Count => match &element {
-            Element::Long(_) => {
-                f_count_l(aggregate_data_ptr, offset);
-            }
-            _ => {
-                log::warn!("unsupported function: {:?}-{:?}", func, &element);
-            }
-        },
+        SupportFunc::Count => {
+            // count works on any column type (value is ignored)
+            f_count_l(aggregate_data_ptr, offset);
+        }
         SupportFunc::MaxD => match &element {
             Element::Long(v) => {
                 f_max_d_l(aggregate_data_ptr, offset, v);
@@ -388,17 +421,25 @@ fn choose_func(
     };
 }
 
-fn fetch_arg_val(sub_data: *const u8, executor: &Executor, stream: &Record) -> Element {
+fn fetch_arg_val(sub_data: *const u8, executor: &Executor, stream: &Record, offsets: &[usize]) -> Element {
     match executor {
         Executor::Fetch(_record_id, field_id) => {
+            // column type from the stream layout, value position from the mapper output offsets
             let column = stream.column(*field_id);
-            let column_type = column.data_type();
-            match column_type {
-                ColumnType::Long => {
-                    Element::Long(unsafe { fetch_ptr(sub_data.add(column.offset())) })
-                }
-                ColumnType::Double => {
-                    Element::Double(unsafe { fetch_ptr(sub_data.add(column.offset())) })
+            let off = *offsets.get(*field_id as usize).unwrap_or(&usize::MAX);
+            if off == usize::MAX {
+                log::warn!(
+                    "aggregate field id [{field_id}] is not selected by the mapper, read as 0"
+                );
+                Element::Long(0)
+            } else {
+                match column.data_type() {
+                    ColumnType::Long => {
+                        Element::Long(unsafe { fetch_ptr(sub_data.add(off)) })
+                    }
+                    ColumnType::Double => {
+                        Element::Double(unsafe { fetch_ptr(sub_data.add(off)) })
+                    }
                 }
             }
         }
@@ -455,10 +496,10 @@ impl Aggregate {
     fn id(&self) -> u16 {
         self.id
     }
-    fn stream_id(&self) -> u16 {
+    pub(crate) fn stream_id(&self) -> u16 {
         self.stream_id
     }
-    fn executors(&self) -> &Vec<Executor> {
+    pub(crate) fn executors(&self) -> &Vec<Executor> {
         &self.executors
     }
 }
@@ -474,7 +515,7 @@ impl WrappedAggregate {
             fn_holder,
         }
     }
-    fn aggregate(&self) -> &Aggregate {
+    pub(crate) fn aggregate(&self) -> &Aggregate {
         &self.aggregate
     }
 }

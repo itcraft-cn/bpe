@@ -1,20 +1,22 @@
 use crate::{
+    aggregate::{call_aggregate, WrappedAggregate},
     aux::{SimpleU16Entry, SimpleU16Map},
     callback::{callback, FnHolder},
+    consts::FIELD_SIZE,
     data::Record,
     error::ParseSqlError,
     exec::{create_executor, Executors},
     id::next_mapper_id,
     param::CallbackParams,
     sql::{
-        base::{parse_options, FilterFunc, ParsedSql},
+        base::{parse_options, ExprEntity, FilterFunc, ParsedSql},
         select::parse_select,
     },
     store::{get_vec_size, WrappedArray},
 };
 use globalvar::{def_global_ptr, get_global, get_global_mut};
 use inkwell::execution_engine::JitFunction;
-use std::alloc::{self, Layout};
+use std::{alloc::{self, Layout}, sync::Arc};
 
 const OPERATOR_INC: fn(usize) -> usize = |v| v + 1;
 const OPERATOR_DEC: fn(usize) -> usize = |v| v - 1;
@@ -38,6 +40,8 @@ pub(crate) fn init_mapper() {
 
 /// Defines a mapper function by parsing the SQL query, generating the mapper structure,
 /// and storing it in the mapper map for later use.
+/// The mapper map is keyed by the target RECORD id (not the mapper id), so multiple
+/// mappers can be registered for the same record and all of them are invoked.
 /// Returns the mapper ID if successful, or None if the mapper could not be created.
 pub(crate) fn define_mapper(sql: &str, func_holder: FnHolder) -> Option<u16> {
     let options = get_global(unsafe { PTR_PARSE_OPTIONS }); // Get global parse options
@@ -45,20 +49,7 @@ pub(crate) fn define_mapper(sql: &str, func_holder: FnHolder) -> Option<u16> {
         // Parse the SQL query
         let rs = gen_mapper(parsed_sql); // Generate mapper structure
         if let Ok(mapper) = rs {
-            let id = mapper.id(); // Get the mapper ID
-            let mapper_map = get_global_mut::<SimpleU16Map>(unsafe { PTR_MAPPER_MAP }); // Get mapper map
-            let entry = mapper_map.entry(id); // Check if ID already exists
-            match entry {
-                SimpleU16Entry::Exist(_) => {
-                    log::warn!("id {id} already exists, sql[{sql}] is skipped"); // Log warning if duplicate
-                    None
-                }
-                SimpleU16Entry::NotExist(_) => {
-                    // Store the mapper with its function holder in the map
-                    mapper_map.insert(id, WrappedMapper::new(mapper, func_holder));
-                    Some(id) // Return the mapper ID
-                }
-            }
+            register_mapper(mapper, func_holder)
         } else {
             log::warn!(
                 "fail to create mapper from sql[{}], hit unexpected error: {:?}",
@@ -73,28 +64,104 @@ pub(crate) fn define_mapper(sql: &str, func_holder: FnHolder) -> Option<u16> {
     }
 }
 
-/// Calls a mapper function for the specified record ID by looking up the mapper and record,
-/// then invoking the mapper with the provided array and parameters.
+/// Defines a mapper that is bound to an aggregate function.
+/// The aggregate field references are resolved against the mapper's SELECT output
+/// by field NAME, so the aggregate reads the correct mapper output columns.
+pub(crate) fn define_mapper_bind_aggregate(
+    sql: &str,
+    wrapped: &'static WrappedAggregate,
+) -> Option<u16> {
+    let options = get_global(unsafe { PTR_PARSE_OPTIONS }); // Get global parse options
+    if let Some(parsed_sql) = parse_select(sql, options) {
+        let rs = gen_mapper(parsed_sql);
+        if let Ok(mapper) = rs {
+            let offsets = resolve_aggregate_offsets(&mapper, wrapped);
+            let f = move |param: CallbackParams| call_aggregate(wrapped, offsets.as_slice(), param);
+            register_mapper(mapper, FnHolder::Lambda(Box::new(f)))
+        } else {
+            log::warn!(
+                "fail to create mapper from sql[{}], hit unexpected error: {:?}",
+                sql,
+                rs.err().unwrap()
+            );
+            None
+        }
+    } else {
+        log::warn!("not supported sql statement: [{sql}]");
+        None
+    }
+}
+
+/// Resolves each stream column id referenced by the aggregate to the byte offset of
+/// the same-named field in the mapper's dense SELECT output.
+/// Returns a vec indexed by stream column id (1-based); usize::MAX means not resolved.
+fn resolve_aggregate_offsets(mapper: &Mapper, wrapped: &WrappedAggregate) -> Arc<Vec<usize>> {
+    let mut offsets = vec![usize::MAX];
+    if let Some(stream) = Record::get_record(wrapped.aggregate().stream_id()) {
+        offsets = vec![usize::MAX; stream._columns().len() + 1];
+        for (name, off) in mapper.select_fields() {
+            if let Some(field_id) = stream.column_id(name) {
+                offsets[*field_id as usize] = *off;
+            }
+        }
+    } else {
+        log::warn!("failed to find stream by id[{}]", wrapped.aggregate().stream_id());
+    }
+    Arc::new(offsets)
+}
+
+/// Registers a generated mapper into the record-keyed mapper list.
+fn register_mapper(mapper: Mapper, func_holder: FnHolder) -> Option<u16> {
+    let id = mapper.id();
+    let record_id = mapper.record_id(); // key by the target record id
+    let mapper_map = get_global_mut::<SimpleU16Map>(unsafe { PTR_MAPPER_MAP });
+    match mapper_map.entry(record_id) {
+        SimpleU16Entry::Exist(_) => {
+            // another mapper for the same record: append to the list
+            if let Some(list) = mapper_map.get_mut::<WrappedMapperList>(record_id) {
+                list.mappers.push(WrappedMapper::new(mapper, func_holder));
+                Some(id)
+            } else {
+                log::warn!("mapper list for record [{record_id}] not found");
+                None
+            }
+        }
+        SimpleU16Entry::NotExist(_) => {
+            mapper_map.insert(
+                record_id,
+                WrappedMapperList {
+                    mappers: vec![WrappedMapper::new(mapper, func_holder)],
+                },
+            );
+            Some(id)
+        }
+    }
+}
+
+/// Calls all mappers registered for the specified record ID by looking up the mapper list
+/// and record, then invoking each mapper with the provided array and parameters.
 #[inline]
 pub(crate) fn call_mapper(array: &WrappedArray, id: u16) {
-    let opt_mappers = search_mapper(id); // Look up the mapper by ID
+    let opt_mappers = search_mapper(id); // Look up the mapper list by record ID
     let opt_record = Record::get_record(id); // Look up the record by ID
     if opt_mappers.is_none() || opt_record.is_none() {
         return; // Return early if either mapper or record is not found
     }
-    let wrapped_mapper = opt_mappers.unwrap(); // Get the wrapped mapper
+    let mapper_list = opt_mappers.unwrap(); // Get the wrapped mapper list
     let record = opt_record.unwrap(); // Get the record
-                                      // Invoke the mapper with the array, mapper structure, record, and function holder
-    invoke(
-        id,
-        array,
-        &wrapped_mapper.mapper,
-        record,
-        &wrapped_mapper.fn_holder,
-    );
+    for wrapped_mapper in &mapper_list.mappers {
+        // Invoke each mapper with the array, mapper structure, record, and function holder
+        invoke(
+            id,
+            array,
+            &wrapped_mapper.mapper,
+            record,
+            &wrapped_mapper.fn_holder,
+        );
+    }
 }
 
-fn search_mapper(id: u16) -> Option<&'static WrappedMapper> {
+fn search_mapper(id: u16) -> Option<&'static WrappedMapperList> {
     let mapper_map = get_global::<SimpleU16Map>(unsafe { PTR_MAPPER_MAP });
     mapper_map.get(id)
 }
@@ -116,11 +183,34 @@ fn gen_mapper(parsed_sql: ParsedSql) -> Result<Mapper, ParseSqlError> {
         )));
     }
     let vec_executors = rs_executors.unwrap();
+    let select_fields = build_select_fields(&parsed_sql);
     Ok(Mapper::new(
         id,
         parsed_sql,
         Executors::new(vec_executors.as_slice()),
+        select_fields,
     ))
+}
+
+/// Builds the (field name, dense output offset) pairs for the mapper's SELECT fields.
+/// The dense offsets match how Mapper::fetch packs fields into the callback buffer.
+fn build_select_fields(parsed_sql: &ParsedSql) -> Vec<(String, usize)> {
+    let mut fields = vec![];
+    let mut offset = 0_usize;
+    for entity in parsed_sql.fields() {
+        let name = match entity {
+            ExprEntity::Field(field_id) => Record::get_record(parsed_sql.records()[0])
+                .map(|r| r.column(*field_id)._name().to_string())
+                .unwrap_or_default(),
+            ExprEntity::FieldWithTab(record_id, field_id) => Record::get_record(*record_id)
+                .map(|r| r.column(*field_id)._name().to_string())
+                .unwrap_or_default(),
+            _ => String::new(),
+        };
+        fields.push((name, offset));
+        offset += FIELD_SIZE;
+    }
+    fields
 }
 
 /// Invokes a mapper by filtering data in the array, then calling the callback function
@@ -156,10 +246,9 @@ fn loop_filter(
     record: &Record,      // The record definition
     u8_ptr: *mut u8,      // Pointer to output buffer
 ) -> usize {
-    let walker = array.walker(); // Get the array walker position
     let mask = array.mask(); // Get the array mask
-    let first_idx = array.first_idx(); // Get first index in array
-    let last_idx = array.last_idx(); // Get last index in array
+    let first_idx = array.first_idx(); // Oldest write index still in window
+    let last_idx = array.last_idx(); // Newest write index
     let step = array.step(); // Get the step size between elements
     let v_ptr = array.u64ptr(); // Get the array's u64 pointer
     let mut n = 0; // Counter for processed elements
@@ -168,14 +257,14 @@ fn loop_filter(
     let asc = mapper.fetch_asc(); // Check if fetching in ascending order
                                   // Create an index wrapper that iterates in the appropriate direction
     let mut idx_wrapper = if asc {
-        Idx::new(last_idx, first_idx, OPERATOR_DEC) // Descending order
+        Idx::new(last_idx, first_idx, OPERATOR_DEC) // Newest to oldest
     } else {
-        Idx::new(first_idx, last_idx, OPERATOR_INC) // Ascending order
+        Idx::new(first_idx, last_idx, OPERATOR_INC) // Oldest to newest
     };
     let filter = mapper.filter(); // Get the filter function
     loop {
-        // Calculate the position in the array
-        let position = ((walker - 1 - idx_wrapper.idx()) * step) & mask;
+        // Calculate the slot position for this write index (mask wraps around)
+        let position = (idx_wrapper.idx() * step) & mask;
         let sub_data_ptr = array.sub_data(position); // Get pointer to sub-data
         let v_sub_ptr = sub_data_ptr as u64; // Convert to u64 pointer
         if unsafe { filter.call(v_sub_ptr) } {
@@ -203,18 +292,35 @@ pub(crate) struct Mapper {
     id: u16,
     parsed_sql: ParsedSql,
     executors: Executors,
+    select_fields: Vec<(String, usize)>,
 }
 impl Mapper {
-    fn new(id: u16, parsed_sql: ParsedSql, executors: Executors) -> Mapper {
+    fn new(
+        id: u16,
+        parsed_sql: ParsedSql,
+        executors: Executors,
+        select_fields: Vec<(String, usize)>,
+    ) -> Mapper {
         Self {
             id,
             parsed_sql,
             executors,
+            select_fields,
         }
     }
 
     pub(crate) fn id(&self) -> u16 {
         self.id
+    }
+
+    /// The target record id this mapper filters on.
+    pub(crate) fn record_id(&self) -> u16 {
+        self.parsed_sql.records()[0]
+    }
+
+    /// The (field name, dense output offset) pairs of the SELECT fields.
+    pub(crate) fn select_fields(&self) -> &Vec<(String, usize)> {
+        &self.select_fields
     }
 
     fn fetch(
@@ -265,6 +371,11 @@ impl WrappedMapper {
     fn new(mapper: Mapper, fn_holder: FnHolder) -> Self {
         WrappedMapper { mapper, fn_holder }
     }
+}
+
+/// A list of mappers registered for the same record id.
+pub(crate) struct WrappedMapperList {
+    mappers: Vec<WrappedMapper>,
 }
 
 #[derive(Debug)]

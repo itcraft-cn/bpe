@@ -1,14 +1,14 @@
 use crate::{
-    aggregate::{call_aggregate, define_aggregate, init_aggregate, search_aggregate},
+    aggregate::{define_aggregate, init_aggregate, search_aggregate},
     callback::FnHolder,
     cfg::load_config,
     data::{check_id_in_store, init_data, Column, Record, RecordType, U8Bytes},
     ffi::FfiFunc,
     jit::base::init_func_generator,
     logger::init_logger,
-    mapper::{call_mapper, define_mapper, init_mapper},
+    mapper::{call_mapper, define_mapper, define_mapper_bind_aggregate, init_mapper},
     param::CallbackParams,
-    store::{find_or_insert_array, init_store, insert, WrappedArray},
+    store::{find_or_insert_array, get_record_size, init_store, insert, WrappedArray},
 };
 use std::sync::Once;
 
@@ -56,13 +56,21 @@ pub fn def_stream(name: &str, columns: Vec<Column>) -> Option<u16> {
     Record::insert_record(name, RecordType::Stream, columns)
 }
 
-/// Processes new incoming data by checking if the record ID is defined,
-/// inserting it into the appropriate array, and triggering mapper processing.
-/// Returns true if the data was successfully processed, false otherwise.
+/// Processes new incoming data by checking if the record ID is defined and the payload
+/// fits into one record slot, inserting it into the appropriate array, and triggering
+/// mapper processing. Returns true if the data was successfully processed, false otherwise.
 pub fn new_data(data: &U8Bytes) -> bool {
     let id = data.id(); // Extract the record ID from the data
     if check_id_in_store(id) {
         log::warn!("id [{id}] is not defined");
+        false
+    } else if data.data_len() > get_record_size() {
+        // guard against writing beyond the record slot (cross-record corruption)
+        log::warn!(
+            "data_len [{}] is larger than record_size [{}], data is rejected",
+            data.data_len(),
+            get_record_size()
+        );
         false
     } else {
         let array = find_or_insert_array(id); // Find or create storage array for this record ID
@@ -95,9 +103,7 @@ where
 pub fn def_mapper_bind_aggregate(sql: &str, aggregate_id: u16) -> Option<u16> {
     let opt_aggregate = search_aggregate(aggregate_id); // Look up the aggregate by ID
     if let Some(wrapped) = opt_aggregate {
-        // Create a closure that calls the aggregate function when the mapper is triggered
-        let f = move |param: CallbackParams| call_aggregate(wrapped, param);
-        define_mapper(sql, FnHolder::Lambda(Box::new(f))) // Register the mapper with the aggregate function
+        define_mapper_bind_aggregate(sql, wrapped)
     } else {
         None // Return None if the aggregate ID was not found
     }

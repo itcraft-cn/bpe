@@ -51,7 +51,14 @@ impl Element {
     }
     pub(crate) fn div(self, other: Element) -> Element {
         match (self, other) {
-            (Element::Long(v1), Element::Long(v2)) => Element::Long(v1 / v2),
+            (Element::Long(v1), Element::Long(v2)) => {
+                // guard against division by zero (would panic and abort in release)
+                if v2 == 0 {
+                    Element::Long(0)
+                } else {
+                    Element::Long(v1 / v2)
+                }
+            }
             (Element::Long(v1), Element::Double(v2)) => Element::Double(v1 as f64 / v2),
             (Element::Double(v1), Element::Long(v2)) => Element::Double(v1 / v2 as f64),
             (Element::Double(v1), Element::Double(v2)) => Element::Double(v1 / v2),
@@ -59,7 +66,14 @@ impl Element {
     }
     pub(crate) fn mod_(self, other: Element) -> Element {
         match (self, other) {
-            (Element::Long(v1), Element::Long(v2)) => Element::Long(v1 % v2),
+            (Element::Long(v1), Element::Long(v2)) => {
+                // guard against modulo by zero
+                if v2 == 0 {
+                    Element::Long(0)
+                } else {
+                    Element::Long(v1 % v2)
+                }
+            }
             _ => Element::Long(0),
         }
     }
