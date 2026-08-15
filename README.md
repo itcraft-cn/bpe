@@ -263,6 +263,16 @@ circular-buffer memory, pre-computed column offsets, JIT-compiled filters, and a
 reused callback buffer. The window-less path never takes the window lock, so
 plain filtering is unaffected by windowing features.
 
+### vs Esper (CEP benchmark, same rules & data, single core)
+
+| Scenario | BPE | Esper 7.1 | Advantage |
+|---|---|---|---|
+| pure filter (6 conditions) | 133 ns | 240 ns | **1.8×** |
+| filter + 5 computed fields | 49 ns | 222 ns | **4.5×** |
+| window aggregate (len 10) | 78 ns | 172 ns | **2.2×** |
+
+See `docs/benchmark/esper-comparison-20260815.md` for methodology and reproduction.
+
 ## Testing
 
 ```bash
