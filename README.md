@@ -263,7 +263,7 @@ circular-buffer memory, pre-computed column offsets, JIT-compiled filters, and a
 reused callback buffer. The window-less path never takes the window lock, so
 plain filtering is unaffected by windowing features.
 
-### vs Esper (CEP benchmark, same rules & data, single core)
+### vs Esper — specialized-kernel benchmark (same rules & data, single core)
 
 | Scenario | BPE | Esper 7.1 | Advantage |
 |---|---|---|---|
@@ -271,7 +271,14 @@ plain filtering is unaffected by windowing features.
 | filter + 5 computed fields | 49 ns | 222 ns | **4.5×** |
 | window aggregate (len 10) | 78 ns | 172 ns | **2.2×** |
 
-See `docs/benchmark/esper-comparison-20260815.md` for methodology and reproduction.
+> **Scope caveat**: this compares a **specialized single-table rule-evaluation
+> kernel** against a **general-purpose CEP platform**. The advantage comes from
+> specialization: BPE only does single-table filter/compute/window aggregation,
+> while Esper supports full CEP (pattern matching, multi-stream joins, state
+> persistence, exactly-once, watermarks, distribution, built-in I/O, JMX ops).
+> BPE is **not** a general replacement — for complex rules/stateful patterns use
+> Esper/Flink; for high-frequency embedded pre-filtering use BPE (or cascade
+> BPE → Esper). See `docs/benchmark/esper-comparison-20260815.md`.
 
 ## Testing
 
