@@ -6,7 +6,7 @@ use std::{
     time::Instant,
 };
 
-const LOOP_SIZE: usize = 200_000;
+const LOOP_SIZE: usize = 2_000_000;
 
 /// 8-column record; filter with 4 conditions + computed fields.
 #[test]
@@ -42,7 +42,7 @@ fn perf_filter() {
     let bytes = u8data.bytes_mut();
     let ptr = bytes.as_mut_ptr();
     // warmup (JIT compilation happens on first call)
-    for i in 0..1000 {
+    for i in 0..50_000 {
         unsafe {
             *(ptr as *mut i64) = 1_700_000_000_000_i64 + i as i64;
             *(ptr.add(8) as *mut i64) = (i % 1000) as i64; // user_id

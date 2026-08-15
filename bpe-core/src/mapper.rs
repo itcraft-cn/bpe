@@ -3,7 +3,7 @@ use crate::{
     aux::{SimpleU16Entry, SimpleU16Map},
     callback::{callback, FnHolder},
     consts::FIELD_SIZE,
-    data::Record,
+    data::{Record, U8Bytes},
     error::ParseSqlError,
     exec::{create_executor, Executors},
     id::next_mapper_id,
@@ -12,14 +12,12 @@ use crate::{
         base::{parse_options, ExprEntity, FilterFunc, ParsedSql},
         select::parse_select,
     },
-    store::{get_vec_size, WrappedArray},
+    store::{find_or_insert_array, get_record_size, get_vec_size, WrappedArray},
 };
 use globalvar::{def_global_ptr, get_global, get_global_mut};
 use inkwell::execution_engine::JitFunction;
-use std::{alloc::{self, Layout}, sync::Arc};
+use std::{alloc::{self, Layout}, sync::{atomic::{AtomicU64, Ordering}, Arc}};
 
-const OPERATOR_INC: fn(usize) -> usize = |v| v + 1;
-const OPERATOR_DEC: fn(usize) -> usize = |v| v - 1;
 
 static mut PTR_MAPPER_MAP: u64 = 0;
 static mut PTR_PARSE_OPTIONS: u64 = 0;
@@ -140,7 +138,7 @@ fn register_mapper(mapper: Mapper, func_holder: FnHolder) -> Option<u16> {
 
 /// Calls all mappers registered for the specified record ID by looking up the mapper list
 /// and record, then invoking each mapper with the provided array and parameters.
-#[inline]
+//#[inline]
 pub(crate) fn call_mapper(array: &WrappedArray, id: u16) {
     let opt_mappers = search_mapper(id); // Look up the mapper list by record ID
     let opt_record = Record::get_record(id); // Look up the record by ID
@@ -164,6 +162,60 @@ pub(crate) fn call_mapper(array: &WrappedArray, id: u16) {
 fn search_mapper(id: u16) -> Option<&'static WrappedMapperList> {
     let mapper_map = get_global::<SimpleU16Map>(unsafe { PTR_MAPPER_MAP });
     mapper_map.get(id)
+}
+
+/// Updates the per-slot hit bitmap of every mapper registered for the record:
+/// the JIT filter runs exactly once per new record (not once per window scan),
+/// and the result is stored in the slot bitmap used by `loop_filter`.
+///
+/// Filters that depend on mutable dimension tables snapshot the dimension state
+/// at insert time; when the dimension version changes, all bitmaps are rebuilt
+/// on this (engine) thread before the new record is filtered.
+pub(crate) fn update_hitmap(array: &WrappedArray, data: &U8Bytes) {
+    let opt_mappers = search_mapper(data.id());
+    let Some(mapper_list) = opt_mappers else { return };
+    let ver = crate::dimension::dim_version();
+    if ver != 0
+        && mapper_list
+            .mappers
+            .iter()
+            .any(|w| w.mapper.dim_version.load(Ordering::Relaxed) != ver)
+    {
+        refresh_all_hitmaps();
+    }
+    let slot = array.newest_slot();
+    let v_ptr = data.bytes().as_ptr() as u64;
+    for wrapped in &mapper_list.mappers {
+        let hit = unsafe { wrapped.mapper.filter().call(v_ptr) };
+        wrapped.mapper.set_hit(slot, hit);
+        wrapped.mapper.dim_version.store(ver, Ordering::Relaxed);
+    }
+}
+
+/// Rebuilds every mapper's hit bitmap by re-running its JIT filter over the
+/// whole window of its record. Runs on the engine thread (from `update_hitmap`),
+/// so it does not race with bitmap reads in `loop_filter`.
+fn refresh_all_hitmaps() {
+    let record_map = get_global::<SimpleU16Map>(crate::data::record_map_ptr());
+    let ver = crate::dimension::dim_version();
+    record_map.for_each_id(|record_id| {
+        let opt_mappers = search_mapper(record_id);
+        let Some(mapper_list) = opt_mappers else { return };
+        let array = find_or_insert_array(record_id);
+        let count = array.walker();
+        let max_records = array.max_records();
+        let first_w = if count > max_records { count - max_records } else { 0 };
+        let step = array.step();
+        for wrapped in &mapper_list.mappers {
+            for w in first_w..count {
+                let slot = w % max_records;
+                let sub = array.sub_data(slot * step);
+                let hit = unsafe { wrapped.mapper.filter().call(sub as u64) };
+                wrapped.mapper.set_hit(slot, hit);
+                wrapped.mapper.dim_version.store(ver, Ordering::Relaxed);
+            }
+        }
+    });
 }
 
 fn gen_mapper(parsed_sql: ParsedSql) -> Result<Mapper, ParseSqlError> {
@@ -213,9 +265,8 @@ fn build_select_fields(parsed_sql: &ParsedSql) -> Vec<(String, usize)> {
     fields
 }
 
-/// Invokes a mapper by filtering data in the array, then calling the callback function
-/// with the filtered results and appropriate parameters.
-#[inline]
+/// Invokes a mapper by scanning the per-slot hit bitmap for the newest matching
+/// records, then calling the callback function with the filtered results.
 fn invoke(
     id: u16,                 // Record ID
     array: &WrappedArray,    // Array containing the data
@@ -225,7 +276,7 @@ fn invoke(
 ) {
     // Get pointer to value data reference for processing
     let u8_ptr = unsafe { PTR_VAL_DATA_REF } as *mut u8;
-    // Filter data in the array based on the mapper's criteria
+    // Collect matching records by scanning the hit bitmap (filter already ran per record)
     let size = loop_filter(array, mapper, id, record, u8_ptr);
     let mask = array.mask(); // Get the array mask
     let offset = (array.walker() - 1) & mask; // Calculate the offset
@@ -239,6 +290,9 @@ fn invoke(
 
 /// Filters data in the array based on the mapper's criteria, processing elements that match
 /// and returning the count of processed elements.
+/// Scans the per-slot hit bitmap by 64-bit words (skipping zero words, locating
+/// set bits via TZCNT/LZCNT), so a full window scan costs a handful of word tests
+/// instead of one bit test per record.
 fn loop_filter(
     array: &WrappedArray, // Array containing the data to filter
     mapper: &Mapper,      // The mapper with filter criteria
@@ -246,42 +300,80 @@ fn loop_filter(
     record: &Record,      // The record definition
     u8_ptr: *mut u8,      // Pointer to output buffer
 ) -> usize {
-    let mask = array.mask(); // Get the array mask
-    let first_idx = array.first_idx(); // Oldest write index still in window
-    let last_idx = array.last_idx(); // Newest write index
-    let step = array.step(); // Get the step size between elements
-    let v_ptr = array.u64ptr(); // Get the array's u64 pointer
-    let mut n = 0; // Counter for processed elements
-    let mut offset = 0; // Offset in output buffer
-    let limit = mapper.limit(); // Get the limit on number of results
-    let asc = mapper.fetch_asc(); // Check if fetching in ascending order
-                                  // Create an index wrapper that iterates in the appropriate direction
-    let mut idx_wrapper = if asc {
-        Idx::new(last_idx, first_idx, OPERATOR_DEC) // Newest to oldest
-    } else {
-        Idx::new(first_idx, last_idx, OPERATOR_INC) // Oldest to newest
+    let count = array.walker(); // number of records written
+    let max_records = array.max_records();
+    let first_w = if count > max_records { count - max_records } else { 0 }; // oldest write index
+    let last_w = count - 1; // newest write index
+    let win_len = count - first_w; // number of records in the window
+    let num_words = (max_records / 64).max(1);
+    let first_slot = first_w % max_records;
+    let last_slot = last_w % max_records;
+    let step = array.step();
+    let v_ptr = array.u64ptr();
+    let limit = mapper.limit();
+    let asc = mapper.fetch_asc(); // newest-first when LIMIT >= 0
+    let hitmap = mapper.hitmap();
+    let mut n = 0; // matched records
+    let mut offset = 0; // output buffer offset
+    let mut scanned = 0usize; // slots examined
+
+    let process = |slot: usize,
+                   n: &mut usize,
+                   offset: &mut usize,
+                   u8_ptr: *mut u8| {
+        let position = slot * step;
+        let sub_data_ptr = array.sub_data(position);
+        let adjusted = unsafe { u8_ptr.add(*offset) };
+        mapper.fetch(id, v_ptr, record, position, sub_data_ptr, adjusted);
+        *n += 1;
+        *offset += step;
     };
-    let filter = mapper.filter(); // Get the filter function
-    loop {
-        // Calculate the slot position for this write index (mask wraps around)
-        let position = (idx_wrapper.idx() * step) & mask;
-        let sub_data_ptr = array.sub_data(position); // Get pointer to sub-data
-        let v_sub_ptr = sub_data_ptr as u64; // Convert to u64 pointer
-        if unsafe { filter.call(v_sub_ptr) } {
-            // Apply the filter
-            let adjusted = unsafe { u8_ptr.add(offset) }; // Adjust output pointer
-                                                          // Fetch and copy the data that passed the filter
-            mapper.fetch(id, v_ptr, record, position, sub_data_ptr, adjusted);
-            n += 1; // Increment processed element counter
-            offset += step; // Update output buffer offset
-            if n == limit {
-                // Check if we've reached the limit
-                break;
+
+    if asc {
+        // newest -> oldest: walk words backwards from the newest slot
+        let mut word_idx = last_slot / 64;
+        let mut start_bit = last_slot % 64;
+        while scanned < win_len && n < limit {
+            let mask = if start_bit >= 63 {
+                u64::MAX
+            } else {
+                (1u64 << (start_bit + 1)) - 1
+            };
+            let mut word = unsafe { *(hitmap.add(word_idx * 8) as *const u64) } & mask;
+            scanned += start_bit + 1;
+            while word != 0 && n < limit {
+                let bit = 63 - word.leading_zeros() as usize;
+                let slot = word_idx * 64 + bit;
+                if slot < max_records {
+                    process(slot, &mut n, &mut offset, u8_ptr);
+                }
+                word &= !(1 << bit);
             }
+            word_idx = (word_idx + num_words - 1) % num_words;
+            start_bit = 63;
         }
-        if idx_wrapper.judge_or_step() {
-            // Check if we should continue iterating
-            break;
+    } else {
+        // oldest -> newest: walk words forward from the oldest slot
+        let mut word_idx = first_slot / 64;
+        let mut start_bit = first_slot % 64;
+        while scanned < win_len && n < limit {
+            let mask = if start_bit == 0 {
+                u64::MAX
+            } else {
+                u64::MAX << start_bit
+            };
+            let mut word = unsafe { *(hitmap.add(word_idx * 8) as *const u64) } & mask;
+            scanned += 64 - start_bit;
+            while word != 0 && n < limit {
+                let bit = word.trailing_zeros() as usize;
+                let slot = word_idx * 64 + bit;
+                if slot < max_records {
+                    process(slot, &mut n, &mut offset, u8_ptr);
+                }
+                word &= word - 1;
+            }
+            word_idx = (word_idx + 1) % num_words;
+            start_bit = 0;
         }
     }
     n // Return the count of processed elements
@@ -293,6 +385,13 @@ pub(crate) struct Mapper {
     parsed_sql: ParsedSql,
     executors: Executors,
     select_fields: Vec<(String, usize)>,
+    /// Per-slot hit bitmap (1 bit per ring-buffer slot): the JIT filter result
+    /// for the record currently stored in each slot. Set once per record at
+    /// insert time by `update_hitmap`; scanned by `loop_filter`.
+    /// Raw pointer: accessed from the single engine thread (insert + scan).
+    hitmap: *mut u8,
+    /// Dimension version when the bitmap was last built (stale detection).
+    dim_version: AtomicU64,
 }
 impl Mapper {
     fn new(
@@ -301,11 +400,18 @@ impl Mapper {
         executors: Executors,
         select_fields: Vec<(String, usize)>,
     ) -> Mapper {
+        // one bit per ring-buffer slot
+        let hitmap_len = get_vec_size() / get_record_size() / 8 + 1;
+        let hitmap = unsafe {
+            std::alloc::alloc_zeroed(std::alloc::Layout::from_size_align(hitmap_len, 1).unwrap())
+        };
         Self {
             id,
             parsed_sql,
             executors,
             select_fields,
+            hitmap,
+            dim_version: AtomicU64::new(0),
         }
     }
 
@@ -321,6 +427,24 @@ impl Mapper {
     /// The (field name, dense output offset) pairs of the SELECT fields.
     pub(crate) fn select_fields(&self) -> &Vec<(String, usize)> {
         &self.select_fields
+    }
+
+    /// Records the JIT filter result for the record stored in `slot`.
+    /// Single-threaded access: called from the engine's insert path.
+    fn set_hit(&self, slot: usize, hit: bool) {
+        unsafe {
+            let p = self.hitmap.add(slot >> 3);
+            let bit = 1 << (slot & 7);
+            if hit {
+                *p |= bit;
+            } else {
+                *p &= !bit;
+            }
+        }
+    }
+
+    fn hitmap(&self) -> *mut u8 {
+        self.hitmap
     }
 
     fn fetch(
@@ -376,33 +500,4 @@ impl WrappedMapper {
 /// A list of mappers registered for the same record id.
 pub(crate) struct WrappedMapperList {
     mappers: Vec<WrappedMapper>,
-}
-
-#[derive(Debug)]
-struct Idx {
-    idx: usize,
-    stop_val: usize,
-    operator: fn(usize) -> usize,
-}
-impl Idx {
-    fn new(init_val: usize, stop_val: usize, operator: fn(usize) -> usize) -> Self {
-        Self {
-            idx: init_val,
-            stop_val,
-            operator,
-        }
-    }
-
-    fn idx(&self) -> usize {
-        self.idx
-    }
-
-    fn judge_or_step(&mut self) -> bool {
-        if self.idx == self.stop_val {
-            true
-        } else {
-            self.idx = (self.operator)(self.idx);
-            false
-        }
-    }
 }

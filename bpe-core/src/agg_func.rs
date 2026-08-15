@@ -1,30 +1,30 @@
 use crate::aux::{fetch_ptr, fill_ptr};
 
-#[inline]
+//#[inline]
 pub(crate) fn f_max_l(aggregate_data_ptr: *mut u8, offset: usize, v: &i64) {
     let max: i64 = fetch_ptr(unsafe { aggregate_data_ptr.add(offset) });
     fill_ptr(unsafe { aggregate_data_ptr.add(offset) }, max.max(*v));
 }
 
-#[inline]
+//#[inline]
 pub(crate) fn f_min_l(aggregate_data_ptr: *mut u8, offset: usize, v: &i64) {
     let min: i64 = fetch_ptr(unsafe { aggregate_data_ptr.add(offset) });
     fill_ptr(unsafe { aggregate_data_ptr.add(offset) }, min.min(*v));
 }
 
-#[inline]
+//#[inline]
 pub(crate) fn f_sum_l(aggregate_data_ptr: *mut u8, offset: usize, v: &i64) {
     let sum: i64 = fetch_ptr(unsafe { aggregate_data_ptr.add(offset) });
     fill_ptr(unsafe { aggregate_data_ptr.add(offset) }, sum + *v);
 }
 
-#[inline]
+//#[inline]
 pub(crate) fn f_count_l(aggregate_data_ptr: *mut u8, offset: usize) {
     let count: i64 = fetch_ptr(unsafe { aggregate_data_ptr.add(offset) });
     fill_ptr(unsafe { aggregate_data_ptr.add(offset) }, count + 1);
 }
 
-#[inline]
+//#[inline]
 pub(crate) fn f_max_d_l(aggregate_data_ptr: *mut u8, offset: usize, v: &i64) {
     let max: f64 = fetch_ptr(unsafe { aggregate_data_ptr.add(offset) });
     fill_ptr(
@@ -33,7 +33,7 @@ pub(crate) fn f_max_d_l(aggregate_data_ptr: *mut u8, offset: usize, v: &i64) {
     );
 }
 
-#[inline]
+//#[inline]
 pub(crate) fn f_min_d_l(aggregate_data_ptr: *mut u8, offset: usize, v: &i64) {
     let min: f64 = fetch_ptr(unsafe { aggregate_data_ptr.add(offset) });
     fill_ptr(
@@ -42,13 +42,13 @@ pub(crate) fn f_min_d_l(aggregate_data_ptr: *mut u8, offset: usize, v: &i64) {
     );
 }
 
-#[inline]
+//#[inline]
 pub(crate) fn f_sum_d_l(aggregate_data_ptr: *mut u8, offset: usize, v: &i64) {
     let sum: f64 = fetch_ptr(unsafe { aggregate_data_ptr.add(offset) });
     fill_ptr(unsafe { aggregate_data_ptr.add(offset) }, sum + *v as f64);
 }
 
-#[inline]
+//#[inline]
 pub(crate) fn f_avg_l(aggregate_data_ptr: *mut u8, offset: usize, v: &i64, data_idx: usize) {
     let avg: f64 = fetch_ptr(unsafe { aggregate_data_ptr.add(offset) });
     fill_ptr(
@@ -57,25 +57,25 @@ pub(crate) fn f_avg_l(aggregate_data_ptr: *mut u8, offset: usize, v: &i64, data_
     );
 }
 
-#[inline]
+//#[inline]
 pub(crate) fn f_max_d_d(aggregate_data_ptr: *mut u8, offset: usize, v: &f64) {
     let max: f64 = fetch_ptr(unsafe { aggregate_data_ptr.add(offset) });
     fill_ptr(unsafe { aggregate_data_ptr.add(offset) }, max.max(*v));
 }
 
-#[inline]
+//#[inline]
 pub(crate) fn f_min_d_d(aggregate_data_ptr: *mut u8, offset: usize, v: &f64) {
     let min: f64 = fetch_ptr(unsafe { aggregate_data_ptr.add(offset) });
     fill_ptr(unsafe { aggregate_data_ptr.add(offset) }, min.min(*v));
 }
 
-#[inline]
+//#[inline]
 pub(crate) fn f_sum_d_d(aggregate_data_ptr: *mut u8, offset: usize, v: &f64) {
     let sum: f64 = fetch_ptr(unsafe { aggregate_data_ptr.add(offset) });
     fill_ptr(unsafe { aggregate_data_ptr.add(offset) }, sum + *v);
 }
 
-#[inline]
+//#[inline]
 pub(crate) fn f_avg_d(
     aggregate_data_ptr: *mut u8,
     offset: usize,
@@ -89,22 +89,22 @@ pub(crate) fn f_avg_d(
     );
 }
 
-#[inline]
+//#[inline]
 pub(crate) fn f_first_l(aggregate_data_ptr: *mut u8, offset: usize, v: &i64) {
     fill_ptr(unsafe { aggregate_data_ptr.add(offset) }, *v);
 }
 
-#[inline]
+//#[inline]
 pub(crate) fn f_first_d(aggregate_data_ptr: *mut u8, offset: usize, v: &f64) {
     fill_ptr(unsafe { aggregate_data_ptr.add(offset) }, *v);
 }
 
-#[inline]
+//#[inline]
 pub(crate) fn f_last_l(aggregate_data_ptr: *mut u8, offset: usize, v: &i64) {
     fill_ptr(unsafe { aggregate_data_ptr.add(offset) }, *v);
 }
 
-#[inline]
+//#[inline]
 pub(crate) fn f_last_d(aggregate_data_ptr: *mut u8, offset: usize, v: &f64) {
     fill_ptr(unsafe { aggregate_data_ptr.add(offset) }, *v);
 }
@@ -114,7 +114,7 @@ pub(crate) fn f_last_d(aggregate_data_ptr: *mut u8, offset: usize, v: &f64) {
 // State layout (24 bytes at state_ptr): [count: f64][mean: f64][m2: f64]
 // ============================================================================
 
-#[inline]
+//#[inline]
 pub(crate) fn f_stddev_step(state_ptr: *mut u8, v: f64) {
     let count: f64 = fetch_ptr(state_ptr);
     let mean: f64 = fetch_ptr(unsafe { state_ptr.add(8) });
@@ -129,7 +129,7 @@ pub(crate) fn f_stddev_step(state_ptr: *mut u8, v: f64) {
 }
 
 /// Writes the final variance into the output slot. `sample=true` uses n-1.
-#[inline]
+//#[inline]
 pub(crate) fn f_var_finalize(out: *mut u8, state_ptr: *const u8, sample: bool) {
     let count: f64 = fetch_ptr(state_ptr);
     let m2: f64 = fetch_ptr(unsafe { state_ptr.add(16) });
@@ -143,7 +143,7 @@ pub(crate) fn f_var_finalize(out: *mut u8, state_ptr: *const u8, sample: bool) {
 }
 
 /// Writes the final stddev into the output slot.
-#[inline]
+//#[inline]
 pub(crate) fn f_stddev_finalize(out: *mut u8, state_ptr: *const u8, sample: bool) {
     let count: f64 = fetch_ptr(state_ptr);
     let m2: f64 = fetch_ptr(unsafe { state_ptr.add(16) });

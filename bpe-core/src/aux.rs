@@ -9,12 +9,12 @@ use crate::consts::FIELD_SIZE;
 
 const U16_FULL_VAL: u32 = u16::MAX as u32 + 1;
 
-#[inline]
+//#[inline]
 pub(crate) fn fill_ptr<T>(u8_ptr: *mut u8, data: T) {
     unsafe { *(u8_ptr as *mut T) = data };
 }
 
-#[inline]
+//#[inline]
 pub(crate) fn fetch_ptr<T>(u8_ptr: *const u8) -> T
 where
     T: Copy,
@@ -22,12 +22,12 @@ where
     unsafe { *(u8_ptr as *const T) }
 }
 
-#[inline]
+//#[inline]
 pub(crate) fn fill<T>(slice: &mut [u8], data: T) {
     unsafe { ptr::write_unaligned(ptr::addr_of!(*slice) as *mut T, data) }
 }
 
-#[inline]
+//#[inline]
 pub(crate) fn fetch<T>(slice: &[u8]) -> T
 where
     T: Copy,
@@ -35,26 +35,26 @@ where
     unsafe { ptr::read_unaligned(ptr::addr_of!(*slice) as *mut T) }
 }
 
-#[inline]
+//#[inline]
 pub(crate) fn bitmap_chk_id(array: &[u8], id: u16) -> bool {
     let (idx, bit) = fetch_idx_bit(id);
     array[idx as usize] & (1 << bit) == 0
 }
 
-#[inline]
+//#[inline]
 pub(crate) fn bitmap_set_id(array: &mut [u8], id: u16) {
     let (idx, bit) = fetch_idx_bit(id);
     array[idx as usize] |= 1 << bit;
 }
 
-#[inline]
+//#[inline]
 fn fetch_idx_bit(id: u16) -> (u16, u16) {
     let idx = id / (FIELD_SIZE as u16);
     let bit = id % (FIELD_SIZE as u16);
     (idx, bit)
 }
 
-#[inline]
+//#[inline]
 pub(crate) fn timestamp() -> u64 {
     let duration = SystemTime::now()
         .duration_since(UNIX_EPOCH)
@@ -71,13 +71,13 @@ impl SimpleU16Map {
             ptr_array: [0_u64; U16_FULL_VAL as usize],
         }
     }
-    #[inline]
+    //#[inline]
     pub(crate) fn insert<T>(&mut self, id: u16, value: T) {
         let val = Box::new(value);
         let p_val = Box::leak(val);
         self.ptr_array[id as usize] = ptr::addr_of_mut!(*p_val) as u64;
     }
-    #[inline]
+    //#[inline]
     pub(crate) fn entry(&mut self, id: u16) -> SimpleU16Entry {
         let ptr = self.ptr_array[id as usize];
         if ptr == 0 {
@@ -86,7 +86,7 @@ impl SimpleU16Map {
             SimpleU16Entry::Exist(id)
         }
     }
-    #[inline]
+    //#[inline]
     pub(crate) fn get_mut<T>(&mut self, id: u16) -> Option<&'static mut T> {
         let u64v = self.ptr_array[id as usize];
         if u64v == 0 {
@@ -96,7 +96,7 @@ impl SimpleU16Map {
             unsafe { Some(&mut *p_val) }
         }
     }
-    #[inline]
+    //#[inline]
     pub(crate) fn get<T>(&self, id: u16) -> Option<&'static T> {
         let u64v = self.ptr_array[id as usize];
         if u64v == 0 {
@@ -106,6 +106,15 @@ impl SimpleU16Map {
             unsafe { Some(&*p_val) }
         }
     }
+
+    /// Visits every occupied id (pointer non-zero).
+    pub(crate) fn for_each_id(&self, mut f: impl FnMut(u16)) {
+        for (i, &p) in self.ptr_array.iter().enumerate() {
+            if p != 0 {
+                f(i as u16);
+            }
+        }
+    }
 }
 
 pub(crate) enum SimpleU16Entry {
@@ -113,7 +122,7 @@ pub(crate) enum SimpleU16Entry {
     NotExist(u16),
 }
 impl SimpleU16Entry {
-    #[inline]
+    //#[inline]
     pub(crate) fn or_insert_with<T, F>(&mut self, map: &mut SimpleU16Map, f: F)
     where
         F: FnOnce() -> T,
@@ -126,7 +135,7 @@ impl SimpleU16Entry {
         }
     }
 
-    #[inline]
+    //#[inline]
     pub(crate) fn _fetch_as_mut<T>(&self, map: &mut SimpleU16Map) -> Option<&'static mut T> {
         match *self {
             SimpleU16Entry::Exist(id) => map.get_mut(id),

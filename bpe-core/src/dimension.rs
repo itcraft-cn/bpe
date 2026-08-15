@@ -7,7 +7,24 @@
 
 use globalvar::{def_global_ptr, get_global, get_global_mut};
 use hashbrown::HashMap;
-use std::sync::{Mutex, Once, RwLock};
+use std::sync::{
+    atomic::{AtomicU64, Ordering},
+    Mutex, Once, RwLock,
+};
+
+/// Bumped on every dimension update/remove so mappers can detect stale hit
+/// bitmaps (a filter using `_dim_has/_dim_get` snapshot the dimension state
+/// at insert time) and rebuild them on the engine thread.
+static DIM_VERSION: AtomicU64 = AtomicU64::new(0);
+
+/// Current dimension version (0 = no updates ever).
+pub(crate) fn dim_version() -> u64 {
+    DIM_VERSION.load(Ordering::Relaxed)
+}
+
+fn bump_version() {
+    DIM_VERSION.fetch_add(1, Ordering::Relaxed);
+}
 
 pub(crate) struct Dimension {
     map: RwLock<HashMap<i64, i64>>,
@@ -47,6 +64,7 @@ pub fn update_dimension(id: u16, key: i64, value: i64) {
     if let Some(dim) = dims.get_mut(id as usize) {
         if let Ok(mut map) = dim.map.write() {
             map.insert(key, value);
+            bump_version();
         }
     } else {
         log::warn!("dimension [{id}] is not defined");
@@ -61,6 +79,7 @@ pub fn remove_dimension(id: u16, key: i64) {
     if let Some(dim) = dims.get_mut(id as usize) {
         if let Ok(mut map) = dim.map.write() {
             map.remove(&key);
+            bump_version();
         }
     } else {
         log::warn!("dimension [{id}] is not defined");

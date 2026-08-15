@@ -44,7 +44,7 @@ fn insert_into_slice(array: &mut WrappedArray, data: &U8Bytes) {
     array.write_data(base, &data[0..size], size);
 }
 
-#[inline]
+//#[inline]
 pub(crate) fn find_or_insert_array<'a>(id: u16) -> &'a mut WrappedArray {
     let map = get_global_mut::<SimpleU16Map>(unsafe { PTR_MAP });
     map.entry(id)
@@ -91,26 +91,17 @@ impl WrappedArray {
         }
     }
 
-    /// Returns the write index of the oldest record still in the window.
-    /// Write indices are monotonically increasing; the actual slot is
-    /// `(write_idx * step) & mask` which wraps via the power-of-two mask.
-    pub(crate) fn first_idx(&self) -> usize {
-        let count = self.walker();
-        if count > self.max_records {
-            count - self.max_records
-        } else {
-            0
-        }
-    }
-
-    /// Returns the write index of the newest record (count - 1).
-    /// Only valid when at least one record has been written.
-    pub(crate) fn last_idx(&self) -> usize {
-        self.walker().saturating_sub(1)
-    }
-
     pub(crate) fn mask(&self) -> usize {
         self.mask
+    }
+
+    pub(crate) fn max_records(&self) -> usize {
+        self.max_records
+    }
+
+    /// Physical slot of the newest written record (call after `insert`).
+    pub(crate) fn newest_slot(&self) -> usize {
+        (self.walker() - 1) % self.max_records
     }
 
     pub(crate) fn step(&self) -> usize {

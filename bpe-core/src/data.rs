@@ -283,6 +283,11 @@ pub(crate) fn check_id_in_store(id: u16) -> bool {
     bitmap_chk_id(id_store.as_slice(), id)  // Check if ID is set in the bitmap
 }
 
+/// Exposes the record registry pointer for cross-module iteration (mapper refresh).
+pub(crate) fn record_map_ptr() -> u64 {
+    unsafe { PTR_RECORD_MAP }
+}
+
 /// Initializes the data system by setting up global pointers for:
 /// - Record map to store record definitions
 /// - Name map to map record names to IDs

@@ -6,7 +6,7 @@ use crate::{
     ffi::FfiFunc,
     jit::base::init_func_generator,
     logger::init_logger,
-    mapper::{call_mapper, define_mapper, define_mapper_bind_aggregate, init_mapper},
+    mapper::{call_mapper, define_mapper, define_mapper_bind_aggregate, init_mapper, update_hitmap},
     param::CallbackParams,
     store::{find_or_insert_array, get_record_size, init_store, insert, WrappedArray},
     window::{define_keyed_window_aggregate, define_window_aggregate, Window},
@@ -84,9 +84,10 @@ pub fn new_data(data: &U8Bytes) -> bool {
 
 /// Processes data by inserting it into the array and triggering the mapper.
 /// This function is marked as inline for performance optimization.
-#[inline]
+//#[inline]
 fn process_data(array: &mut WrappedArray, data: &U8Bytes) {
     insert(array, data); // Insert the data into the storage array
+    update_hitmap(array, data); // Run each mapper's JIT filter once, record hits
     call_mapper(array, data.id()); // Trigger mapper processing for this record ID
 }
 
