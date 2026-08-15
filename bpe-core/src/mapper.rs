@@ -1,15 +1,15 @@
 use crate::{
     aggregate::{call_aggregate, WrappedAggregate},
-    aux::{SimpleU16Entry, SimpleU16Map},
+    aux::{fetch_ptr, fill_ptr, SimpleU16Entry, SimpleU16Map},
     callback::{callback, FnHolder},
     consts::FIELD_SIZE,
-    data::{Record, U8Bytes},
+    data::{ColumnType, Record, U8Bytes},
     error::ParseSqlError,
     exec::{create_executor, Executors},
     id::next_mapper_id,
     param::CallbackParams,
     sql::{
-        base::{parse_options, ExprEntity, FilterFunc, ParsedSql},
+        base::{parse_options, ExprEntity, FilterFunc, ParsedSql, ValType},
         select::parse_select,
     },
     store::{find_or_insert_array, get_record_size, get_vec_size, WrappedArray},
@@ -236,12 +236,51 @@ fn gen_mapper(parsed_sql: ParsedSql) -> Result<Mapper, ParseSqlError> {
     }
     let vec_executors = rs_executors.unwrap();
     let select_fields = build_select_fields(&parsed_sql);
+    let field_readers = build_field_readers(&parsed_sql);
     Ok(Mapper::new(
         id,
         parsed_sql,
         Executors::new(vec_executors.as_slice()),
         select_fields,
+        field_readers,
     ))
+}
+
+/// Builds the pre-resolved field readers: plain column reads become direct
+/// (offset, type) readers; constants are inlined; expressions fall back to the
+/// executor index (fields and executors are ordered identically).
+fn build_field_readers(parsed_sql: &ParsedSql) -> Vec<FieldReader> {
+    let mut readers = vec![];
+    let mut executor_idx = 0usize;
+    let record = Record::get_record(parsed_sql.records()[0]);
+    for entity in parsed_sql.fields() {
+        match entity {
+            ExprEntity::Field(field_id) => {
+                if let Some(rec) = record {
+                    let col = rec.column(*field_id);
+                    readers.push(match col.data_type() {
+                        ColumnType::Long => FieldReader::LongAt(col.offset()),
+                        ColumnType::Double => FieldReader::DoubleAt(col.offset()),
+                    });
+                }
+            }
+            ExprEntity::FieldWithTab(record_id, field_id) => {
+                if let Some(rec) = Record::get_record(*record_id) {
+                    let col = rec.column(*field_id);
+                    readers.push(match col.data_type() {
+                        ColumnType::Long => FieldReader::LongAt(col.offset()),
+                        ColumnType::Double => FieldReader::DoubleAt(col.offset()),
+                    });
+                }
+            }
+            ExprEntity::Val(ValType::Bool(b)) => readers.push(FieldReader::ConstLong(*b as i64)),
+            ExprEntity::Val(ValType::Int(v)) => readers.push(FieldReader::ConstLong(*v)),
+            ExprEntity::Val(ValType::Float(f)) => readers.push(FieldReader::ConstDouble(*f)),
+            ExprEntity::Function(..) => readers.push(FieldReader::Computed(executor_idx)),
+        }
+        executor_idx += 1;
+    }
+    readers
 }
 
 /// Builds the (field name, dense output offset) pairs for the mapper's SELECT fields.
@@ -385,6 +424,8 @@ pub(crate) struct Mapper {
     parsed_sql: ParsedSql,
     executors: Executors,
     select_fields: Vec<(String, usize)>,
+    /// Pre-resolved readers for the SELECT fields (fast path).
+    field_readers: Vec<FieldReader>,
     /// Per-slot hit bitmap (1 bit per ring-buffer slot): the JIT filter result
     /// for the record currently stored in each slot. Set once per record at
     /// insert time by `update_hitmap`; scanned by `loop_filter`.
@@ -393,12 +434,26 @@ pub(crate) struct Mapper {
     /// Dimension version when the bitmap was last built (stale detection).
     dim_version: AtomicU64,
 }
+/// A pre-resolved SELECT field reader: column offset/type and constants are
+/// resolved at definition time, so the hot path avoids record lookups and deep
+/// executor dispatch for plain column reads.
+#[derive(Debug)]
+enum FieldReader {
+    LongAt(usize),
+    DoubleAt(usize),
+    ConstLong(i64),
+    ConstDouble(f64),
+    /// Computed expression: fall back to the executor tree (index into `executors`).
+    Computed(usize),
+}
+
 impl Mapper {
     fn new(
         id: u16,
         parsed_sql: ParsedSql,
         executors: Executors,
         select_fields: Vec<(String, usize)>,
+        field_readers: Vec<FieldReader>,
     ) -> Mapper {
         // one bit per ring-buffer slot
         let hitmap_len = get_vec_size() / get_record_size() / 8 + 1;
@@ -410,6 +465,7 @@ impl Mapper {
             parsed_sql,
             executors,
             select_fields,
+            field_readers,
             hitmap,
             dim_version: AtomicU64::new(0),
         }
@@ -456,20 +512,39 @@ impl Mapper {
         sub_data_ptr: *const u8,
         target: *const u8,
     ) {
-        let mut val;
         let mut offset = 0_usize;
-        let executors = &self.executors;
-        let len = executors.executor_size();
-        let mut i = 0;
-        loop {
-            let executor = executors.index_of(i);
-            val = executor.fetch(id, v_ptr, record, position, sub_data_ptr);
-            let val_len = val.len();
-            val.copy_to_target(target as *mut u8, offset);
-            offset += val_len;
-            i += 1;
-            if i >= len {
-                break;
+        for reader in &self.field_readers {
+            match reader {
+                FieldReader::LongAt(off) => {
+                    let v: i64 = unsafe { fetch_ptr(sub_data_ptr.add(*off)) };
+                    unsafe { fill_ptr((target as *mut u8).add(offset), v) };
+                    offset += FIELD_SIZE;
+                }
+                FieldReader::DoubleAt(off) => {
+                    let v: f64 = unsafe { fetch_ptr(sub_data_ptr.add(*off)) };
+                    unsafe { fill_ptr((target as *mut u8).add(offset), v) };
+                    offset += FIELD_SIZE;
+                }
+                FieldReader::ConstLong(v) => {
+                    unsafe { fill_ptr((target as *mut u8).add(offset), *v) };
+                    offset += FIELD_SIZE;
+                }
+                FieldReader::ConstDouble(v) => {
+                    unsafe { fill_ptr((target as *mut u8).add(offset), *v) };
+                    offset += FIELD_SIZE;
+                }
+                FieldReader::Computed(i) => {
+                    let val = self.executors.index_of(*i as i32).fetch(
+                        id,
+                        v_ptr,
+                        record,
+                        position,
+                        sub_data_ptr,
+                    );
+                    let val_len = val.len();
+                    val.copy_to_target(target as *mut u8, offset);
+                    offset += val_len;
+                }
             }
         }
     }
