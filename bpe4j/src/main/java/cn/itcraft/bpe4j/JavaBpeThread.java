@@ -26,7 +26,11 @@ class JavaBpeThread {
     }
 
     public void fillQueue(WrappedData<?> data) {
-        queue.offer(data);
+        // bounded queue: retry until accepted - producers are throttled to the
+        // consumer's rate (backpressure) instead of silently dropping data
+        while (!queue.offer(data)) {
+            Thread.yield();
+        }
     }
 
     private void runBpe() {

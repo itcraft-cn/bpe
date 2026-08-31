@@ -13,8 +13,8 @@ public final class JmhPositionBenchMain {
     public static void main(String[] args) throws Exception {
         org.openjdk.jmh.runner.options.Options opt = new OptionsBuilder()
                 .include(PositionWindowBench.class.getSimpleName())
-                .warmupIterations(3).warmupTime(TimeValue.seconds(2))
-                .measurementIterations(6).measurementTime(TimeValue.seconds(2))
+                .warmupIterations(2).warmupTime(TimeValue.seconds(8))
+                .measurementIterations(4).measurementTime(TimeValue.seconds(8))
                 .shouldFailOnError(true)
                 .jvmArgsAppend("-Djava.library.path=" + System.getProperty("java.library.path"))
                 .build();
