@@ -17,6 +17,14 @@ final class Bpe {
 
     native static long droppedEvents();
 
+    native static long pendingEvents();
+
+    native static long alertCount();
+
+    native static void setEgressPolicy(int policy, long thresholdMs);
+
+    native static void setAlertListener(BpeCallback listener);
+
     native static int defIncoming(String name, String[] names, int[] types, int[] lengths);
 
     native static int defStream(String name, String[] names, int[] types, int[] lengths);

@@ -28,7 +28,6 @@ public class BpeTest5 {
     public void test() throws Exception {
         SimpleDataConverter converter = new SimpleDataConverter();
         JavaBpe.start();
-        JavaBpe.setDeliveryMode(JavaBpe.DELIVERY_ASYNC);
 
         List<ColumnDefine> list = new ArrayList<>();
         list.add(ColumnDefine.createLong("a"));
@@ -60,7 +59,7 @@ public class BpeTest5 {
 
         JavaBpe.regConvert(recordId, converter);
         for (int i = 0; i < 100; i++) {
-            JavaBpe.newDataSync(recordId, new SimpleData(i, i + 1, i + 0.2D, Integer.toHexString(i)));
+            JavaBpe.newDataAsync(recordId, new SimpleData(i, i + 1, i + 0.2D, Integer.toHexString(i))).get(5, java.util.concurrent.TimeUnit.SECONDS);
         }
 
         boolean delivered = latch.await(5, TimeUnit.SECONDS);
@@ -81,7 +80,6 @@ public class BpeTest5 {
         assertTrue("delivered record count", total.get() >= 10);
         assertTrue("droppedEvents must be readable", JavaBpe.droppedEvents() >= 0);
 
-        JavaBpe.setDeliveryMode(JavaBpe.DELIVERY_SYNC);
         JavaBpe.stop();
         LOGGER.info("async delivery test passed, dropped={}", JavaBpe.droppedEvents());
     }

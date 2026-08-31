@@ -5,9 +5,6 @@ import org.slf4j.LoggerFactory;
 
 import java.util.List;
 import java.util.concurrent.CompletableFuture;
-import java.util.concurrent.ExecutionException;
-import java.util.concurrent.TimeUnit;
-import java.util.concurrent.TimeoutException;
 import java.util.concurrent.atomic.AtomicBoolean;
 
 public class JavaBpe {
@@ -27,7 +24,10 @@ public class JavaBpe {
                 JAVA_BPE_THREAD.start();
                 Thread thread = new Thread(JavaBpe::stop0, "bpe-shutdown-hook");
                 Runtime.getRuntime().addShutdownHook(thread);
-                return Bpe.start();
+                boolean started = Bpe.start();
+                // callbacks are delivered asynchronously on the egress thread
+                Bpe.setDeliveryMode(DELIVERY_ASYNC);
+                return started;
             } else {
                 return true;
             }
@@ -37,28 +37,46 @@ public class JavaBpe {
     public static void stop() {
     }
 
-    /** Callback delivery mode: synchronous, on the calling (ingest) thread. */
-    public static final int DELIVERY_SYNC = 0;
-    /** Callback delivery mode: asynchronous, on the engine's egress thread. */
+    /** Asynchronous callback delivery (the only mode for Java). */
     public static final int DELIVERY_ASYNC = 1;
 
+    /** Watchdog policy: discard queued backlog when a callback times out. */
+    public static final int POLICY_DRAIN = 1;
+    /** Watchdog policy: promote a new consumer thread; fall back to DRAIN when all hang. */
+    public static final int POLICY_FAILOVER = 2;
+    /** Watchdog policy: only raise alerts, never interfere. */
+    public static final int POLICY_ALERT_ONLY = 3;
+
     /**
-     * Selects how callbacks are delivered. In {@link #DELIVERY_ASYNC} mode the
-     * engine copies results into an egress ring and a dedicated thread invokes
-     * the Java callbacks, so ingest is never blocked by callback execution.
-     *
-     * @param mode {@link #DELIVERY_SYNC} or {@link #DELIVERY_ASYNC}
+     * Configures the egress watchdog: what to do when a callback exceeds
+     * {@code thresholdMs}. Default: {@link #POLICY_ALERT_ONLY} / 100 ms.
      */
-    public static void setDeliveryMode(int mode) {
-        Bpe.setDeliveryMode(mode);
+    public static void setEgressPolicy(int policy, long thresholdMs) {
+        Bpe.setEgressPolicy(policy, thresholdMs);
     }
 
     /**
-     * Number of callback events dropped because the egress ring was full
-     * (async mode only; drops are counted, never block ingest).
+     * Registers a listener invoked on callback timeouts. It receives a
+     * 32-byte payload (four little-endian longs): {@code [elapsedMs][pending][dropped][policy]}.
+     * Passing null restores the default (engine log alerts).
      */
+    public static void setAlertListener(BpeCallback listener) {
+        Bpe.setAlertListener(listener);
+    }
+
+    /** Events waiting in the egress channel. */
+    public static long pendingEvents() {
+        return Bpe.pendingEvents();
+    }
+
+    /** Events discarded by the DRAIN policy (the channel itself never drops). */
     public static long droppedEvents() {
         return Bpe.droppedEvents();
+    }
+
+    /** Total timeout alerts raised so far. */
+    public static long alertCount() {
+        return Bpe.alertCount();
     }
 
     private static void stop0() {
@@ -86,22 +104,6 @@ public class JavaBpe {
 
     public static void regConvert(int id, ByteConverter<?> converter) {
         CONVERTERS[id] = converter;
-    }
-
-    public static <T> NewDataResult newDataSync(int id, T data) {
-        try {
-            return newDataAsync(id, data).get(TIMEOUT, TimeUnit.MILLISECONDS)
-                   ? NewDataResult.SUCCESSFUL : NewDataResult.FAILURE;
-        } catch (InterruptedException e) {
-            LOGGER.warn("interrupted: {}", e.getMessage());
-            return NewDataResult.INTERRUPTED;
-        } catch (ExecutionException e) {
-            LOGGER.warn("execute failed: {}", e.getMessage(), e);
-            return NewDataResult.EXECUTE_FAILED;
-        } catch (TimeoutException e) {
-            LOGGER.warn("timeout: {}", e.getMessage());
-            return NewDataResult.TIMEOUT;
-        }
     }
 
     public static <T> CompletableFuture<Boolean> newDataAsync(int id, T data) {

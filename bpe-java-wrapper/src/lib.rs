@@ -1,6 +1,6 @@
 #![allow(non_snake_case)]
 
-use bpe::{CallbackParams, Column, DeliveryMode, FfiFunc, U8Bytes, Window};
+use bpe::{CallbackParams, Column, FfiFunc, U8Bytes, Window};
 use jni::{
     objects::{
         GlobalRef, JByteArray, JClass, JIntArray, JObject, JObjectArray, JPrimitiveArray, JString,
@@ -34,6 +34,7 @@ pub extern "system" fn Java_cn_itcraft_bpe4j_Bpe_stop<'local>(
 
 /// Selects callback delivery mode: 0 = synchronous (legacy), 1 = asynchronous
 /// (callbacks run on the engine's egress thread, off the hot path).
+/// JavaBpe.start() switches to async automatically.
 #[no_mangle]
 pub extern "system" fn Java_cn_itcraft_bpe4j_Bpe_setDeliveryMode<'local>(
     _env: JNIEnv<'local>,
@@ -41,20 +42,79 @@ pub extern "system" fn Java_cn_itcraft_bpe4j_Bpe_setDeliveryMode<'local>(
     mode: jint,
 ) {
     let mode = if mode == 1 {
-        DeliveryMode::Async
+        bpe::DeliveryMode::Async
     } else {
-        DeliveryMode::Sync
+        bpe::DeliveryMode::Sync
     };
     bpe::set_delivery_mode(mode);
 }
 
-/// Number of callback events dropped because the egress ring was full.
+/// Number of callback events dropped by the Drain policy (the unbounded
+/// egress channel itself never drops events).
 #[no_mangle]
 pub extern "system" fn Java_cn_itcraft_bpe4j_Bpe_droppedEvents<'local>(
     _env: JNIEnv<'local>,
     _class: JClass<'local>,
 ) -> jlong {
     bpe::dropped_events() as jlong
+}
+
+/// Number of events waiting in the egress channel.
+#[no_mangle]
+pub extern "system" fn Java_cn_itcraft_bpe4j_Bpe_pendingEvents<'local>(
+    _env: JNIEnv<'local>,
+    _class: JClass<'local>,
+) -> jlong {
+    bpe::pending_events() as jlong
+}
+
+/// Total number of timeout alerts raised by the egress watchdog.
+#[no_mangle]
+pub extern "system" fn Java_cn_itcraft_bpe4j_Bpe_alertCount<'local>(
+    _env: JNIEnv<'local>,
+    _class: JClass<'local>,
+) -> jlong {
+    bpe::alert_count() as jlong
+}
+
+/// Configures the egress watchdog policy (1=Drain, 2=Failover, 3=AlertOnly)
+/// and the callback time threshold in milliseconds.
+#[no_mangle]
+pub extern "system" fn Java_cn_itcraft_bpe4j_Bpe_setEgressPolicy<'local>(
+    _env: JNIEnv<'local>,
+    _class: JClass<'local>,
+    policy: jint,
+    threshold_ms: jlong,
+) {
+    let policy = match policy {
+        1 => bpe::EgressPolicy::Drain,
+        2 => bpe::EgressPolicy::Failover,
+        _ => bpe::EgressPolicy::AlertOnly,
+    };
+    bpe::set_egress_policy(policy, threshold_ms.max(1) as u64);
+}
+
+/// Registers a Java alert listener invoked on egress callback timeouts.
+/// The listener receives `(byte[32], 1)` laid out as four little-endian i64:
+/// `[elapsed_ms][pending][dropped][policy]`. Passing null clears the listener
+/// (alerts fall back to engine logs).
+#[no_mangle]
+pub extern "system" fn Java_cn_itcraft_bpe4j_Bpe_setAlertListener<'local>(
+    env: JNIEnv<'local>,
+    _class: JClass<'local>,
+    j_callback: JObject<'local>,
+) {
+    if j_callback.is_null() {
+        bpe::set_alert_listener(None);
+        return;
+    }
+    let rs_vm = env.get_java_vm();
+    let rs_ref = env.new_global_ref(j_callback);
+    if let (Ok(vm), Ok(callback)) = (rs_vm, rs_ref) {
+        bpe::set_alert_listener(Some(Box::new(JavaFfiFunc { vm, callback })));
+    } else {
+        log::warn!("setAlertListener: failed to capture vm/global ref");
+    }
 }
 
 #[no_mangle]

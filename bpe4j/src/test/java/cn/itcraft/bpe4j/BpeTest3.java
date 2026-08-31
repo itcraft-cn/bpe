@@ -18,7 +18,7 @@ public class BpeTest3 {
     private static final String SQL = "select demo3.a, demo3.b, demo3.c, demo3.d from demo3 limit 10";
 
     @Test
-    public void test() {
+    public void test() throws Exception {
         SimpleDataConverter converter = new SimpleDataConverter();
         JavaBpe.start();
         List<ColumnDefine> list = new ArrayList<>();
@@ -44,7 +44,7 @@ public class BpeTest3 {
         }
         JavaBpe.regConvert(recordId, converter);
         for (int i = 0; i < 100; i++) {
-            JavaBpe.newDataSync(recordId, new SimpleData(i, i + 1, i + 0.2D, Integer.toHexString(i)));
+            JavaBpe.newDataAsync(recordId, new SimpleData(i, i + 1, i + 0.2D, Integer.toHexString(i))).get(5, java.util.concurrent.TimeUnit.SECONDS);
         }
         JavaBpe.stop();
     }

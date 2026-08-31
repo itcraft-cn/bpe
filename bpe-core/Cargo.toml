@@ -35,6 +35,7 @@ strum = "0.27.1"
 strum_macros = "0.27.1"
 inkwell = { version = "0.7.1", features = ["llvm19-1"] }
 globalvar = "0.2.0"
+crossbeam-channel = "0.5"
 
 [dev-dependencies]
 criterion = { version = "0.6.0", features = ["html_reports"] }

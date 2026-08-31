@@ -1,103 +1,142 @@
-//! Egress delivery: async callback channel between the engine and callbacks.
+//! Egress delivery: unbounded async callback channel between the engine and callbacks.
 //!
-//! The engine (data-ingest / window-timer thread) publishes callback events into
-//! a bounded single-producer/single-consumer ring. A dedicated `bpe-egress`
-//! thread consumes the ring and dispatches to the `FnHolder` callbacks, so user
-//! code (Java/Python via FFI, or Rust closures) never runs on the engine thread.
+//! The engine (data-ingest / window-timer threads) publishes callback events into an
+//! unbounded MPSC channel (`crossbeam-channel`, lock-free block chain), so events are
+//! **never dropped by backpressure**; a dedicated `bpe-egress` thread consumes and
+//! dispatches to the `FnHolder` callbacks, so user code never runs on the hot path.
 //!
-//! Event layout per slot (`EGRESS_SLOT_SIZE` bytes):
+//! ## Timeout watchdog & policies
 //!
-//! ```text
-//! [fn_selector: u16 (0 = FnHolder id, 1 = FnHolder ptr)]
-//! [fn_id_or_ptr: u64]
-//! [win_start_ms: i64]
-//! [win_end_ms: i64]
-//! [size: u64]
-//! [step: u64]
-//! [payload bytes ...]
-//! ```
+//! Callback execution time is watched by an independent `bpe-egress-watchdog` thread
+//! (100ms tick): the consumer records a processing-start timestamp before each
+//! dispatch; if it exceeds the threshold, the watchdog applies the configured policy
+//! (the stuck consumer thread itself cannot time out a deadlocked callback):
 //!
-//! Delivery modes:
-//! - `Sync`:  the caller thread invokes the callback directly (legacy behavior).
-//! - `Async`: events are copied into the ring; the egress thread dispatches.
-//!            If the ring is full, the event is dropped with a warning and a
-//!            drop counter (risk-control semantics: drop, never block).
+//! - [`EgressPolicy::Drain`] (1): spawn a sweeper thread that reads and discards all
+//!   queued events (counted in `dropped_events`); the stuck thread keeps running.
+//! - [`EgressPolicy::Failover`] (2): promote a new consumer thread (generation + 1);
+//!   the old thread exits as soon as its callback returns. If the new thread also
+//!   hangs (all threads hung), falls back to Drain behavior.
+//! - [`EgressPolicy::AlertOnly`] (3): just raise an alert; never interferes.
 //!
-//! The engine calls `publish` on a single thread at a time; the egress thread is
-//! the only reader. Ordering is guaranteed per producer (seq-cst store/load on
-//! the head/tail cursors).
+//! Alerts go to the registered alert listener (FFI, e.g. Java) when present,
+//! otherwise default to `log::warn`.
+//!
+//! ## Delivery modes
+//!
+//! - `Sync`: legacy direct invocation on the engine thread (Rust users / tests).
+//! - `Async`: events are cloned into the channel; the egress thread dispatches.
+//!   Oversized payloads (beyond `MAX_ASYNC_PAYLOAD`) still fall back to synchronous
+//!   delivery so no data is silently truncated.
 
 use crate::{
     callback::{callback, FnHolder},
+    ffi::FfiFunc,
     param::CallbackParams,
 };
+use crossbeam_channel::{unbounded, Receiver, Sender};
 use std::{
-    alloc::{alloc_zeroed, Layout},
     sync::{
-        atomic::{AtomicU64, AtomicUsize, Ordering},
+        atomic::{AtomicU64, AtomicU8, AtomicBool, Ordering},
         Mutex, Once,
     },
     thread::{self, JoinHandle},
+    time::{Duration, Instant},
 };
 
-/// Number of slots in the egress ring. Must be a power of two.
-const EGRESS_SLOTS: usize = 1024;
-/// Bytes per slot: header + payload. Mapper events are `size * record_size`
-/// (e.g. LIMIT 10 x 512 B = 5 KiB), so slots must hold at least a full LIMIT
-/// batch; larger events (big keyed windows) fall back to synchronous delivery.
-const EGRESS_SLOT_SIZE: usize = 8192;
-/// Header bytes before the payload in each slot.
-const HEADER_SIZE: usize = 48;
-/// Max payload bytes copied per event (mapper output is bounded by vec_size,
-/// window/keyed outputs are bounded by record counts; larger events fall back
-/// to synchronous delivery so no data is silently truncated).
-const MAX_ASYNC_PAYLOAD: usize = EGRESS_SLOT_SIZE - HEADER_SIZE;
+/// Max payload bytes per async event (oversized -> synchronous fallback).
+/// Mapper events are `LIMIT * record_size` (e.g. 10 * 512 B = 5 KiB).
+const MAX_ASYNC_PAYLOAD: usize = 64 * 1024;
 
 /// How callbacks are delivered.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum DeliveryMode {
     /// Invoke callbacks on the calling (engine) thread - legacy synchronous path.
     Sync,
-    /// Publish events to the egress ring; a dedicated thread dispatches them.
+    /// Publish events to the egress channel; a dedicated thread dispatches them.
     Async,
 }
 
-static INIT: Once = Once::new();
-static mut EGRESS: Option<EgressRing> = None;
-static MODE: AtomicUsize = AtomicUsize::new(0); // 0 = Sync, 1 = Async
-static DROPPED: AtomicU64 = AtomicU64::new(0);
-
-struct EgressRing {
-    slots: *mut u8,
-    /// Producer cursor (next slot to write); single producer.
-    head: AtomicU64,
-    /// Consumer cursor (next slot to read); single consumer.
-    tail: AtomicU64,
-    /// Registered FnHolder table (id -> holder). Ids come from a global counter
-    /// shared with definitions; each definition registers here exactly once.
-    holders: Mutex<Vec<Option<&'static FnHolder>>>,
-    handle: Mutex<Option<JoinHandle<()>>>,
-    running: AtomicU64,
+/// What the watchdog does when a callback exceeds the time threshold.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum EgressPolicy {
+    /// Spawn a sweeper that reads and discards queued events; keep the stuck thread.
+    Drain = 1,
+    /// Promote a new consumer thread; fall back to Drain when all threads hang.
+    Failover = 2,
+    /// Only raise alerts (listener / log); never interfere.
+    AlertOnly = 3,
 }
 
-impl EgressRing {
-    fn new() -> Self {
-        let total = EGRESS_SLOTS * EGRESS_SLOT_SIZE;
-        let slots = unsafe { alloc_zeroed(Layout::from_size_align(total, 64).unwrap()) };
-        EgressRing {
-            slots,
-            head: AtomicU64::new(0),
-            tail: AtomicU64::new(0),
+/// One queued callback event: fixed header + owned payload bytes.
+struct EgressEvent {
+    holder_id: u64,
+    win_start_ms: i64,
+    win_end_ms: i64,
+    size: usize,
+    step: usize,
+    payload: Box<[u8]>,
+}
+
+static INIT: Once = Once::new();
+static mut EGRESS: Option<EgressState> = None;
+static MODE: AtomicU8 = AtomicU8::new(0); // 0 = Sync, 1 = Async
+static POLICY: AtomicU8 = AtomicU8::new(3); // default AlertOnly
+static THRESHOLD_MS: AtomicU64 = AtomicU64::new(100);
+static POLICY_DROPPED: AtomicU64 = AtomicU64::new(0);
+static ALERTS: AtomicU64 = AtomicU64::new(0);
+/// Elapsed ms (from EPOCH_BASE) when the consumer started the current event; 0 = idle.
+static PROCESSING_SINCE: AtomicU64 = AtomicU64::new(0);
+/// Current consumer generation; a consumer exits when it falls behind.
+static GENERATION: AtomicU64 = AtomicU64::new(0);
+/// Consecutive watchdog timeouts without a completed callback in between.
+static HUNG_STREAK: AtomicU64 = AtomicU64::new(0);
+static RUNNING: AtomicBool = AtomicBool::new(false);
+/// monotonic baseline for PROCESSING_SINCE timestamps
+static mut EPOCH_BASE: Option<Instant> = None;
+
+struct EgressState {
+    tx: Sender<EgressEvent>,
+    rx: Receiver<EgressEvent>,
+    holders: Mutex<Vec<Option<&'static FnHolder>>>,
+    alert_listener: Mutex<Option<&'static FnHolder>>,
+    /// handle of the live consumer (latest generation)
+    consumer: Mutex<Option<JoinHandle<()>>>,
+    watchdog: Mutex<Option<JoinHandle<()>>>,
+}
+
+fn state() -> &'static EgressState {
+    INIT.call_once(|| unsafe {
+        let (tx, rx) = unbounded();
+        EGRESS = Some(EgressState {
+            tx,
+            rx,
             holders: Mutex::new(Vec::new()),
-            handle: Mutex::new(None),
-            running: AtomicU64::new(0),
-        }
+            alert_listener: Mutex::new(None),
+            consumer: Mutex::new(None),
+            watchdog: Mutex::new(None),
+        });
+        EPOCH_BASE = Some(Instant::now());
+    });
+    // SAFETY: written exactly once inside INIT.call_once before any reader proceeds;
+    // never mutated afterwards; the Option is always Some from then on.
+    unsafe {
+        let opt = (&raw const EGRESS).as_ref().unwrap_unchecked();
+        opt.as_ref().unwrap_unchecked()
     }
 }
 
-/// Selects the delivery mode. `Async` must be selected before any mapper or
-/// aggregate is defined (holders are bound at definition time otherwise).
-/// Default is `Sync` (legacy behavior).
+fn now_ms() -> u64 {
+    // SAFETY: set with EGRESS in the same call_once (readers only arrive after
+    // INIT completes); read-only afterwards, always Some.
+    unsafe {
+        let opt = (&raw const EPOCH_BASE).as_ref().unwrap_unchecked();
+        opt.as_ref().unwrap_unchecked().elapsed().as_millis() as u64
+    }
+}
+
+/// Selects the delivery mode. Default is `Sync` (legacy behavior); the Java/Python
+/// bindings switch to `Async` on start.
 pub fn set_delivery_mode(mode: DeliveryMode) {
     MODE.store(
         match mode {
@@ -116,61 +155,102 @@ pub fn delivery_mode() -> DeliveryMode {
     }
 }
 
-/// Number of events dropped because the egress ring was full (Async mode only).
+/// Configures the watchdog policy and callback time threshold.
+/// Unknown ids keep the current policy. Default: AlertOnly / 100 ms.
+pub fn set_egress_policy(policy: EgressPolicy, threshold_ms: u64) {
+    POLICY.store(policy as u8, Ordering::SeqCst);
+    THRESHOLD_MS.store(threshold_ms.max(1), Ordering::SeqCst);
+}
+
+/// Number of events waiting in the egress channel (async mode).
+pub fn pending_events() -> usize {
+    state().rx.len()
+}
+
+/// Number of events discarded by the Drain policy (async mode). The unbounded
+/// channel itself never drops events.
 pub fn dropped_events() -> u64 {
-    DROPPED.load(Ordering::Relaxed)
+    POLICY_DROPPED.load(Ordering::Relaxed)
 }
 
-/// Initializes the egress system lazily. Starts the egress thread when the
-/// first Async-mode event is published (or on explicit `init_egress`).
-fn lazy_init() -> &'static EgressRing {
-    INIT.call_once(|| unsafe {
-        EGRESS = Some(EgressRing::new());
-    });
-    // SAFETY: `EGRESS` is written exactly once (above) before any reader can
-    // reach here (INIT.call_once blocks concurrent first callers), and is never
-    // mutated afterwards; the Option is always Some from then on.
-    unsafe {
-        let opt = (&raw const EGRESS).as_ref().unwrap_unchecked();
-        opt.as_ref().unwrap_unchecked()
-    }
+/// Number of timeout alerts raised so far.
+pub fn alert_count() -> u64 {
+    ALERTS.load(Ordering::Relaxed)
 }
 
-/// Starts the egress thread. Idempotent; also called from `start()`.
+/// Registers (or clears with `None`) an alert listener invoked on watchdog
+/// timeouts. The listener receives a CallbackParams payload laid out as
+/// `[elapsed_ms: i64][pending: i64][dropped: i64][policy: i64]`, size=1, step=32.
+pub fn set_alert_listener(listener: Option<Box<dyn FfiFunc>>) {
+    let leaked = listener.map(|ffi| -> &'static FnHolder { Box::leak(Box::new(FnHolder::FfiFunc(ffi))) });
+    let mut slot = state().alert_listener.lock().unwrap_or_else(|e| e.into_inner());
+    *slot = leaked;
+}
+
+/// Starts the egress consumer and watchdog threads. Idempotent; also called
+/// from `start()`.
 pub(crate) fn init_egress() {
-    let ring = lazy_init();
-    if ring.running.load(Ordering::SeqCst) == 0 {
-        ring.running.store(1, Ordering::SeqCst);
-        let mut handle = ring.handle.lock().unwrap_or_else(|e| e.into_inner());
-        if handle.is_none() {
-            *handle = thread::Builder::new()
-                .name("bpe-egress".to_string())
-                .spawn(consume_loop)
-                .ok();
+    if !RUNNING.swap(true, Ordering::SeqCst) {
+        let st = state();
+        // consumer
+        {
+            let mut h = st.consumer.lock().unwrap_or_else(|e| e.into_inner());
+            if h.is_none() {
+                let gen = GENERATION.fetch_add(1, Ordering::SeqCst) + 1;
+                *h = thread::Builder::new()
+                    .name("bpe-egress".to_string())
+                    .spawn(move || consume_loop(gen))
+                    .ok();
+            }
+        }
+        // watchdog
+        {
+            let mut h = st.watchdog.lock().unwrap_or_else(|e| e.into_inner());
+            if h.is_none() {
+                *h = thread::Builder::new()
+                    .name("bpe-egress-watchdog".to_string())
+                    .spawn(watchdog_loop)
+                    .ok();
+            }
         }
     }
 }
 
-/// Stops the egress thread (called from `stop()`). The thread exits after
-/// draining the ring, so already-published events are still delivered.
+/// Stops the egress threads. The watchdog joins; a healthy consumer drains the
+/// remaining events then exits. A consumer stuck in a user callback cannot be
+/// joined - it is detached and exits by itself once the callback returns.
 pub(crate) fn stop_egress() {
-    let ring = lazy_init();
-    if ring.running.load(Ordering::SeqCst) != 0 {
-        ring.running.store(0, Ordering::SeqCst);
-        let mut handle = ring.handle.lock().unwrap_or_else(|e| e.into_inner());
-        if let Some(h) = handle.take() {
-            let _ = h.join();
+    if !RUNNING.swap(false, Ordering::SeqCst) {
+        return;
+    }
+    let st = state();
+    let wd = st
+        .watchdog
+        .lock()
+        .unwrap_or_else(|e| e.into_inner())
+        .take();
+    if let Some(h) = wd {
+        let _ = h.join();
+    }
+    let consumer = st
+        .consumer
+        .lock()
+        .unwrap_or_else(|e| e.into_inner())
+        .take();
+    if let Some(h) = consumer {
+        // bounded wait: a stuck consumer must not block stop()
+        let deadline = Instant::now() + Duration::from_millis(500);
+        while !h.is_finished() && Instant::now() < deadline {
+            thread::sleep(Duration::from_millis(5));
         }
     }
+    PROCESSING_SINCE.store(0, Ordering::SeqCst);
+    HUNG_STREAK.store(0, Ordering::SeqCst);
 }
-
-/// Internal id used to bind a `FnHolder` to the egress table.
-static NEXT_HOLDER_ID: AtomicU64 = AtomicU64::new(0);
 
 /// Dispatch one callback event through the current delivery mode.
-/// `payload` is the caller's buffer; in Async mode its bytes are copied into
-/// the ring slot before this function returns, so callers may reuse the buffer.
-/// Events larger than `MAX_ASYNC_PAYLOAD` fall back to synchronous delivery.
+/// In Async mode the payload bytes are moved into the channel, so callers may
+/// reuse their buffer as soon as this returns.
 pub(crate) fn dispatch(
     holder: &FnHolder,
     u8_ptr: *const u8,
@@ -182,61 +262,53 @@ pub(crate) fn dispatch(
     win_end_ms: i64,
 ) {
     if delivery_mode() == DeliveryMode::Sync {
-        let param = CallbackParams::new_with_window(
-            u8_ptr, mask, offset, size, step, win_start_ms, win_end_ms,
-        );
-        callback(holder, param);
+        invoke_sync(holder, u8_ptr, mask, offset, size, step, win_start_ms, win_end_ms);
         return;
     }
     let payload_len = size.saturating_mul(step);
     if payload_len > MAX_ASYNC_PAYLOAD {
-        // too large to copy: synchronous fallback (never truncate)
-        let param = CallbackParams::new_with_window(
-            u8_ptr, mask, offset, size, step, win_start_ms, win_end_ms,
-        );
-        callback(holder, param);
+        // too large to clone: synchronous fallback (never truncate)
+        invoke_sync(holder, u8_ptr, mask, offset, size, step, win_start_ms, win_end_ms);
         return;
     }
-    let holder_id = register_holder(holder);
-    let ring = lazy_init();
+    let st = state();
     init_egress();
-    let head = ring.head.load(Ordering::SeqCst);
-    let tail = ring.tail.load(Ordering::SeqCst);
-    if head.wrapping_sub(tail) as usize >= EGRESS_SLOTS {
-        DROPPED.fetch_add(1, Ordering::Relaxed);
-        log::warn!(
-            "egress ring full, event dropped (total dropped: {})",
-            DROPPED.load(Ordering::Relaxed)
-        );
-        return;
-    }
-    let slot = (head % EGRESS_SLOTS as u64) as usize;
-    let slot_ptr = unsafe { ring.slots.add(slot * EGRESS_SLOT_SIZE) };
+    let holder_id = register_holder(holder);
+    let mut buf = vec![0_u8; payload_len].into_boxed_slice();
     unsafe {
-        // header
-        *(slot_ptr as *mut u64) = holder_id;
-        *(slot_ptr.add(8) as *mut u64) = size as u64;
-        *(slot_ptr.add(16) as *mut u64) = step as u64;
-        *(slot_ptr.add(24) as *mut i64) = win_start_ms;
-        *(slot_ptr.add(32) as *mut i64) = win_end_ms;
-        // payload copy (reuse buffer safety: bytes are owned by the ring now)
         if payload_len > 0 {
-            std::ptr::copy_nonoverlapping(u8_ptr, slot_ptr.add(HEADER_SIZE), payload_len);
+            std::ptr::copy_nonoverlapping(u8_ptr, buf.as_mut_ptr(), payload_len);
         }
-        // fence: payload written before publishing head
-        std::sync::atomic::fence(Ordering::Release);
     }
-    ring.head.store(head.wrapping_add(1), Ordering::SeqCst);
+    let _ = st.tx.send(EgressEvent {
+        holder_id,
+        win_start_ms,
+        win_end_ms,
+        size,
+        step,
+        payload: buf,
+    });
 }
 
-/// Registers a holder in the egress table and returns its id.
-/// Holders are `&'static` leaked by definition paths, so registration is a
-/// one-time cost per definition; repeated dispatch reuses the id.
+fn invoke_sync(
+    holder: &FnHolder,
+    u8_ptr: *const u8,
+    mask: usize,
+    offset: usize,
+    size: usize,
+    step: usize,
+    win_start_ms: i64,
+    win_end_ms: i64,
+) {
+    let param =
+        CallbackParams::new_with_window(u8_ptr, mask, offset, size, step, win_start_ms, win_end_ms);
+    callback(holder, param);
+}
+
+/// Registers a holder and returns its stable id (pointer-identity cache).
 fn register_holder(holder: &FnHolder) -> u64 {
-    // pointer identity: fast path - the holder was registered before
-    let ring = lazy_init();
-    let mut table = ring.holders.lock().unwrap_or_else(|e| e.into_inner());
-    let ptr = holder as *const FnHolder;
+    let st = state();
+    let mut table = st.holders.lock().unwrap_or_else(|e| e.into_inner());
     for (i, slot) in table.iter().enumerate() {
         if let Some(h) = slot {
             if std::ptr::eq(*h, holder) {
@@ -244,96 +316,277 @@ fn register_holder(holder: &FnHolder) -> u64 {
             }
         }
     }
-    let id = NEXT_HOLDER_ID.fetch_add(1, Ordering::SeqCst);
-    let leaked: &'static FnHolder = unsafe { &*(ptr) };
-    let idx = id as usize;
-    if idx >= table.len() {
-        table.resize(idx + 1, None);
-    }
-    table[idx] = Some(leaked);
-    id
+    // SAFETY: holders live in engine-global registration tables for the process
+    // lifetime (leaked at definition time), so extending the lifetime here is sound.
+    let leaked: &'static FnHolder = unsafe { &*(holder as *const FnHolder) };
+    table.push(Some(leaked));
+    (table.len() - 1) as u64
 }
 
-/// Egress consumer loop: drain the ring, dispatch each event to its holder.
-fn consume_loop() {
-    let ring = lazy_init();
+/// Egress consumer loop. Exits when stopped or when superseded by a newer
+/// generation (Failover policy).
+fn consume_loop(gen: u64) {
+    let st = state();
     let mut spins: u32 = 0;
     loop {
-        let tail = ring.tail.load(Ordering::SeqCst);
-        let head = ring.head.load(Ordering::SeqCst);
-        if tail == head {
-            if ring.running.load(Ordering::SeqCst) == 0 {
-                return; // stopped and drained
+        if !RUNNING.load(Ordering::SeqCst) || GENERATION.load(Ordering::SeqCst) != gen {
+            return;
+        }
+        match st.rx.try_recv() {
+            Ok(ev) => {
+                spins = 0;
+                PROCESSING_SINCE.store(now_ms().max(1), Ordering::SeqCst);
+                dispatch_event(&ev);
+                PROCESSING_SINCE.store(0, Ordering::SeqCst);
+                HUNG_STREAK.store(0, Ordering::SeqCst);
             }
-            // adaptive idle: brief spin, then yield
-            spins = spins.wrapping_add(1);
-            if spins < 100 {
-                std::hint::spin_loop();
-            } else {
-                thread::yield_now();
+            Err(_) => {
+                spins = spins.wrapping_add(1);
+                if spins < 100 {
+                    std::hint::spin_loop();
+                } else {
+                    thread::yield_now();
+                }
             }
+        }
+    }
+}
+
+fn dispatch_event(ev: &EgressEvent) {
+    let st = state();
+    let holder = {
+        let table = st.holders.lock().unwrap_or_else(|e| e.into_inner());
+        table.get(ev.holder_id as usize).copied().flatten()
+    };
+    if let Some(holder) = holder {
+        let param = CallbackParams::new_with_window(
+            ev.payload.as_ptr(),
+            0,
+            0,
+            ev.size,
+            ev.step,
+            ev.win_start_ms,
+            ev.win_end_ms,
+        );
+        callback(holder, param);
+    } else {
+        log::warn!("egress event for unknown holder id [{}] dropped", ev.holder_id);
+    }
+}
+
+/// Watchdog loop: checks the current event's processing time every tick and
+/// applies the configured policy on timeout.
+fn watchdog_loop() {
+    const TICK_MS: u64 = 20;
+    loop {
+        if !RUNNING.load(Ordering::SeqCst) {
+            return;
+        }
+        thread::sleep(Duration::from_millis(TICK_MS));
+        let since = PROCESSING_SINCE.load(Ordering::SeqCst);
+        if since == 0 {
             continue;
         }
-        spins = 0;
-        let slot = (tail % EGRESS_SLOTS as u64) as usize;
-        let slot_ptr = unsafe { ring.slots.add(slot * EGRESS_SLOT_SIZE) };
-        unsafe {
-            // fence: read payload only after observing the head advance
-            std::sync::atomic::fence(Ordering::Acquire);
-            let holder_id = *(slot_ptr as *const u64);
-            let size = *(slot_ptr.add(8) as *const u64) as usize;
-            let step = *(slot_ptr.add(16) as *const u64) as usize;
-            let win_start_ms = *(slot_ptr.add(24) as *const i64);
-            let win_end_ms = *(slot_ptr.add(32) as *const i64);
-            let payload_ptr = slot_ptr.add(HEADER_SIZE);
-            let holder = {
-                let table = ring.holders.lock().unwrap_or_else(|e| e.into_inner());
-                table.get(holder_id as usize).copied().flatten()
-            };
-            if let Some(holder) = holder {
-                let param = CallbackParams::new_with_window(
-                    payload_ptr, 0, 0, size, step, win_start_ms, win_end_ms,
-                );
-                callback(holder, param);
-            } else {
-                log::warn!("egress event for unknown holder id [{holder_id}] dropped");
-            }
+        let elapsed = now_ms().saturating_sub(since);
+        let threshold = THRESHOLD_MS.load(Ordering::SeqCst);
+        if elapsed < threshold {
+            continue;
         }
-        ring.tail.store(tail.wrapping_add(1), Ordering::SeqCst);
+        let streak = HUNG_STREAK.fetch_add(1, Ordering::SeqCst) + 1;
+        ALERTS.fetch_add(1, Ordering::Relaxed);
+        let pending = state().rx.len() as i64;
+        let policy = POLICY.load(Ordering::SeqCst);
+        fire_alert(elapsed as i64, pending, policy as i64);
+        match policy {
+            1 => spawn_sweeper(),
+            2 => {
+                if streak >= 2 {
+                    // every consumer thread is hung: fall back to Drain
+                    spawn_sweeper();
+                } else {
+                    promote_new_consumer();
+                }
+            }
+            _ => {}
+        }
+        // back off so one hung event does not fire the policy every tick
+        PROCESSING_SINCE.store(now_ms().max(1) - threshold, Ordering::SeqCst);
+    }
+}
+
+/// Drain policy: spawn a sweeper that reads and discards queued events.
+fn spawn_sweeper() {
+    let spawned = thread::Builder::new()
+        .name("bpe-egress-sweeper".to_string())
+        .spawn(|| {
+            let rx = &state().rx;
+            let mut n: u64 = 0;
+            while let Ok(_ev) = rx.try_recv() {
+                n += 1;
+            }
+            if n > 0 {
+                POLICY_DROPPED.fetch_add(n, Ordering::Relaxed);
+                log::warn!("egress sweeper discarded {n} queued events");
+            }
+        })
+        .ok();
+    if spawned.is_none() {
+        log::warn!("failed to spawn egress sweeper");
+    }
+}
+
+/// Failover policy: promote a new consumer generation.
+fn promote_new_consumer() {
+    let gen = GENERATION.fetch_add(1, Ordering::SeqCst) + 1;
+    let st = state();
+    let _h = st.consumer.lock().unwrap_or_else(|e| e.into_inner());
+    let spawned = thread::Builder::new()
+        .name(format!("bpe-egress-{gen}"))
+        .spawn(move || consume_loop(gen))
+        .ok();
+    if spawned.is_some() {
+        log::warn!("egress consumer promoted to generation {gen}");
+    }
+    // old handle is intentionally not joined: the thread exits by itself once
+    // its (stuck) callback returns and it observes the generation change
+}
+
+/// Fires the alert: listener first, log fallback.
+fn fire_alert(elapsed_ms: i64, pending: i64, policy: i64) {
+    let st = state();
+    let listener = {
+        let slot = st.alert_listener.lock().unwrap_or_else(|e| e.into_inner());
+        *slot
+    };
+    let dropped = POLICY_DROPPED.load(Ordering::Relaxed) as i64;
+    let info = [
+        elapsed_ms.to_le_bytes(),
+        pending.to_le_bytes(),
+        dropped.to_le_bytes(),
+        policy.to_le_bytes(),
+    ]
+    .concat();
+    match listener {
+        Some(holder) => {
+            let param = CallbackParams::new(info.as_ptr(), 0, 0, 1, 32);
+            callback(holder, param);
+        }
+        None => {
+            log::warn!(
+                "egress callback timeout: elapsed={elapsed_ms}ms pending={pending} dropped={dropped} policy={policy}"
+            );
+        }
     }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::param::CallbackParams;
     use std::sync::atomic::AtomicUsize;
+    use std::sync::Arc;
 
+    fn leak_holder(f: impl Fn(CallbackParams) + Send + 'static) -> &'static FnHolder {
+        Box::leak(Box::new(FnHolder::Func(Box::new(f))))
+    }
+
+    fn wait_until(timeout_ms: u64, cond: impl Fn() -> bool) -> bool {
+        let deadline = Instant::now() + Duration::from_millis(timeout_ms);
+        while !cond() {
+            if Instant::now() > deadline {
+                return false;
+            }
+            thread::sleep(Duration::from_millis(2));
+        }
+        true
+    }
+
+    /// All egress scenarios share global engine state (one channel, one consumer),
+    /// so they must run sequentially inside a single test.
     #[test]
-    fn test_egress_async_delivery() {
-        use std::sync::Arc;
+    fn test_egress_end_to_end() {
+        // -- 1. basic async delivery ----------------------------------------
         set_delivery_mode(DeliveryMode::Async);
         init_egress();
         let count = Arc::new(AtomicUsize::new(0));
         let sink = Arc::clone(&count);
-        let holder: &'static FnHolder = Box::leak(Box::new(FnHolder::Func(Box::new(
-            move |p: CallbackParams| {
-                sink.fetch_add(p.size(), Ordering::SeqCst);
-            },
-        ))));
-        // 3 records * 1 field
+        let holder = leak_holder(move |p: CallbackParams| {
+            sink.fetch_add(p.size(), Ordering::SeqCst);
+        });
         let mut buf = vec![0u8; 3 * 8];
         for i in 0..3 {
             buf[i * 8..(i + 1) * 8].copy_from_slice(&(i as i64).to_le_bytes());
         }
         dispatch(holder, buf.as_ptr(), 0, 0, 3, 8, 0, 0);
-        // wait for the egress thread to deliver
-        let deadline = std::time::Instant::now() + std::time::Duration::from_secs(5);
-        while count.load(Ordering::SeqCst) != 3 {
-            if std::time::Instant::now() > deadline {
-                panic!("egress delivery timeout");
-            }
-            std::thread::sleep(std::time::Duration::from_millis(1));
+        assert!(
+            wait_until(5000, || count.load(Ordering::SeqCst) == 3),
+            "egress delivery timeout"
+        );
+
+        // -- 2. unbounded: no loss under a large burst ----------------------
+        let total = 20_000_usize;
+        for _ in 0..total {
+            dispatch(holder, buf.as_ptr(), 0, 0, 1, 8, 0, 0);
         }
+        assert!(
+            wait_until(10_000, || count.load(Ordering::SeqCst) == 3 + total),
+            "unbounded delivery lost events: {}/{}",
+            count.load(Ordering::SeqCst),
+            3 + total
+        );
+        assert_eq!(dropped_events(), 0, "unbounded channel must not drop");
+
+        // -- 3. Drain policy: sweeper discards backlog on timeout ------------
+        set_egress_policy(EgressPolicy::Drain, 60);
+        let gate = Arc::new(AtomicU8::new(1)); // 1: slow, 0: fast
+        let g = Arc::clone(&gate);
+        let slow = leak_holder(move |_: CallbackParams| {
+            if g.load(Ordering::SeqCst) == 1 {
+                thread::sleep(Duration::from_millis(400)); // exceeds the threshold
+            }
+        });
+        // first event hangs the consumer; more events pile up behind it
+        dispatch(slow, buf.as_ptr(), 0, 0, 1, 8, 0, 0);
+        for _ in 0..50 {
+            dispatch(slow, buf.as_ptr(), 0, 0, 1, 8, 0, 0);
+        }
+        assert!(
+            wait_until(5000, || alert_count() >= 1),
+            "watchdog did not alert"
+        );
+        assert!(
+            wait_until(5000, || dropped_events() >= 1),
+            "drain policy did not discard backlog"
+        );
+        gate.store(0, Ordering::SeqCst); // release the stuck callback
+        assert!(wait_until(5000, || pending_events() == 0));
+        // wait until the consumer actually returns from the stuck callback
+        assert!(
+            wait_until(5000, || PROCESSING_SINCE.load(Ordering::SeqCst) == 0),
+            "consumer still processing after drain scenario"
+        );
+
+        // -- 4. Failover policy: new consumer generation on timeout ----------
+        set_egress_policy(EgressPolicy::Failover, 60);
+        HUNG_STREAK.store(0, Ordering::SeqCst); // reset the Drain-scenario streak
+        let gen0 = GENERATION.load(Ordering::SeqCst);
+        let gate2 = Arc::new(AtomicU8::new(1));
+        let g2 = Arc::clone(&gate2);
+        let slow2 = leak_holder(move |_: CallbackParams| {
+            if g2.load(Ordering::SeqCst) == 1 {
+                thread::sleep(Duration::from_millis(800));
+            }
+        });
+        dispatch(slow2, buf.as_ptr(), 0, 0, 1, 8, 0, 0);
+        assert!(
+            wait_until(5000, || GENERATION.load(Ordering::SeqCst) > gen0),
+            "failover did not promote a new consumer"
+        );
+        gate2.store(0, Ordering::SeqCst); // let the stuck one finish & exit
+        assert!(wait_until(5000, || pending_events() == 0));
+
+        // -- restore defaults ------------------------------------------------
+        set_egress_policy(EgressPolicy::AlertOnly, 100);
         set_delivery_mode(DeliveryMode::Sync);
     }
 }

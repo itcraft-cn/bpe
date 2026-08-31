@@ -46,7 +46,10 @@ pub use crate::core::stop;
 pub use crate::data::Column;
 pub use crate::data::U8Bytes;
 pub use crate::dimension::{def_dimension, remove_dimension, update_dimension};
-pub use crate::egress::{delivery_mode, dropped_events, set_delivery_mode, DeliveryMode};
+pub use crate::egress::{
+    alert_count, delivery_mode, dropped_events, pending_events, set_alert_listener,
+    set_delivery_mode, set_egress_policy, DeliveryMode, EgressPolicy,
+};
 pub use crate::ffi::FfiFunc;
 pub use crate::param::CallbackParams;
 pub use crate::window::Window;
