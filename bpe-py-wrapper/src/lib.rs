@@ -2,8 +2,6 @@ use bpe::{CallbackParams, Column, DeliveryMode, FfiFunc, U8Bytes, Window};
 use pyo3::prelude::*;
 use std::slice;
 
-const U8_DATA_MAX_SIZE: usize = 512;
-
 #[pyfunction]
 #[allow(dead_code)]
 fn start() -> PyResult<()> {
@@ -269,19 +267,18 @@ impl FfiFunc for PythonFfiFunc {
     fn callback(&self, params: CallbackParams) {
         let data_ptr = params.u8_ptr();
         let size = params.size();
+        // payload real length is size * step - never assume a fixed stride
+        let len = size.saturating_mul(params.step());
         Python::with_gil(|py| {
-            let data = unsafe {
-                let array_ptr = data_ptr as *const [u8; U8_DATA_MAX_SIZE];
-                slice::from_raw_parts(array_ptr, size)
-            };
+            let data = unsafe { slice::from_raw_parts(data_ptr, len) };
             call_py_func(py, &self.callback, data);
         })
     }
 }
 
-fn call_py_func(py: Python, callback: &PyObject, data: &[[u8; U8_DATA_MAX_SIZE]]) {
+fn call_py_func(py: Python, callback: &PyObject, data: &[u8]) {
     if let Ok(func) = callback.getattr(py, "callback") {
-        let array = conv_array(data);
+        let array = data.to_vec();
         let args = (array,);
         let rs = func.call1(py, args);
         if rs.is_err() {
@@ -301,28 +298,18 @@ impl FfiFunc for PythonWindowFfiFunc {
         let size = params.size();
         let start = params.window_start_ms();
         let end = params.window_end_ms();
+        let len = size.saturating_mul(params.step());
         Python::with_gil(|py| {
-            let data = unsafe {
-                let array_ptr = data_ptr as *const [u8; U8_DATA_MAX_SIZE];
-                slice::from_raw_parts(array_ptr, size)
-            };
+            let data = unsafe { slice::from_raw_parts(data_ptr, len) };
             if let Ok(func) = self.callback.getattr(py, "callback") {
-                let array = conv_array(data);
+                let array = data.to_vec();
                 let args = (array, start, end);
                 let rs = func.call1(py, args);
                 if rs.is_err() {
-                    log::warn!("call python window callback failed: {:?}", rs.err().unwrap());
+                    log::warn!("call python window callback failed: {:?}", rs.err());
                 }
             }
         })
     }
 }
 
-fn conv_array(data: &[[u8; U8_DATA_MAX_SIZE]]) -> Vec<u8> {
-    let len = data.len();
-    let mut vec = vec![0_u8; len * U8_DATA_MAX_SIZE];
-    for i in 0..len {
-        vec[i * U8_DATA_MAX_SIZE..(i + 1) * U8_DATA_MAX_SIZE].copy_from_slice(&data[i]);
-    }
-    vec
-}

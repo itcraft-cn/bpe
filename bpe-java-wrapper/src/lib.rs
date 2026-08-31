@@ -11,8 +11,6 @@ use jni::{
 };
 use std::{slice, sync::Once};
 
-const U8_DATA_MAX_SIZE: usize = 512;
-
 #[no_mangle]
 pub extern "system" fn Java_cn_itcraft_bpe4j_Bpe_start<'local>(
     _env: JNIEnv<'local>,
@@ -468,6 +466,9 @@ impl FfiFunc for JavaFfiFunc {
     fn callback(&self, params: CallbackParams) {
         let data_ptr = params.u8_ptr();
         let size = params.size();
+        // payload real length is size * step (mapper: 512-byte records, window/
+        // aggregate results: compact field rows) - never assume a fixed stride
+        let len = size.saturating_mul(params.step());
         // In async delivery mode this runs on the engine's egress thread, which
         // has never been attached to the JVM: attach it permanently on first use
         // (repeated attach/detach per event would cost ~us each).
@@ -476,11 +477,11 @@ impl FfiFunc for JavaFfiFunc {
             .get_env()
             .or_else(|_| self.vm.attach_current_thread_permanently());
         if let Ok(mut env) = rs_env {
-            let data = unsafe {
-                let array_ptr = data_ptr as *const [u8; U8_DATA_MAX_SIZE];
-                slice::from_raw_parts(array_ptr, size)
-            };
-            let array = conv_array(&env, data);
+            let data = unsafe { slice::from_raw_parts(data_ptr, len) };
+            let i8slice =
+                unsafe { &*(data as *const [u8] as *const [i8]) };
+            let array = env.new_byte_array(len as i32).unwrap();
+            let _ = env.set_byte_array_region(&array, 0, i8slice);
             let param1 = JValueGen::Object(&array as &JObject);
             let param2 = JValueGen::Int(size as i32);
             let rs = env.call_method(
@@ -496,16 +497,6 @@ impl FfiFunc for JavaFfiFunc {
     }
 }
 
-fn conv_array<'a>(env: &JNIEnv<'a>, data: &[[u8; U8_DATA_MAX_SIZE]]) -> JPrimitiveArray<'a, i8> {
-    let len = data.len();
-    let array = env.new_byte_array((len * U8_DATA_MAX_SIZE) as i32).unwrap();
-    for (i, item) in data.iter().enumerate().take(len) {
-        let u8slice = item.as_slice();
-        let i8slice = unsafe { &*(u8slice as *const [u8] as *const [i8]) };
-        let _ = env.set_byte_array_region(&array, (i * U8_DATA_MAX_SIZE) as i32, i8slice);
-    }
-    array
-}
 
 fn conv_arrays<'a>(
     env: &mut JNIEnv<'a>,

@@ -103,13 +103,15 @@ pub(crate) fn call_aggregate_jit(
             return;
         }
     }
+    // step must be the real row stride (FIELD_SIZE): the egress channel copies
+    // size*step bytes, so a wrong stride silently truncates the payload
     crate::egress::dispatch(
         wrapped.fn_holder(),
         aggregate_data_ptr,
         1,
         0,
         out_size,
-        1,
+        FIELD_SIZE,
         0,
         0,
     );
