@@ -5,7 +5,7 @@ use crate::{
         f_sum_d_d, f_sum_d_l, f_sum_l, f_var_finalize,
     },
     aux::{fetch_ptr, fill_ptr, SimpleU16Map},
-    callback::{callback, FnHolder},
+    callback::FnHolder,
     consts::{FIELD_SIZE, U8_DATA_MAX_SIZE},
     data::{ColumnType, Record},
     element::Element,
@@ -103,9 +103,15 @@ pub(crate) fn call_aggregate_jit(
             return;
         }
     }
-    callback(
+    crate::egress::dispatch(
         wrapped.fn_holder(),
-        CallbackParams::new(aggregate_data_ptr, 1, 0, out_size, 1),
+        aggregate_data_ptr,
+        1,
+        0,
+        out_size,
+        1,
+        0,
+        0,
     );
 }
 

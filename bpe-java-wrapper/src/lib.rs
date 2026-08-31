@@ -1,6 +1,6 @@
 #![allow(non_snake_case)]
 
-use bpe::{CallbackParams, Column, FfiFunc, U8Bytes, Window};
+use bpe::{CallbackParams, Column, DeliveryMode, FfiFunc, U8Bytes, Window};
 use jni::{
     objects::{
         GlobalRef, JByteArray, JClass, JIntArray, JObject, JObjectArray, JPrimitiveArray, JString,
@@ -30,6 +30,31 @@ pub extern "system" fn Java_cn_itcraft_bpe4j_Bpe_stop<'local>(
 ) {
     static STOP: Once = Once::new();
     STOP.call_once(bpe::stop);
+}
+
+/// Selects callback delivery mode: 0 = synchronous (legacy), 1 = asynchronous
+/// (callbacks run on the engine's egress thread, off the hot path).
+#[no_mangle]
+pub extern "system" fn Java_cn_itcraft_bpe4j_Bpe_setDeliveryMode<'local>(
+    _env: JNIEnv<'local>,
+    _class: JClass<'local>,
+    mode: jint,
+) {
+    let mode = if mode == 1 {
+        DeliveryMode::Async
+    } else {
+        DeliveryMode::Sync
+    };
+    bpe::set_delivery_mode(mode);
+}
+
+/// Number of callback events dropped because the egress ring was full.
+#[no_mangle]
+pub extern "system" fn Java_cn_itcraft_bpe4j_Bpe_droppedEvents<'local>(
+    _env: JNIEnv<'local>,
+    _class: JClass<'local>,
+) -> jlong {
+    bpe::dropped_events() as jlong
 }
 
 #[no_mangle]
@@ -312,6 +337,7 @@ pub extern "system" fn Java_cn_itcraft_bpe4j_Bpe_removeDimension<'local>(
     bpe::remove_dimension(j_id as u16, j_key);
 }
 
+#[no_mangle]
 pub extern "system" fn Java_cn_itcraft_bpe4j_Bpe_defAggregate<'local>(
     env: JNIEnv<'local>,
     _class: JClass<'local>,
@@ -382,8 +408,14 @@ impl FfiFunc for JavaFfiFunc {
     fn callback(&self, params: CallbackParams) {
         let data_ptr = params.u8_ptr();
         let size = params.size();
-        let rs = self.vm.get_env();
-        if let Ok(mut env) = rs {
+        // In async delivery mode this runs on the engine's egress thread, which
+        // has never been attached to the JVM: attach it permanently on first use
+        // (repeated attach/detach per event would cost ~us each).
+        let rs_env = self
+            .vm
+            .get_env()
+            .or_else(|_| self.vm.attach_current_thread_permanently());
+        if let Ok(mut env) = rs_env {
             let data = unsafe {
                 let array_ptr = data_ptr as *const [u8; U8_DATA_MAX_SIZE];
                 slice::from_raw_parts(array_ptr, size)

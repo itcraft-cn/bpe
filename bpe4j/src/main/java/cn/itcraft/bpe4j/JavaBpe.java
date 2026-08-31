@@ -37,6 +37,30 @@ public class JavaBpe {
     public static void stop() {
     }
 
+    /** Callback delivery mode: synchronous, on the calling (ingest) thread. */
+    public static final int DELIVERY_SYNC = 0;
+    /** Callback delivery mode: asynchronous, on the engine's egress thread. */
+    public static final int DELIVERY_ASYNC = 1;
+
+    /**
+     * Selects how callbacks are delivered. In {@link #DELIVERY_ASYNC} mode the
+     * engine copies results into an egress ring and a dedicated thread invokes
+     * the Java callbacks, so ingest is never blocked by callback execution.
+     *
+     * @param mode {@link #DELIVERY_SYNC} or {@link #DELIVERY_ASYNC}
+     */
+    public static void setDeliveryMode(int mode) {
+        Bpe.setDeliveryMode(mode);
+    }
+
+    /**
+     * Number of callback events dropped because the egress ring was full
+     * (async mode only; drops are counted, never block ingest).
+     */
+    public static long droppedEvents() {
+        return Bpe.droppedEvents();
+    }
+
     private static void stop0() {
         JAVA_BPE_THREAD.stop(TIMEOUT);
         Bpe.stop();

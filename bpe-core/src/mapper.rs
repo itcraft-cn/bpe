@@ -1,7 +1,7 @@
 use crate::{
     aggregate::{call_aggregate_jit, WrappedAggregate},
     aux::{fetch_ptr, fill_ptr, SimpleU16Entry, SimpleU16Map},
-    callback::{callback, FnHolder},
+    callback::FnHolder,
     consts::FIELD_SIZE,
     data::{ColumnType, Record, U8Bytes},
     error::ParseSqlError,
@@ -334,11 +334,9 @@ fn invoke(
     let mask = array.mask(); // Get the array mask
     let offset = (array.walker() - 1) & mask; // Calculate the offset
     let step = array.step(); // Get the step size
-                             // Call the callback function with the processed data and parameters
-    callback(
-        fn_holder,
-        CallbackParams::new(u8_ptr, mask, offset, size, step),
-    );
+                             // Deliver the callback (async egress ring copies the payload,
+                             // so the reused global buffer stays safe)
+    crate::egress::dispatch(fn_holder, u8_ptr, mask, offset, size, step, 0, 0);
 }
 
 /// Filters data in the array based on the mapper's criteria, processing elements that match

@@ -1,4 +1,4 @@
-use bpe::{CallbackParams, Column, FfiFunc, U8Bytes, Window};
+use bpe::{CallbackParams, Column, DeliveryMode, FfiFunc, U8Bytes, Window};
 use pyo3::prelude::*;
 use std::slice;
 
@@ -16,6 +16,29 @@ fn start() -> PyResult<()> {
 fn stop() -> PyResult<()> {
     bpe::stop();
     Ok(())
+}
+
+/// Selects callback delivery: `is_async=True` delivers callbacks on the
+/// engine's egress thread (results are copied into an egress ring, so ingest
+/// is never blocked by Python callback execution / the GIL).
+#[pyfunction]
+#[allow(dead_code)]
+fn set_delivery_mode(is_async: bool) -> PyResult<()> {
+    let mode = if is_async {
+        DeliveryMode::Async
+    } else {
+        DeliveryMode::Sync
+    };
+    bpe::set_delivery_mode(mode);
+    Ok(())
+}
+
+/// Number of callback events dropped because the egress ring was full
+/// (async mode only).
+#[pyfunction]
+#[allow(dead_code)]
+fn dropped_events() -> PyResult<u64> {
+    Ok(bpe::dropped_events())
 }
 
 #[pyfunction]
@@ -178,7 +201,7 @@ fn def_keyed_window_aggregate(
         sql,
         window,
         ts_field,
-        key_field,
+        Some(key_field),
         lag_ms,
         Box::new(PythonWindowFfiFunc { callback }),
     ) {
@@ -223,6 +246,8 @@ where
 fn bpe4py(_py: Python, m: &PyModule) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(start, m)?)?;
     m.add_function(wrap_pyfunction!(stop, m)?)?;
+    m.add_function(wrap_pyfunction!(set_delivery_mode, m)?)?;
+    m.add_function(wrap_pyfunction!(dropped_events, m)?)?;
     m.add_function(wrap_pyfunction!(def_incoming, m)?)?;
     m.add_function(wrap_pyfunction!(def_stream, m)?)?;
     m.add_function(wrap_pyfunction!(new_data, m)?)?;

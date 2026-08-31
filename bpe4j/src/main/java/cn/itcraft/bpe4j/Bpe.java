@@ -13,6 +13,10 @@ final class Bpe {
 
     native static void stop();
 
+    native static void setDeliveryMode(int mode);
+
+    native static long droppedEvents();
+
     native static int defIncoming(String name, String[] names, int[] types, int[] lengths);
 
     native static int defStream(String name, String[] names, int[] types, int[] lengths);

@@ -3,6 +3,7 @@ use crate::{
     callback::FnHolder,
     cfg::load_config,
     data::{check_id_in_store, init_data, Column, Record, RecordType, U8Bytes},
+    egress::init_egress,
     ffi::FfiFunc,
     jit::base::init_func_generator,
     logger::init_logger,
@@ -31,6 +32,7 @@ fn actual_start() {
     init_store(); // Initialize data store
     init_mapper(); // Initialize mapper components
     init_aggregate(); // Initialize aggregate components
+    init_egress(); // Start the egress delivery thread (async callback channel)
 }
 
 /// Stops the BPE system by marking it as deactivated.
@@ -43,6 +45,7 @@ pub fn stop() {
 /// Internal function that logs the deactivation of the BPE system.
 fn actual_stop() {
     crate::window::stop_timer(); // stop the window timer thread
+    crate::egress::stop_egress(); // stop the egress thread after draining pending events
     log::info!("mark as deactived");
 }
 

@@ -25,7 +25,7 @@
 use crate::{
     aggregate::{compute_data, gen_aggregate, init_data, WrappedAggregate},
     aux::fetch_ptr,
-    callback::{callback, FnHolder},
+    callback::FnHolder,
     consts::FIELD_SIZE,
     data::{Record, U8Bytes},
     id::next_window_id,
@@ -431,7 +431,10 @@ fn deliver_window(p: &Pending) {
             }
         }
         let size = if count > 0 { 1 } else { 0 };
-        let param = CallbackParams::new_with_window(
+        // Deliver via the egress channel (async mode copies the result buffer,
+        // so the per-aggregate reused `result_buf` stays safe)
+        crate::egress::dispatch(
+            agg.wrapped.fn_holder(),
             buf,
             0,
             0,
@@ -440,7 +443,6 @@ fn deliver_window(p: &Pending) {
             p.start_ms,
             p.end_ms,
         );
-        callback(agg.wrapped.fn_holder(), param);
     }
 }
 
@@ -484,7 +486,10 @@ fn deliver_keyed(p: &Pending, agg: &WindowAggregate, stream: &Record, count: usi
         }
         off += row_size;
     }
-    let param = CallbackParams::new_with_window(
+    // Deliver all key rows via the egress channel (async mode copies the rows;
+    // the local `out` buffer may be freed right after this call)
+    crate::egress::dispatch(
+        agg.wrapped.fn_holder(),
         out.as_ptr(),
         0,
         0,
@@ -493,7 +498,6 @@ fn deliver_keyed(p: &Pending, agg: &WindowAggregate, stream: &Record, count: usi
         p.start_ms,
         p.end_ms,
     );
-    callback(agg.wrapped.fn_holder(), param);
 }
 
 /// Starts the timer thread if it is not already running.
