@@ -1,6 +1,6 @@
 [package]
 name = "bpe"
-version = "0.3.0-dev" # managed by updgitver
+version = "0.3.0" # managed by updgitver
 edition = "2021"
 authors = ["Helly Guo<hellyguo@foxmail.com>"]
 exclude = ["tests", "test_data", "benches", "examples", ".vscode"]
