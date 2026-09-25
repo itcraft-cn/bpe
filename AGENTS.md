@@ -8,12 +8,10 @@ Streaming data processing engine with SQL-like queries and LLVM JIT compilation.
 
 ```bash
 # Debug build (default)
-./build.sh 0
 cargo build
 
 # Release build (links LLVM-19)
-./build.sh 1
-RUSTFLAGS='-lLLVM-19' cargo build --release
+RUSTFLAGS="-lLLVM-19" cargo build --release
 ```
 
 ## Test Commands
