@@ -1,3 +1,6 @@
+// 端到端示例：incoming(demo) -> mapper(filter) -> aggregate(stream)。
+// 中等数据量模式：10 万事件，数据均可通过 WHERE 过滤，用于验证
+// filter→aggregate 数据链路并顺带观测吞吐，避免日志淹没性能测量。
 use bpe::{
     def_aggregate, def_incoming, def_mapper_bind_aggregate, def_stream, new_data, start, stop,
     CallbackParams, Column, U8Bytes,
@@ -12,7 +15,8 @@ use std::{
     time::{Duration, SystemTime},
 };
 
-const LOOP_SIZE: usize = 200;
+/// 中等数据量：10 万事件，兼顾数据链路验证与轻量吞吐观测。
+const LOOP_SIZE: usize = 100_000;
 const LOOP_SIZE_F64: f64 = LOOP_SIZE as f64;
 
 const FILTER_SQL: &str = r#"
@@ -36,9 +40,14 @@ pub fn main() {
         log::warn!("init failed");
     } else {
         let mut u8data = gen_u8_bytes(id1);
-        exec_with_time_it(move || gen_new_data(&mut u8data));
-        let sum = sum_store.load(Ordering::SeqCst);
-        log::info!("sum: {sum}");
+        let mut seq: i64 = 0;
+        exec_with_time_it(move || {
+            seq += 1;
+            gen_new_data(&mut u8data, seq);
+        });
+        // sum_store 实际累计的是聚合回调有效结果数（命中数）。
+        let hits = sum_store.load(Ordering::SeqCst);
+        log::info!("aggregate hits: {hits}");
     }
     stop();
 }
@@ -73,21 +82,26 @@ fn init_func(sum_store: Arc<AtomicI64>) -> (u16, u16) {
 #[inline]
 fn func_callback(sum_store: &Arc<AtomicI64>, param: CallbackParams) {
     if param.size() > 0 {
-        sum_store.fetch_add(1, Ordering::SeqCst);
-        let ptr = param.u8_ptr();
-        let v1 = fetch_i64(ptr);
-        let v2 = fetch_i64(ptr.wrapping_add(8));
-        let v3 = fetch_i64(ptr.wrapping_add(16));
-        let v4 = fetch_i64(ptr.wrapping_add(24));
-        log::info!("data: {v1}|{v2}|{v3}|{v4}");
-        let _v = v1 + v2 + v3 + v4;
+        let n = sum_store.fetch_add(1, Ordering::SeqCst);
+        // 中等数据量下按固定间隔打印运行中的聚合值，避免逐事件日志淹没测量。
+        if n % 10_000 == 0 {
+            let ptr = param.u8_ptr();
+            let v1 = fetch_i64(ptr);
+            let v2 = fetch_i64(ptr.wrapping_add(8));
+            let v3 = fetch_i64(ptr.wrapping_add(16));
+            let v4 = fetch_i64(ptr.wrapping_add(24));
+            log::info!("data[{n}]: {v1}|{v2}|{v3}|{v4}");
+            let _v = v1 + v2 + v3 + v4;
+        }
     } else {
-        log::warn!("got null data");
+        log::debug!("got null data");
     }
 }
 
-fn gen_new_data(u8data: &mut U8Bytes) {
+fn gen_new_data(u8data: &mut U8Bytes, seq: i64) {
     update_now(u8data);
+    // demo.a 随事件变化（保持 >1 以通过过滤），用于观测聚合的 first/last/min/max。
+    fill_i64(&mut u8data.bytes_mut()[0..8], 2 + seq % 1000);
     let ret = new_data(u8data);
     if ret {
         log::debug!("send success");
@@ -147,11 +161,12 @@ fn gen_u8_bytes(id: u16) -> U8Bytes {
     let slice = u8array.as_mut_slice();
     let now = now();
     //log::info!("now: {now}");
-    fill_i64(&mut slice[0..8], 1);
-    fill_i64(&mut slice[8..16], 2);
-    fill_i64(&mut slice[16..24], 3);
-    fill_i64(&mut slice[24..32], 4);
-    fill_i64(&mut slice[32..40], 5);
+    // 取值需满足 WHERE a>1 AND b>2 AND c>3 AND d>4 AND e>5，确保事件可通过过滤。
+    fill_i64(&mut slice[0..8], 2);
+    fill_i64(&mut slice[8..16], 3);
+    fill_i64(&mut slice[16..24], 4);
+    fill_i64(&mut slice[24..32], 5);
+    fill_i64(&mut slice[32..40], 6);
     fill_i64(&mut slice[40..48], now as i64);
     log::info!("v: {}", now as i64);
     U8Bytes::new_from_vec(id, 512, Vec::from(u8array))
