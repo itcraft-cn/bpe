@@ -206,6 +206,30 @@ criterion 全链路测量（`new_data → 入环形缓冲 → 窗口扫描 → J
 热路径无锁、Rust 侧零分配：连续环形缓冲内存、预计算列偏移、JIT 编译过滤、
 回调缓冲复用。无窗口路径不触碰窗口锁，纯过滤性能不受窗口功能影响。
 
+### 本机复测记录（2026-09-25）
+
+直接运行 `examples/` 复测（非 criterion）；release 构建，环境 Intel Core Ultra 9 285H
+（16 线程，单 NUMA，实测 CPU scaling 约 49%）；单消费者线程；各示例重复 3 次，波动约 ±3~5%。
+
+| 示例 | 场景 | ns/op | 约 events/s |
+|---|---|---:|---:|
+| `perf_rsize` | 入站（512B / 64B 记录） | 147.9 / 147.6 | ~680 万 |
+| `perf_aligned` | 过滤 6 条件 + 1 字段 | ~149 | ~670 万 |
+| `perf_aligned2` | 过滤 1 条件 + 5 计算字段（LIMIT 1） | 50.0 | ~2000 万 |
+| `perf_agg` | 过滤 + 聚合（bind 路径，解释执行） | 68.1 | ~1470 万 |
+| `perf_diff` | 入站 + 过滤 + fetch + 回调 | 368~399 | ~250~270 万 |
+| `sample` | 入站 → mapper（过滤）→ aggregate，逐事件回调 | 983 | ~100 万 |
+
+`perf_diff` 分解（复测）：insert ~15.8 ns；filter+scan ~118~121 ns；fetch+callback ~236~260 ns。
+
+要点：
+
+- **debug 与 release 差距显著**：`sample` debug 约 3460 ns/op，release 约 983 ns/op（约 3.5×）。性能须以 release 为准。
+- **瓶颈在管道投递，不在 SQL/JIT 求值**：`fetch+callback`（队列投递 + 回调派发）为最大单项；
+  6 条件过滤仅 ~118 ns，聚合内核 ~68 ns。
+- **记录大小无影响**：64B 与 512B 均为 ~148 ns/op，此规模下由每记录固定开销主导。
+- 以上数字与上文 criterion / Esper 小节存在小幅差异（机器、测量方式、版本不同），此处仅作记录。
+
 ### 对标 Esper（特化内核基准，同规则同数据，单核）
 
 | 场景 | BPE | Esper 7.1 | 优势 |
