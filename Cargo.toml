@@ -2,16 +2,16 @@
 name = "bpe"
 version = "0.3.0" # managed by updgitver
 edition = "2021"
-authors = ["Helly Guo<hellyguo@foxmail.com>"]
+authors = ["Helly Guo <hellyguo@foxmail.com>"]
 exclude = ["tests", "test_data", "benches", "examples", ".vscode"]
-homepage = ""
-repository = ""
+homepage = "https://itcraft.cn/bpe/"
+repository = "https://github.com/itcraft-cn/bpe"
 license = "Apache-2.0"
 readme = "README.md"
-description = ""
-categories = [""]
-documentation = ""
-keywords = [""]
+description = "A high-performance, embeddable streaming rule engine written in Rust, with SQL-based queries, LLVM JIT compilation."
+categories = ["data-structures"]
+documentation = "https://docs.rs/crate/bpe/latest"
+keywords = ["CEP", "JIT", "SQL", "Stream"]
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
