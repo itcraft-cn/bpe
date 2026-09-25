@@ -1,28 +1,27 @@
 # Bamboo Pipe Engine (BPE)
 
-A high-performance, embeddable streaming rule engine written in Rust, with SQL-based
-queries, LLVM JIT compilation, and multi-language bindings (Rust / Java / Python).
+用 Rust 编写的高性能、可嵌入的流式规则引擎：基于 SQL 的查询接口 + LLVM JIT 编译，支持
+Rust / Java / Python 多语言绑定。
 
-BPE targets **risk-control and alerting workloads**: high-throughput pre-filtering,
-time-window aggregation, per-key grouping, and keyed dimension lookups — all with
-nanosecond-level hot-path latency.
+BPE 面向**风控与告警场景**：高吞吐预过滤、时间窗口聚合、per-key 分组、维表关联——热路径
+延迟纳秒级。
 
-## Feature Overview
+## 特性总览
 
-| Capability | Description |
+| 能力 | 说明 |
 |---|---|
-| JIT filtering | `WHERE` clauses compiled to native machine code via LLVM-19 |
-| Multiple rules | Multiple mappers per record, all evaluated per record |
-| Scalar functions | 15+ functions (`_abs`, `_pow`, `_sqrt`, `_greatest`, `_to_double`, ...) usable in both `SELECT` and `WHERE` |
-| Aggregate functions | `_suml/_count/_avg/_minl/_maxl/_firstl/_lastl` (+Double variants), `_stddev/_variance` (population & sample) |
-| Time windows | Fixed (`Tumbling`) and sliding (`Sliding`) windows, event-time or processing-time |
-| Watermark | Event-time out-of-order tolerance (`lag_ms`), data-driven early firing + wall-clock fallback |
-| Per-key grouping | `def_keyed_window_aggregate`: window results grouped by a key column |
-| Dimension tables | Keyed lookup tables (blacklists, quotas) via `_dim_has(dim_id, key)` / `_dim_get(dim_id, key)` |
-| Multi-language | Rust (native), Java (JNI/bpe4j), Python (PyO3/bpe4py) |
-| Low overhead | Lock-free single-thread hot path; window-less path has zero added cost |
+| JIT 过滤 | `WHERE` 条件经 LLVM-19 编译为原生机器码 |
+| 多规则 | 同一记录可注册多个 mapper，逐条评估 |
+| 标量函数 | 15+ 个（`_abs` `_pow` `_sqrt` `_greatest` `_to_double` ...），SELECT 与 WHERE 均可用 |
+| 聚合函数 | `_suml/_count/_avg/_minl/_maxl/_firstl/_lastl`（含 Double 变体）、`_stddev/_variance`（总体/样本） |
+| 时间窗口 | 固定窗口（Tumbling）与滑动窗口（Sliding），事件时间或处理时间 |
+| Watermark | 事件时间乱序容忍（`lag_ms`），数据驱动提前触发 + wall-clock 兜底 |
+| Per-key 分组 | `def_keyed_window_aggregate`：窗口结果按 key 列分组 |
+| 维表关联 | 黑名单/限额等 keyed 查询表，SQL `_dim_has(dim_id, key)` / `_dim_get(dim_id, key)` |
+| 多语言 | Rust（原生）/ Java（JNI/bpe4j）/ Python（PyO3/bpe4py） |
+| 低开销 | 无锁单线程热路径；无窗口路径零额外开销 |
 
-## Quick Start (Rust)
+## 快速开始（Rust）
 
 ```toml
 [dependencies]
@@ -33,27 +32,27 @@ bpe = { path = "bpe-core" }
 use bpe::{def_incoming, def_mapper, new_data, start, stop, Column, U8Bytes};
 
 fn main() {
-    // the config root (cfg/config.toml lives under BPE_HOME)
+    // 配置文件根目录（cfg/config.toml 位于 BPE_HOME 下）
     std::env::set_var("BPE_HOME", std::env::current_dir().unwrap());
     start();
 
-    // 1. define the record schema (Long/Double columns, 8 bytes each)
+    // 1. 定义记录模式（Long/Double 列，每列 8 字节）
     let txn = def_incoming("txn", vec![
-        Column::new_long("ts"),      // event time (ms)
+        Column::new_long("ts"),      // 事件时间（毫秒）
         Column::new_long("user_id"),
         Column::new_long("amount"),
     ]).unwrap();
 
-    // 2. high-speed threshold rule: JIT-compiled WHERE, called per record
+    // 2. 高速阈值规则：WHERE 经 JIT 编译，每条记录评估
     def_mapper(
         "SELECT txn.user_id, _to_double(txn.amount) FROM txn WHERE txn.amount > 100000 LIMIT 10",
         |p| {
-            // p.size() matched records, dense fields at p.u8_ptr()
-            eprintln!("large transaction alert: {} matches", p.size());
+            // p.size() 为命中数，字段密集排列于 p.u8_ptr()
+            eprintln!("大额交易告警：{} 条命中", p.size());
         },
     );
 
-    // 3. send data (payload is a fixed 512-byte record; columns at 8-byte offsets)
+    // 3. 发送数据（定长 512 字节记录，列偏移 8 字节对齐）
     let mut payload = vec![0_u8; 512];
     unsafe {
         *(payload.as_mut_ptr() as *mut i64) = 1_700_000_000_000_i64;        // ts
@@ -66,32 +65,32 @@ fn main() {
 }
 ```
 
-## Time Windows (risk-control style)
+## 时间窗口（风控/告警场景）
 
 ```rust
 use bpe::{def_window_aggregate, def_keyed_window_aggregate, Window};
 
-// Fixed window: report every 1 minute the count/sum of transactions
+// 固定窗口：每 1 分钟上报该分钟交易笔数与金额
 def_window_aggregate(
     "SELECT _count(txn.amount), _suml(txn.amount) FROM txn WHERE txn.amount > 0",
     Window::Tumbling { period_ms: 60_000 },
-    Some("ts"), 0,                      // event time from column "ts"
+    Some("ts"), 0,                      // 事件时间取 "ts" 列
     |p| {
         let start = p.window_start_ms();
         let end = p.window_end_ms();
-        // aggregate result at p.u8_ptr(): [count i64][sum i64]
+        // 聚合结果位于 p.u8_ptr()：[count i64][sum i64]
     },
 );
 
-// Sliding window: every 60s, look back 5 minutes for abnormal-flag count
+// 滑动窗口：每 60 秒回看近 5 分钟的异常标记次数
 def_window_aggregate(
     "SELECT _count(txn.risk) FROM txn WHERE txn.risk = 1",
     Window::Sliding { length_ms: 300_000, slide_ms: 60_000 },
     Some("ts"), 0,
-    |p| { /* window [start, end) risk count */ },
+    |p| { /* 窗口 [start, end) 命中数 */ },
 );
 
-// Per-key: per-user counts within each window (rows [key][field0]...[fieldN])
+// per-key：每个用户在每个窗口内的笔数（行布局 [key][field0]...[fieldN]）
 def_keyed_window_aggregate(
     "SELECT _count(txn.amount) FROM txn WHERE txn.amount > 0",
     Window::Tumbling { period_ms: 60_000 },
@@ -99,23 +98,23 @@ def_keyed_window_aggregate(
     |p| {
         for row in 0..p.size() {
             let r = unsafe { p.u8_ptr().add(row * p.step()) };
-            // key: i64 at r, fields follow
+            // r 处为 key(i64)，后续为聚合字段
         }
     },
 );
 ```
 
-Semantics:
-- **Event time**: `ts_field` names a Long (ms) column. Windows align to event time;
-  `lag_ms` is the out-of-order tolerance — a record older than the watermark
-  (`max_seen_ts - lag_ms`) is dropped.
-- **Processing time**: pass `ts_field = None`; windows align to arrival time.
-- **Firing**: a window fires when `end < watermark` (event time advances) or
-  `end + lag_ms <= now` (wall-clock fallback, so idle windows still report).
-- **Empty windows** still fire with `size()==0` (initial aggregate values).
-- Callbacks run on the engine's timer thread; they must be `Send` and fast.
+语义说明：
 
-## Dimension Tables
+- **事件时间**：`ts_field` 指定 Long（毫秒）列；窗口按事件时间对齐；`lag_ms` 为乱序容忍，
+  早于 watermark（`max_seen_ts - lag_ms`）的记录被丢弃。
+- **处理时间**：`ts_field = None`，窗口按到达时间对齐。
+- **触发**：窗口满足 `end < watermark`（事件时间推进）或 `end + lag_ms <= now`
+  （wall-clock 兜底，数据停止时窗口仍上报）即触发。
+- **空窗口也会触发**（`size()==0`，返回聚合初值）。
+- 回调在引擎定时器线程执行，需线程安全（Send）且不宜阻塞。
+
+## 维表关联
 
 ```rust
 use bpe::{def_dimension, update_dimension, def_mapper};
@@ -125,44 +124,44 @@ update_dimension(blacklist, 42, 1);          // key -> value
 
 def_mapper(
     "SELECT txn.amount FROM txn WHERE _dim_has(0, txn.user_id) > 0 LIMIT 10",
-    |p| { /* only users present in dimension 0 pass */ },
+    |p| { /* 仅维表 0 中存在的用户通过 */ },
 );
 
 def_mapper(
     "SELECT _dim_get(0, txn.user_id), txn.amount FROM txn WHERE txn.amount > 0 LIMIT 10",
-    |p| { /* first field = dimension value (0 if absent) */ },
+    |p| { /* 首字段为维表值（不存在为 0） */ },
 );
 ```
 
-## SQL Function Reference
+## SQL 函数参考
 
-Functions are invoked with a leading underscore: `_name(args)`.
+函数以 `_` 前缀调用：`_name(args)`。
 
-### Scalar (usable in `SELECT` fields and `WHERE` conditions)
+### 标量（SELECT 字段与 WHERE 条件均可用）
 
-| Function | Description | | Function | Description |
+| 函数 | 说明 | | 函数 | 说明 |
 |---|---|---|---|---|
-| `_add/_sub/_mul/_div/_mod(a,b)` | arithmetic | | `_sign(x)` | sign (-1/0/1) |
-| `_abs(x)` | absolute value | | `_trunc(x)` | truncate fraction |
-| `_ceil/_floor/_round(x)` | rounding | | `_to_long(x)` | cast to i64 |
-| `_sqrt(x)` | square root → f64 | | `_to_double(x)` | cast to f64 |
-| `_exp(x)` | e^x → f64 | | `_pow(a,b)` | power → f64 |
-| `_ln(x)` | natural log → f64 | | `_greatest/_least(a,b)` | max/min |
-| `_log10(x)` | base-10 log → f64 | | `_dim_has/_dim_get(dim_id,key)` | dimension lookup |
+| `_add/_sub/_mul/_div/_mod(a,b)` | 算术 | | `_sign(x)` | 符号（-1/0/1） |
+| `_abs(x)` | 绝对值 | | `_trunc(x)` | 截断小数 |
+| `_ceil/_floor/_round(x)` | 取整 | | `_to_long(x)` | 转 i64 |
+| `_sqrt(x)` | 平方根 → f64 | | `_to_double(x)` | 转 f64 |
+| `_exp(x)` | e^x → f64 | | `_pow(a,b)` | 幂 → f64 |
+| `_ln(x)` | 自然对数 → f64 | | `_greatest/_least(a,b)` | 取大/取小 |
+| `_log10(x)` | 常用对数 → f64 | | `_dim_has/_dim_get(dim_id,key)` | 维表查询 |
 
-### Aggregate (window / aggregate SQL)
+### 聚合（窗口 / 聚合 SQL）
 
-| Function | Description | | Function | Description |
+| 函数 | 说明 | | 函数 | 说明 |
 |---|---|---|---|---|
-| `_suml/_sumd(x)` | sum | | `_avg(x)` | mean (f64) |
-| `_count(x)` | count (any column type) | | `_firstl/_firstd(x)` | first value |
-| `_minl/_minl(x)` / `_maxl/_maxd(x)` | min/max | | `_lastl/_lastd(x)` | last value |
-| `_stddev(x)` | population stddev (f64) | | `_stddev_samp(x)` | sample stddev (f64) |
-| `_variance(x)` | population variance (f64) | | `_var_samp(x)` | sample variance (f64) |
+| `_suml/_sumd(x)` | 求和 | | `_avg(x)` | 均值（f64） |
+| `_count(x)` | 计数（任意列类型） | | `_firstl/_firstd(x)` | 首值 |
+| `_minl/_minl(x)` / `_maxl/_maxd(x)` | 最小/最大 | | `_lastl/_lastd(x)` | 末值 |
+| `_stddev(x)` | 总体标准差（f64） | | `_stddev_samp(x)` | 样本标准差（f64） |
+| `_variance(x)` | 总体方差（f64） | | `_var_samp(x)` | 样本方差（f64） |
 
-## Multi-language Bindings
+## 多语言绑定
 
-### Python (bpe4py, PyO3)
+### Python（bpe4py，PyO3）
 
 ```python
 import bpe4py as bpe
@@ -171,7 +170,7 @@ bpe.start()
 txn = bpe.def_stream("txn", ["ts", "user_id", "amount"], [0, 0, 0], [8, 8, 8])
 
 def on_window(data, start_ms, end_ms):
-    # data: bytes of the aggregate result; start_ms/end_ms: window range
+    # data: 聚合结果字节；start_ms/end_ms: 窗口时间范围
     print("window", start_ms, end_ms, "bytes:", len(data))
 
 bpe.def_window_aggregate(
@@ -179,13 +178,12 @@ bpe.def_window_aggregate(
     window_type=1, period_ms=60000, length_ms=0, slide_ms=0,
     ts_field="ts", lag_ms=0, callback=on_window,
 )
-# bpe.def_keyed_window_aggregate(...), bpe.def_dimension()/update_dimension/remove_dimension
+# bpe.def_keyed_window_aggregate(...)、bpe.def_dimension()/update_dimension/remove_dimension
 ```
 
-> Building the Python wrapper requires PyO3 0.20 (Python ≤ 3.12): set
-> `PYO3_PYTHON=/path/to/python3.11`.
+> 构建 Python 封装需 PyO3 0.20（Python ≤ 3.12）：设置 `PYO3_PYTHON=/path/to/python3.11`。
 
-### Java (bpe4j, JNI)
+### Java（bpe4j，JNI）
 
 ```java
 JavaBpe.start();
@@ -197,109 +195,98 @@ int txn = JavaBpe.defStream("txn", List.of(
 JavaBpe.defWindowAggregate(
     "SELECT _count(txn.amount) FROM txn WHERE txn.amount > 0",
     JavaBpe.WINDOW_TUMBLING, 60_000, 0, 0, "ts", 0,
-    (data, size) -> { /* aggregate result bytes */ }
+    (data, size) -> { /* 聚合结果字节 */ }
 );
 int dim = JavaBpe.defDimension();
 JavaBpe.updateDimension(dim, 42L, 1L);
 ```
 
-## Configuration
+## 配置
 
-`cfg/config.toml` (root resolved via `BPE_HOME`):
+`cfg/config.toml`（根目录由 `BPE_HOME` 环境变量指定）：
 
 ```toml
-dev_mode = true      # true: console + file logs; false: file only
-vec_size = 1048576   # circular buffer bytes (must be a power of two)
-record_size = 512    # bytes per record slot (max 8192; keep ≥ columns × 8)
-log_dir = "/tmp"     # log directory
+dev_mode = true      # true: 控制台+文件日志；false: 仅文件日志
+vec_size = 1048576   # 环形缓冲字节数（须为 2 的幂）
+record_size = 512    # 单条记录槽字节数（最大 8192；须 ≥ 列数×8）
+log_dir = "/tmp"     # 日志目录
 ```
 
-## Building
+## 构建
 
 ```bash
-./build.sh 0   # debug build (core)
-./build.sh 1   # release build (core)
-./build.sh 2   # full debug build (core + Java + Python)
-./build.sh 3   # full release build (core + Java + Python)
+./build.sh 0   # 调试构建（核心）
+./build.sh 1   # 发布构建（核心）
+./build.sh 2   # 完整调试构建（核心 + Java + Python）
+./build.sh 3   # 完整发布构建（核心 + Java + Python）
 ```
 
-Requirements: Rust 2021, LLVM-19, Java 8+ (for bpe4j), Python 3.11/3.12 (for bpe4py).
+依赖：Rust 2021、LLVM-19、Java 8+（bpe4j）、Python 3.11/3.12（bpe4py）。
 
-## Performance
+## 性能
 
-Measured with criterion on the full pipeline
-(`new_data → insert → window scan → JIT filter → field fetch → callback`), release build:
+criterion 全链路测量（`new_data → 入环形缓冲 → 窗口扫描 → JIT 过滤 → 字段提取 → 回调`），release 构建：
 
-| Scenario | Median | ~Throughput (single core) |
+| 场景 | 中位数 | 单核吞吐（约） |
 |---|---|---|
-| new_data + filter (4 fields, LIMIT 10) | ~0.44 µs/op | ~2.3M rec/s |
-| new_data + filter + aggregate (JIT kernel) | ~0.46 µs/op | ~2.2M rec/s |
+| new_data + 过滤（4 字段，LIMIT 10） | ~0.44 µs/op | ~230 万条/秒 |
+| new_data + 过滤 + 聚合（JIT 内核） | ~0.46 µs/op | ~220 万条/秒 |
 
-### Full-path breakdown (perf_diff: 6-condition WHERE + 5 computed SELECT fields, window full)
+### 全链路分解（perf_diff：6 条件 WHERE + 5 计算字段 SELECT，窗口满）
 
-| Stage | Cost | Share |
+| 阶段 | 成本 | 占比 |
 |---|---|---|
-| insert (512 B memcpy) | ~14 ns | 4.5% |
-| filter + bitmap scan | ~106 ns | 34% |
-| field fetch + callback (10 × 5 fields) | ~194 ns | 62% |
-| **total** | **~314 ns/op** | — |
+| insert（512B memcpy） | ~14 ns | 4.5% |
+| 过滤 + 位图扫描 | ~106 ns | 34% |
+| 字段提取 + 回调（10 条 × 5 字段） | ~194 ns | 62% |
+| **合计** | **~314 ns/op** | — |
 
-Aggregate-only path (bind `def_aggregate`, 5 fields × LIMIT 10): ~78 ns/op (~13M rec/s).
+纯聚合路径（bind `def_aggregate`，5 字段 × LIMIT 10）：~78 ns/op（~1300 万条/秒）。
 
-### Optimization history (perf_diff scenario, 8.4 µs/op → 0.31 µs/op, ≈27×)
+### 优化历程（perf_diff 场景，8.4 µs/op → 0.31 µs/op，约 **27 倍**）
 
-1. **Incremental hit bitmap**: the JIT filter runs once per record at insert time
-   (not once per window scan); result stored as 1 bit/slot.
-2. **64-bit bitmap scanning**: zero words skipped, set bits located via
-   TZCNT/LZCNT (SIMD-friendly).
-3. **Pre-resolved field readers & evaluation plans**: SELECT fields compile to
-   direct (offset, type) reads / flattened expression trees.
-4. **JIT aggregate kernels**: the whole batch aggregation compiles into a single
-   LLVM loop (direct loads, inlined arithmetic, phi accumulators) — the
-   bind/`def_aggregate` path went from ~82 µs/op to ~78 ns/op (>1000×).
+1. **增量命中位图**：JIT 过滤在插入时每条记录仅执行一次（而非每次窗口扫描），结果按 slot 1 bit 存储
+2. **64 位块扫描**：跳过零字 + TZCNT/LZCNT 定位置位（SIMD 友好的位运算）
+3. **预解析字段读取计划**：SELECT 字段编译为 (offset, type) 直读 / 扁平化表达式树
+4. **聚合 JIT 内核**：整批聚合编译为单个 LLVM 循环（直读 + 内联算术 + phi 累加器）——绑定/def_aggregate 路径从 ~82µs/op 降至 ~78ns/op（超 1000 倍）
 
-The hot path is lock-free and allocation-free on the Rust side: continuous
-circular-buffer memory, pre-computed column offsets, JIT-compiled filters, and a
-reused callback buffer. The window-less path never takes the window lock, so
-plain filtering is unaffected by windowing features.
+热路径无锁、Rust 侧零分配：连续环形缓冲内存、预计算列偏移、JIT 编译过滤、
+回调缓冲复用。无窗口路径不触碰窗口锁，纯过滤性能不受窗口功能影响。
 
-### vs Esper — specialized-kernel benchmark (same rules & data, single core)
+### 对标 Esper（特化内核基准，同规则同数据，单核）
 
-| Scenario | BPE | Esper 7.1 | Advantage |
+| 场景 | BPE | Esper 7.1 | 优势 |
 |---|---|---|---|
-| pure filter (6 conditions) | 133 ns | 240 ns | **1.8×** |
-| filter + 5 computed fields | 49 ns | 222 ns | **4.5×** |
-| window aggregate (len 10) | 78 ns | 172 ns | **2.2×** |
+| 纯过滤（6 条件） | 133 ns | 240 ns | **1.8×** |
+| 过滤 + 5 计算字段 | 49 ns | 222 ns | **4.5×** |
+| 窗口聚合（len 10） | 78 ns | 172 ns | **2.2×** |
 
-> **Scope caveat**: this compares a **specialized single-table rule-evaluation
-> kernel** against a **general-purpose CEP platform**. The advantage comes from
-> specialization: BPE only does single-table filter/compute/window aggregation,
-> while Esper supports full CEP (pattern matching, multi-stream joins, state
-> persistence, exactly-once, watermarks, distribution, built-in I/O, JMX ops).
-> BPE is **not** a general replacement — for complex rules/stateful patterns use
-> Esper/Flink; for high-frequency embedded pre-filtering use BPE (or cascade
-> BPE → Esper). See `docs/benchmark/esper-comparison-20260815.md`.
+> **边界声明**：这是**特化单表规则评估内核**与**通用 CEP 平台**的对比，优势源于
+> 特化——BPE 只做单表过滤/计算/窗口聚合；Esper 完整支持 CEP 模式匹配、多流
+> 关联、状态持久化、exactly-once、watermark、分布式、内置接入、JMX 运维等。
+> **BPE 不是 Esper 的通用替代**：复杂规则/有状态模式用 Esper/Flink；
+> 高频嵌入式预筛用 BPE（或级联 BPE 预筛 → Esper 复杂处理）。
+> 方法学与复现见 `docs/benchmark/esper-comparison-20260815.md`。
 
-## Testing
+## 测试
 
 ```bash
 RUSTFLAGS='-lLLVM-19' cargo test
 ```
 
-42 test binaries: unit tests, SQL parsing, filter/aggregate correctness, window
-semantics (fixed/sliding/processing-time/watermark), per-key grouping, dimension
-lookups, and regression tests with assertions.
+42 个测试二进制：单元测试、SQL 解析、过滤/聚合正确性、窗口语义（固定/滑动/
+处理时间/watermark）、per-key 分组、维表查询，以及带断言的回归测试。
 
-## Documentation
+## 文档索引
 
-- `docs/design.md` — architecture notes
-- `docs/deconstruct/` — design deconstruction (class/data-flow diagrams, algorithms, memory analysis)
-- `docs/review/` — code review reports
-- `docs/detect/` — problem detection & scoring
-- `docs/refactor/` — refactoring plan and status
-- `docs/code-part-modification/task-*` — per-task change logs
+- `docs/design.md` — 架构说明
+- `docs/deconstruct/` — 设计解构（类图/数据流图、算法、内存分析）
+- `docs/review/` — 代码审查报告
+- `docs/detect/` — 问题侦测与评分
+- `docs/refactor/` — 重构方案与执行状态
+- `docs/code-part-modification/task-*` — 各任务变更记录
 
-## Dependencies
+## 依赖
 
-- LLVM 19 (JIT via inkwell), sql-parse (SQL dialect), log4rs (logging),
-  hashbrown, core_affinity, strum, config, PyO3 / JNI (bindings).
+- LLVM 19（经 inkwell 的 JIT）、sql-parse（SQL 方言）、log4rs（日志）、
+  hashbrown、core_affinity、strum、config，以及 PyO3 / JNI（绑定）。
