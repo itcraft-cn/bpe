@@ -1,7 +1,6 @@
 # Bamboo Pipe Engine (BPE)
 
-用 Rust 编写的高性能、可嵌入的流式规则引擎：基于 SQL 的查询接口 + LLVM JIT 编译，支持
-Rust / Java / Python 多语言绑定。
+用 Rust 编写的高性能、可嵌入的流式规则引擎：基于 SQL 的查询接口 + LLVM JIT 编译
 
 BPE 面向**风控与告警场景**：高吞吐预过滤、时间窗口聚合、per-key 分组、维表关联——热路径
 延迟纳秒级。
@@ -18,14 +17,13 @@ BPE 面向**风控与告警场景**：高吞吐预过滤、时间窗口聚合、
 | Watermark | 事件时间乱序容忍（`lag_ms`），数据驱动提前触发 + wall-clock 兜底 |
 | Per-key 分组 | `def_keyed_window_aggregate`：窗口结果按 key 列分组 |
 | 维表关联 | 黑名单/限额等 keyed 查询表，SQL `_dim_has(dim_id, key)` / `_dim_get(dim_id, key)` |
-| 多语言 | Rust（原生）/ Java（JNI/bpe4j）/ Python（PyO3/bpe4py） |
 | 低开销 | 无锁单线程热路径；无窗口路径零额外开销 |
 
 ## 快速开始（Rust）
 
 ```toml
 [dependencies]
-bpe = { path = "bpe-core" }
+bpe = "<version>"
 ```
 
 ```rust
@@ -159,48 +157,6 @@ def_mapper(
 | `_stddev(x)` | 总体标准差（f64） | | `_stddev_samp(x)` | 样本标准差（f64） |
 | `_variance(x)` | 总体方差（f64） | | `_var_samp(x)` | 样本方差（f64） |
 
-## 多语言绑定
-
-### Python（bpe4py，PyO3）
-
-```python
-import bpe4py as bpe
-
-bpe.start()
-txn = bpe.def_stream("txn", ["ts", "user_id", "amount"], [0, 0, 0], [8, 8, 8])
-
-def on_window(data, start_ms, end_ms):
-    # data: 聚合结果字节；start_ms/end_ms: 窗口时间范围
-    print("window", start_ms, end_ms, "bytes:", len(data))
-
-bpe.def_window_aggregate(
-    "SELECT _count(txn.amount) FROM txn WHERE txn.amount > 0",
-    window_type=1, period_ms=60000, length_ms=0, slide_ms=0,
-    ts_field="ts", lag_ms=0, callback=on_window,
-)
-# bpe.def_keyed_window_aggregate(...)、bpe.def_dimension()/update_dimension/remove_dimension
-```
-
-> 构建 Python 封装需 PyO3 0.20（Python ≤ 3.12）：设置 `PYO3_PYTHON=/path/to/python3.11`。
-
-### Java（bpe4j，JNI）
-
-```java
-JavaBpe.start();
-int txn = JavaBpe.defStream("txn", List.of(
-    new ColumnDefine("ts", ColumnDefine.Type.LONG, 8),
-    new ColumnDefine("user_id", ColumnDefine.Type.LONG, 8),
-    new ColumnDefine("amount", ColumnDefine.Type.LONG, 8)
-));
-JavaBpe.defWindowAggregate(
-    "SELECT _count(txn.amount) FROM txn WHERE txn.amount > 0",
-    JavaBpe.WINDOW_TUMBLING, 60_000, 0, 0, "ts", 0,
-    (data, size) -> { /* 聚合结果字节 */ }
-);
-int dim = JavaBpe.defDimension();
-JavaBpe.updateDimension(dim, 42L, 1L);
-```
-
 ## 配置
 
 `cfg/config.toml`（根目录由 `BPE_HOME` 环境变量指定）：
@@ -215,13 +171,10 @@ log_dir = "/tmp"     # 日志目录
 ## 构建
 
 ```bash
-./build.sh 0   # 调试构建（核心）
-./build.sh 1   # 发布构建（核心）
-./build.sh 2   # 完整调试构建（核心 + Java + Python）
-./build.sh 3   # 完整发布构建（核心 + Java + Python）
+RUSTFLAGS="-lLLVM-19" cargo build --release
 ```
 
-依赖：Rust 2021、LLVM-19、Java 8+（bpe4j）、Python 3.11/3.12（bpe4py）。
+依赖：Rust 2021、LLVM-19
 
 ## 性能
 
@@ -289,4 +242,4 @@ RUSTFLAGS='-lLLVM-19' cargo test
 ## 依赖
 
 - LLVM 19（经 inkwell 的 JIT）、sql-parse（SQL 方言）、log4rs（日志）、
-  hashbrown、core_affinity、strum、config，以及 PyO3 / JNI（绑定）。
+  hashbrown、core_affinity、strum、config

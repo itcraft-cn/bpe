@@ -1,7 +1,7 @@
 # Bamboo Pipe Engine (BPE)
 
 A high-performance, embeddable streaming rule engine written in Rust, with SQL-based
-queries, LLVM JIT compilation, and multi-language bindings (Rust / Java / Python).
+queries, LLVM JIT compilation.
 
 BPE targets **risk-control and alerting workloads**: high-throughput pre-filtering,
 time-window aggregation, per-key grouping, and keyed dimension lookups — all with
@@ -19,14 +19,13 @@ nanosecond-level hot-path latency.
 | Watermark | Event-time out-of-order tolerance (`lag_ms`), data-driven early firing + wall-clock fallback |
 | Per-key grouping | `def_keyed_window_aggregate`: window results grouped by a key column |
 | Dimension tables | Keyed lookup tables (blacklists, quotas) via `_dim_has(dim_id, key)` / `_dim_get(dim_id, key)` |
-| Multi-language | Rust (native), Java (JNI/bpe4j), Python (PyO3/bpe4py) |
 | Low overhead | Lock-free single-thread hot path; window-less path has zero added cost |
 
 ## Quick Start (Rust)
 
 ```toml
 [dependencies]
-bpe = { path = "bpe-core" }
+bpe = "<version>"
 ```
 
 ```rust
@@ -160,49 +159,6 @@ Functions are invoked with a leading underscore: `_name(args)`.
 | `_stddev(x)` | population stddev (f64) | | `_stddev_samp(x)` | sample stddev (f64) |
 | `_variance(x)` | population variance (f64) | | `_var_samp(x)` | sample variance (f64) |
 
-## Multi-language Bindings
-
-### Python (bpe4py, PyO3)
-
-```python
-import bpe4py as bpe
-
-bpe.start()
-txn = bpe.def_stream("txn", ["ts", "user_id", "amount"], [0, 0, 0], [8, 8, 8])
-
-def on_window(data, start_ms, end_ms):
-    # data: bytes of the aggregate result; start_ms/end_ms: window range
-    print("window", start_ms, end_ms, "bytes:", len(data))
-
-bpe.def_window_aggregate(
-    "SELECT _count(txn.amount) FROM txn WHERE txn.amount > 0",
-    window_type=1, period_ms=60000, length_ms=0, slide_ms=0,
-    ts_field="ts", lag_ms=0, callback=on_window,
-)
-# bpe.def_keyed_window_aggregate(...), bpe.def_dimension()/update_dimension/remove_dimension
-```
-
-> Building the Python wrapper requires PyO3 0.20 (Python ≤ 3.12): set
-> `PYO3_PYTHON=/path/to/python3.11`.
-
-### Java (bpe4j, JNI)
-
-```java
-JavaBpe.start();
-int txn = JavaBpe.defStream("txn", List.of(
-    new ColumnDefine("ts", ColumnDefine.Type.LONG, 8),
-    new ColumnDefine("user_id", ColumnDefine.Type.LONG, 8),
-    new ColumnDefine("amount", ColumnDefine.Type.LONG, 8)
-));
-JavaBpe.defWindowAggregate(
-    "SELECT _count(txn.amount) FROM txn WHERE txn.amount > 0",
-    JavaBpe.WINDOW_TUMBLING, 60_000, 0, 0, "ts", 0,
-    (data, size) -> { /* aggregate result bytes */ }
-);
-int dim = JavaBpe.defDimension();
-JavaBpe.updateDimension(dim, 42L, 1L);
-```
-
 ## Configuration
 
 `cfg/config.toml` (root resolved via `BPE_HOME`):
@@ -217,13 +173,10 @@ log_dir = "/tmp"     # log directory
 ## Building
 
 ```bash
-./build.sh 0   # debug build (core)
-./build.sh 1   # release build (core)
-./build.sh 2   # full debug build (core + Java + Python)
-./build.sh 3   # full release build (core + Java + Python)
+RUSTFLAGS="-lLLVM-19" cargo build --release
 ```
 
-Requirements: Rust 2021, LLVM-19, Java 8+ (for bpe4j), Python 3.11/3.12 (for bpe4py).
+Requirements: Rust 2021, LLVM-19
 
 ## Performance
 
