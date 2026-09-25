@@ -2,7 +2,7 @@
 name = "bpe"
 version = "0.3.0-dev" # managed by updgitver
 edition = "2021"
-authors = ["Guo Zheyong <guozheyong@erayt.com>"]
+authors = ["Helly Guo<hellyguo@foxmail.com>"]
 exclude = ["tests", "test_data", "benches", "examples", ".vscode"]
 homepage = ""
 repository = ""
