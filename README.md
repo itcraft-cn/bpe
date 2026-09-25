@@ -23,7 +23,7 @@ BPE 面向**风控与告警场景**：高吞吐预过滤、时间窗口聚合、
 
 ```toml
 [dependencies]
-bpe = "<version>"
+bpengine = "<version>"
 ```
 
 ```rust

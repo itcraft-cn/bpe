@@ -25,7 +25,7 @@ nanosecond-level hot-path latency.
 
 ```toml
 [dependencies]
-bpe = "<version>"
+bpengine = "<version>"
 ```
 
 ```rust

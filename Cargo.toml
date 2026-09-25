@@ -1,5 +1,5 @@
 [package]
-name = "bpe"
+name = "bpengine"
 version = "0.3.0" # managed by updgitver
 edition = "2021"
 authors = ["Helly Guo <hellyguo@foxmail.com>"]
