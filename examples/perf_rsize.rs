@@ -3,7 +3,12 @@ use bpe::{def_incoming, def_mapper, new_data, start, stop, Column, U8Bytes};
 use std::{env, time::Instant};
 
 fn main() {
-    let rsize: usize = env::args().nth(1).unwrap().parse().unwrap();
+    // rsize 为可选位置参数：缺省时使用 512B（默认记录大小），
+    // 便于 `cargo run --example=perf_rsize` 直接运行。
+    let rsize: usize = env::args()
+        .nth(1)
+        .map(|s| s.parse().expect("rsize 必须是正整数"))
+        .unwrap_or(512);
     env::set_var("BPE_HOME", env::current_dir().unwrap());
     start();
     let rid = def_incoming("pr_demo", vec![
